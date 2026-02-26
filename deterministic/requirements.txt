@@ -1,0 +1,11 @@
+# Requirements for Deterministic Database Implementation
+
+# PostgreSQL database adapter
+psycopg2-binary>=2.9.0
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# Note: psycopg2-binary is recommended for beginners as it includes
+# all dependencies and doesn't require compilation.
+# For production, you might want to use psycopg2 instead.

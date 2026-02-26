@@ -1,0 +1,34 @@
+diff --git a/backend/agent/agent_pool.py b/backend/agent/agent_pool.py
+index b89b174..b22cb55 100644
+--- a/backend/agent/agent_pool.py
++++ b/backend/agent/agent_pool.py
+@@ -37,7 +37,7 @@ async def get_agent() -> LangGraphAgent:
+     global _agent_instance, _agent_initialized, _agent_last_used   
+:...skipping...
+diff --git a/backend/agent/agent_pool.py b/backend/agent/agent_pool.py
+index b89b174..b22cb55 100644
+--- a/backend/agent/agent_pool.py
++++ b/backend/agent/agent_pool.py
+@@ -37,7 +37,7 @@ async def get_agent() -> LangGraphAgent:
+     global _agent_instance, _agent_initialized, _agent_last_used
+     
+     async with _agent_lock:
+-        # Check if agent exis ts and is still valid
++        # Check if agent exists and is still valid
+         if _agent_instance is not None and _agent_initialized:
+             # Check if agent has expired (not used for TTL period)
+             if _agent_last_used:
+diff --git a/backend/agent/langgraph_agent.py b/backend/agent/langgraph_agent.py
+index 57ed550..e85a9db 100644
+--- a/backend/agent/langgraph_agent.py
++++ b/backend/agent/langgraph_agent.py
+@@ -9,29 +9,11 @@ from typing import Optional, AsyncIterator, Dict, Any
+ import asyncio
+ from datetime import datetime
+ 
+-# Try multiple import paths for RunnableConfig (LangGraph version differences)
+-RunnableConfig = None
+-LANGGRAPH_CONFIG_AVAILABLE = False
+-try:
+-    from langgraph.graph import RunnableConfig
+-    LANGGRAPH_CONFIG_AVAILABLE = True

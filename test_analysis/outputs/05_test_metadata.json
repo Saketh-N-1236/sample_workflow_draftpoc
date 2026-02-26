@@ -1,0 +1,1041 @@
+{
+  "generated_at": "2026-02-25T18:28:45.527133",
+  "data": {
+    "total_tests": 74,
+    "tests_with_descriptions": 74,
+    "tests_with_markers": 30,
+    "async_tests": 30,
+    "parameterized_tests": 42,
+    "marker_counts": {
+      "asyncio": 30
+    },
+    "pattern_counts": {
+      "test_prefix": 73,
+      "bdd_pattern": 1
+    },
+    "test_metadata": [
+      {
+        "test_id": "test_0001",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_agent.py",
+        "class_name": "TestLangGraphAgent",
+        "method_name": "test_agent_initialization",
+        "name": "test_agent_initialization",
+        "description": "Test agent initialization.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 28
+      },
+      {
+        "test_id": "test_0002",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_agent.py",
+        "class_name": "TestLangGraphAgent",
+        "method_name": "test_agent_initialization_failure_no_servers",
+        "name": "test_agent_initialization_failure_no_servers",
+        "description": "Test agent initialization failure when MCP servers are not available.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 46
+      },
+      {
+        "test_id": "test_0003",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_agent.py",
+        "class_name": "TestLangGraphAgent",
+        "method_name": "test_agent_initialization_no_tools",
+        "name": "test_agent_initialization_no_tools",
+        "description": "Test agent initialization when no tools are available.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 58
+      },
+      {
+        "test_id": "test_0004",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_agent.py",
+        "class_name": "TestLangGraphAgent",
+        "method_name": "test_agent_invoke",
+        "name": "test_agent_invoke",
+        "description": "Test agent invocation.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 75
+      },
+      {
+        "test_id": "test_0005",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_agent.py",
+        "class_name": "TestLangGraphAgent",
+        "method_name": "test_agent_invoke_with_session_id",
+        "name": "test_agent_invoke_with_session_id",
+        "description": "Test agent invocation with session ID.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 110
+      },
+      {
+        "test_id": "test_0006",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_agent.py",
+        "class_name": "TestLangGraphAgent",
+        "method_name": "test_agent_stream_invoke",
+        "name": "test_agent_stream_invoke",
+        "description": "Test agent streaming invocation.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 144
+      },
+      {
+        "test_id": "test_0007",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_agent.py",
+        "class_name": "TestLangGraphAgent",
+        "method_name": "test_agent_stream_invoke_error",
+        "name": "test_agent_stream_invoke_error",
+        "description": "Test agent streaming invocation with error.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 181
+      },
+      {
+        "test_id": "test_0008",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_agent.py",
+        "class_name": "TestLangGraphAgent",
+        "method_name": "test_agent_close",
+        "name": "test_agent_close",
+        "description": "Test agent cleanup.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 207
+      },
+      {
+        "test_id": "test_0009",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_agent.py",
+        "class_name": "TestLangGraphAgent",
+        "method_name": "test_agent_context_manager",
+        "name": "test_agent_context_manager",
+        "description": "Test agent as async context manager.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 218
+      },
+      {
+        "test_id": "test_0010",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_agent.py",
+        "class_name": "TestLangGraphAgent",
+        "method_name": "test_agent_extract_stage_info_agent_thinking",
+        "name": "test_agent_extract_stage_info_agent_thinking",
+        "description": "Test stage info extraction for agent thinking.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 235
+      },
+      {
+        "test_id": "test_0011",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_agent.py",
+        "class_name": "TestLangGraphAgent",
+        "method_name": "test_agent_extract_stage_info_tool_executing",
+        "name": "test_agent_extract_stage_info_tool_executing",
+        "description": "Test stage info extraction for tool execution.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 247
+      },
+      {
+        "test_id": "test_0012",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_agent.py",
+        "class_name": "TestLangGraphAgent",
+        "method_name": "test_agent_extract_stage_info_tool_completed",
+        "name": "test_agent_extract_stage_info_tool_completed",
+        "description": "Test stage info extraction for tool completion.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 266
+      },
+      {
+        "test_id": "test_0013",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_builder.py",
+        "class_name": "TestLangGraphBuilder",
+        "method_name": "test_builder_initialization",
+        "name": "test_builder_initialization",
+        "description": "Test builder initialization.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 27
+      },
+      {
+        "test_id": "test_0014",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_builder.py",
+        "class_name": "TestLangGraphBuilder",
+        "method_name": "test_builder_initialization_no_tools",
+        "name": "test_builder_initialization_no_tools",
+        "description": "Test builder initialization with no tools.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 33
+      },
+      {
+        "test_id": "test_0015",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_builder.py",
+        "class_name": "TestLangGraphBuilder",
+        "method_name": "test_build_graph",
+        "name": "test_build_graph",
+        "description": "Test building the graph.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 38
+      },
+      {
+        "test_id": "test_0016",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_builder.py",
+        "class_name": "TestLangGraphBuilder",
+        "method_name": "test_build_graph_no_tools",
+        "name": "test_build_graph_no_tools",
+        "description": "Test building graph with no tools.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 59
+      },
+      {
+        "test_id": "test_0017",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_builder.py",
+        "class_name": "TestLangGraphBuilder",
+        "method_name": "test_get_graph",
+        "name": "test_get_graph",
+        "description": "Test getting the compiled graph.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 76
+      },
+      {
+        "test_id": "test_0018",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_builder.py",
+        "class_name": "TestLangGraphBuilder",
+        "method_name": "test_get_graph_not_built",
+        "name": "test_get_graph_not_built",
+        "description": "Test getting graph before building.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 94
+      },
+      {
+        "test_id": "test_0019",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_state_converter.py",
+        "class_name": "TestStateConverter",
+        "method_name": "test_normalize_message_content_string",
+        "name": "test_normalize_message_content_string",
+        "description": "Test normalizing string content.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 23
+      },
+      {
+        "test_id": "test_0020",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_state_converter.py",
+        "class_name": "TestStateConverter",
+        "method_name": "test_normalize_message_content_list",
+        "name": "test_normalize_message_content_list",
+        "description": "Test normalizing list content (Gemini format).",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 30
+      },
+      {
+        "test_id": "test_0021",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_state_converter.py",
+        "class_name": "TestStateConverter",
+        "method_name": "test_normalize_message_content_list_simple",
+        "name": "test_normalize_message_content_list_simple",
+        "description": "Test normalizing simple list content.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 40
+      },
+      {
+        "test_id": "test_0022",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_state_converter.py",
+        "class_name": "TestStateConverter",
+        "method_name": "test_normalize_message_content_none",
+        "name": "test_normalize_message_content_none",
+        "description": "Test normalizing None content.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 47
+      },
+      {
+        "test_id": "test_0023",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_state_converter.py",
+        "class_name": "TestStateConverter",
+        "method_name": "test_normalize_message_content_dict_with_text",
+        "name": "test_normalize_message_content_dict_with_text",
+        "description": "Test normalizing dict with text key.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 52
+      },
+      {
+        "test_id": "test_0024",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_state_converter.py",
+        "class_name": "TestStateConverter",
+        "method_name": "test_convert_to_langchain_messages",
+        "name": "test_convert_to_langchain_messages",
+        "description": "Test converting custom messages to LangChain messages.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 58
+      },
+      {
+        "test_id": "test_0025",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_state_converter.py",
+        "class_name": "TestStateConverter",
+        "method_name": "test_convert_to_langchain_messages_tool",
+        "name": "test_convert_to_langchain_messages_tool",
+        "description": "Test converting tool messages.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 73
+      },
+      {
+        "test_id": "test_0026",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_state_converter.py",
+        "class_name": "TestStateConverter",
+        "method_name": "test_convert_from_langchain_messages",
+        "name": "test_convert_from_langchain_messages",
+        "description": "Test converting LangChain messages to custom format.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 85
+      },
+      {
+        "test_id": "test_0027",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_state_converter.py",
+        "class_name": "TestStateConverter",
+        "method_name": "test_convert_from_langchain_messages_with_tool_calls",
+        "name": "test_convert_from_langchain_messages_with_tool_calls",
+        "description": "Test converting AIMessage with tool calls.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 98
+      },
+      {
+        "test_id": "test_0028",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_state_converter.py",
+        "class_name": "TestStateConverter",
+        "method_name": "test_convert_langgraph_state_to_agent",
+        "name": "test_convert_langgraph_state_to_agent",
+        "description": "Test converting LangGraph state to agent state.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 115
+      },
+      {
+        "test_id": "test_0029",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_state_converter.py",
+        "class_name": "TestStateConverter",
+        "method_name": "test_convert_langgraph_state_to_agent_with_tool_calls",
+        "name": "test_convert_langgraph_state_to_agent_with_tool_calls",
+        "description": "Test converting state with tool calls.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 141
+      },
+      {
+        "test_id": "test_0030",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_tool_converter.py",
+        "class_name": "TestToolConverter",
+        "method_name": "test_json_schema_to_pydantic_string",
+        "name": "test_json_schema_to_pydantic_string",
+        "description": "Test JSON schema to Pydantic conversion for string type.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 62
+      },
+      {
+        "test_id": "test_0031",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_tool_converter.py",
+        "class_name": "TestToolConverter",
+        "method_name": "test_json_schema_to_pydantic_integer",
+        "name": "test_json_schema_to_pydantic_integer",
+        "description": "Test JSON schema to Pydantic conversion for integer type.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 72
+      },
+      {
+        "test_id": "test_0032",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_tool_converter.py",
+        "class_name": "TestToolConverter",
+        "method_name": "test_json_schema_to_pydantic_array",
+        "name": "test_json_schema_to_pydantic_array",
+        "description": "Test JSON schema to Pydantic conversion for array type.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 90
+      },
+      {
+        "test_id": "test_0033",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_tool_converter.py",
+        "class_name": "TestToolConverter",
+        "method_name": "test_json_schema_to_pydantic_empty",
+        "name": "test_json_schema_to_pydantic_empty",
+        "description": "Test JSON schema to Pydantic conversion for empty schema.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 111
+      },
+      {
+        "test_id": "test_0034",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_tool_converter.py",
+        "class_name": "TestToolConverter",
+        "method_name": "test_mcp_tool_to_langchain",
+        "name": "test_mcp_tool_to_langchain",
+        "description": "Test MCP tool to LangChain conversion.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 123
+      },
+      {
+        "test_id": "test_0035",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_tool_converter.py",
+        "class_name": "TestToolConverter",
+        "method_name": "test_mcp_tool_to_langchain_error_handling",
+        "name": "test_mcp_tool_to_langchain_error_handling",
+        "description": "Test MCP tool to LangChain conversion with error handling.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 146
+      },
+      {
+        "test_id": "test_0036",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_tool_converter.py",
+        "class_name": "TestToolConverter",
+        "method_name": "test_convert_mcp_tools_to_langchain",
+        "name": "test_convert_mcp_tools_to_langchain",
+        "description": "Test conversion of multiple MCP tools.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 164
+      },
+      {
+        "test_id": "test_0037",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_tool_converter.py",
+        "class_name": "TestToolConverter",
+        "method_name": "test_convert_mcp_tools_to_langchain_empty",
+        "name": "test_convert_mcp_tools_to_langchain_empty",
+        "description": "Test conversion with empty tool list.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 182
+      },
+      {
+        "test_id": "test_0038",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_tool_converter.py",
+        "class_name": "TestToolConverter",
+        "method_name": "test_convert_mcp_tools_to_langchain_conversion_error",
+        "name": "test_convert_mcp_tools_to_langchain_conversion_error",
+        "description": "Test conversion with tool conversion error.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 196
+      },
+      {
+        "test_id": "test_0039",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\analytics\\test_aggregator.py",
+        "class_name": "TestAnalyticsAggregator",
+        "method_name": "test_get_overview_stats",
+        "name": "test_get_overview_stats",
+        "description": "Test getting overview statistics.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 22
+      },
+      {
+        "test_id": "test_0040",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\analytics\\test_aggregator.py",
+        "class_name": "TestAnalyticsAggregator",
+        "method_name": "test_get_tool_usage_stats",
+        "name": "test_get_tool_usage_stats",
+        "description": "Test getting tool usage statistics.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 45
+      },
+      {
+        "test_id": "test_0041",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\api\\test_routes.py",
+        "class_name": "TestAPIRoutes",
+        "method_name": "test_root_endpoint",
+        "name": "test_root_endpoint",
+        "description": "Test root endpoint.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 24
+      },
+      {
+        "test_id": "test_0042",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\api\\test_routes.py",
+        "class_name": "TestAPIRoutes",
+        "method_name": "test_health_endpoint",
+        "name": "test_health_endpoint",
+        "description": "Test health check endpoint.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 33
+      },
+      {
+        "test_id": "test_0043",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\api\\test_routes.py",
+        "class_name": "TestAPIRoutes",
+        "method_name": "test_chat_endpoint",
+        "name": "test_chat_endpoint",
+        "description": "Test chat endpoint.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 41
+      },
+      {
+        "test_id": "test_0044",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\api\\test_routes.py",
+        "class_name": "TestAPIRoutes",
+        "method_name": "test_chat_endpoint_with_session",
+        "name": "test_chat_endpoint_with_session",
+        "description": "Test chat endpoint with session ID.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 75
+      },
+      {
+        "test_id": "test_0045",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\api\\test_routes.py",
+        "class_name": "TestAPIRoutes",
+        "method_name": "test_chat_endpoint_invalid_request",
+        "name": "test_chat_endpoint_invalid_request",
+        "description": "Test chat endpoint with invalid request.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 107
+      },
+      {
+        "test_id": "test_0046",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\api\\test_routes.py",
+        "class_name": "TestAPIRoutes",
+        "method_name": "test_chat_stream_endpoint",
+        "name": "test_chat_stream_endpoint",
+        "description": "Test chat stream endpoint.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 117
+      },
+      {
+        "test_id": "test_0047",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\api\\test_routes.py",
+        "class_name": "TestAPIRoutes",
+        "method_name": "test_tools_endpoint",
+        "name": "test_tools_endpoint",
+        "description": "Test tools listing endpoint.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 141
+      },
+      {
+        "test_id": "test_0048",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\api\\test_routes.py",
+        "class_name": "TestAPIRoutes",
+        "method_name": "test_health_check_endpoint",
+        "name": "test_health_check_endpoint",
+        "description": "Test health check endpoint with system info.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 162
+      },
+      {
+        "test_id": "test_0049",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\api\\test_routes.py",
+        "class_name": "TestAPIRoutes",
+        "method_name": "test_status_endpoint",
+        "name": "test_status_endpoint",
+        "description": "Test status endpoint.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 173
+      },
+      {
+        "test_id": "test_0050",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\config\\test_settings.py",
+        "class_name": "TestSettings",
+        "method_name": "test_settings_default_values",
+        "name": "test_settings_default_values",
+        "description": "Test default settings values.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 18
+      },
+      {
+        "test_id": "test_0051",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\config\\test_settings.py",
+        "class_name": "TestSettings",
+        "method_name": "test_settings_from_env",
+        "name": "test_settings_from_env",
+        "description": "Test loading settings from environment variables.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 29
+      },
+      {
+        "test_id": "test_0052",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\config\\test_settings.py",
+        "class_name": "TestSettings",
+        "method_name": "test_settings_validate_llm_provider",
+        "name": "test_settings_validate_llm_provider",
+        "description": "Test LLM provider validation.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 46
+      },
+      {
+        "test_id": "test_0053",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\config\\test_settings.py",
+        "class_name": "TestSettings",
+        "method_name": "test_settings_validate_embedding_provider",
+        "name": "test_settings_validate_embedding_provider",
+        "description": "Test embedding provider validation.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 52
+      },
+      {
+        "test_id": "test_0054",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\config\\test_settings.py",
+        "class_name": "TestSettings",
+        "method_name": "test_get_settings_singleton",
+        "name": "test_get_settings_singleton",
+        "description": "Test get_settings returns singleton.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 58
+      },
+      {
+        "test_id": "test_0055",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\config\\test_settings.py",
+        "class_name": "TestSettings",
+        "method_name": "test_clear_settings_cache",
+        "name": "test_clear_settings_cache",
+        "description": "Test clearing settings cache.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 67
+      },
+      {
+        "test_id": "test_0056",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\config\\test_settings.py",
+        "class_name": "TestSettings",
+        "method_name": "test_settings_optional_fields",
+        "name": "test_settings_optional_fields",
+        "description": "Test optional settings fields.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 80
+      },
+      {
+        "test_id": "test_0057",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\inference_logging\\test_logger.py",
+        "class_name": "TestInferenceLogger",
+        "method_name": "test_log_request",
+        "name": "test_log_request",
+        "description": "Test logging a request.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 22
+      },
+      {
+        "test_id": "test_0058",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\inference_logging\\test_logger.py",
+        "class_name": "TestInferenceLogger",
+        "method_name": "test_get_logs",
+        "name": "test_get_logs",
+        "description": "Test getting logs.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 39
+      },
+      {
+        "test_id": "test_0059",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\inference_logging\\test_logger.py",
+        "class_name": "TestInferenceLogger",
+        "method_name": "test_get_log_not_found",
+        "name": "test_get_log_not_found",
+        "description": "Test getting non-existent log.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 57
+      },
+      {
+        "test_id": "test_0060",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\integration\\test_agent_workflow.py",
+        "class_name": "TestAgentWorkflow",
+        "method_name": "test_agent_initialization_workflow",
+        "name": "test_agent_initialization_workflow",
+        "description": "Test complete agent initialization workflow.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 16
+      },
+      {
+        "test_id": "test_0061",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\integration\\test_agent_workflow.py",
+        "class_name": "TestAgentWorkflow",
+        "method_name": "test_agent_invocation_workflow",
+        "name": "test_agent_invocation_workflow",
+        "description": "Test complete agent invocation workflow.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 53
+      },
+      {
+        "test_id": "test_0062",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\llm\\test_factory.py",
+        "class_name": "TestLLMFactory",
+        "method_name": "test_create_provider_gemini",
+        "name": "test_create_provider_gemini",
+        "description": "Test creating Gemini provider.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 38
+      },
+      {
+        "test_id": "test_0063",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\llm\\test_factory.py",
+        "class_name": "TestLLMFactory",
+        "method_name": "test_create_provider_gemini_missing_key",
+        "name": "test_create_provider_gemini_missing_key",
+        "description": "Test creating Gemini provider without API key.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 52
+      },
+      {
+        "test_id": "test_0064",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\llm\\test_factory.py",
+        "class_name": "TestLLMFactory",
+        "method_name": "test_create_provider_ollama",
+        "name": "test_create_provider_ollama",
+        "description": "Test creating Ollama provider.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 59
+      },
+      {
+        "test_id": "test_0065",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\llm\\test_factory.py",
+        "class_name": "TestLLMFactory",
+        "method_name": "test_create_provider_invalid",
+        "name": "test_create_provider_invalid",
+        "description": "Test creating provider with invalid name.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 70
+      },
+      {
+        "test_id": "test_0066",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\llm\\test_factory.py",
+        "class_name": "TestLLMFactory",
+        "method_name": "test_get_available_providers",
+        "name": "test_get_available_providers",
+        "description": "Test getting list of available providers.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 78
+      },
+      {
+        "test_id": "test_0067",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\llm\\test_factory.py",
+        "class_name": "TestLLMFactory",
+        "method_name": "test_create_embedding_provider_gemini",
+        "name": "test_create_embedding_provider_gemini",
+        "description": "Test creating Gemini embedding provider.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 88
+      },
+      {
+        "test_id": "test_0068",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\llm\\test_factory.py",
+        "class_name": "TestLLMFactory",
+        "method_name": "test_create_embedding_provider_ollama",
+        "name": "test_create_embedding_provider_ollama",
+        "description": "Test creating Ollama embedding provider.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 101
+      },
+      {
+        "test_id": "test_0069",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\llm\\test_factory.py",
+        "class_name": "TestLLMFactory",
+        "method_name": "test_create_embedding_provider_invalid",
+        "name": "test_create_embedding_provider_invalid",
+        "description": "Test creating embedding provider with invalid name.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "test_prefix",
+        "line_number": 114
+      },
+      {
+        "test_id": "test_0070",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\mcp_servers\\test_catalog_server.py",
+        "class_name": "TestCatalogServer",
+        "method_name": "test_list_tables_tool",
+        "name": "test_list_tables_tool",
+        "description": "Test list_tables tool.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 27
+      },
+      {
+        "test_id": "test_0071",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\mcp_servers\\test_catalog_server.py",
+        "class_name": "TestCatalogServer",
+        "method_name": "test_describe_table_tool",
+        "name": "test_describe_table_tool",
+        "description": "Test describe_table tool.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 38
+      },
+      {
+        "test_id": "test_0072",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\mcp_servers\\test_catalog_server.py",
+        "class_name": "TestCatalogServer",
+        "method_name": "test_get_table_row_count_tool",
+        "name": "test_get_table_row_count_tool",
+        "description": "Test get_table_row_count tool.",
+        "markers": [
+          "asyncio"
+        ],
+        "is_async": true,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 49
+      },
+      {
+        "test_id": "test_0073",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\mlflow\\test_tracking.py",
+        "class_name": "TestMLflowTracking",
+        "method_name": "test_get_tracker",
+        "name": "test_get_tracker",
+        "description": "Test getting MLflow tracker.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": true,
+        "pattern": "test_prefix",
+        "line_number": 24
+      },
+      {
+        "test_id": "test_0074",
+        "file_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\mlflow\\test_tracking.py",
+        "class_name": "TestMLflowTracking",
+        "method_name": "test_tracker_disabled_when_mlflow_not_available",
+        "name": "test_tracker_disabled_when_mlflow_not_available",
+        "description": "Test tracker is disabled when MLflow is not available.",
+        "markers": [],
+        "is_async": false,
+        "is_parameterized": false,
+        "pattern": "bdd_pattern",
+        "line_number": 33
+      }
+    ]
+  }
+}

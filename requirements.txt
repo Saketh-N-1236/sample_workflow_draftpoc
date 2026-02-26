@@ -1,0 +1,25 @@
+# Requirements for Test Impact Analysis System
+# Python 3.7+ required
+
+# PostgreSQL database adapter
+# psycopg2-binary is recommended for easier installation (includes all dependencies)
+# For production, you might want to use psycopg2 instead
+psycopg2-binary>=2.9.0
+
+# Environment variable management (.env file support)
+python-dotenv>=1.0.0
+
+# Optional: Enhanced AST parsing (for better docstring extraction)
+# Uncomment if needed for advanced parsing features
+# ast-comments>=1.1.3
+
+# Note: Most functionality uses Python standard library:
+# - ast (Abstract Syntax Tree parsing)
+# - pathlib (File path handling)
+# - json (JSON file operations)
+# - re (Regular expressions)
+# - datetime (Timestamp generation)
+# - collections (Data structures)
+# - typing (Type hints)
+# - contextlib (Context managers)
+# - sys, os (System operations)

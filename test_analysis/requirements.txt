@@ -1,0 +1,14 @@
+# Requirements for Test Repository Analysis
+# Minimal dependencies - most functionality uses Python standard library
+
+# Enhanced AST parsing (optional, for better docstring extraction)
+# ast-comments>=1.1.3  # Uncomment if needed for advanced parsing
+
+# Note: This project primarily uses Python's built-in modules:
+# - ast (Abstract Syntax Tree parsing)
+# - pathlib (File path handling)
+# - json (JSON file operations)
+# - re (Regular expressions)
+# - datetime (Timestamp generation)
+
+# All other dependencies are part of Python standard library (3.7+)

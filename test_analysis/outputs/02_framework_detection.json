@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-02-25T18:26:41.303825",
+  "data": {
+    "primary_framework": "pytest",
+    "confidence": "high",
+    "pytest_score": 36,
+    "unittest_score": 13,
+    "config_files": {
+      "pytest_ini": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\pytest.ini",
+      "setup_cfg": null,
+      "pyproject_toml": null,
+      "tox_ini": null,
+      "config_found": true,
+      "pytest_ini_content": "[pytest]\n# Pytest configuration file\n\n# Test discovery patterns\npython_files = test_*.py\npython_classes = Test*\npython_functions = test_*\n\n# Test paths\ntestpaths = .\n\n# Output options\naddopts = \n    -v\n    --strict-markers\n    --tb=short\n    --disable-warnings\n\n# Markers\nmarkers =\n    asyncio: marks tests as async (using pytest-asyncio)\n    integration: marks tests as integration tests\n    unit: marks tests as unit tests\n    slow: marks tests as slow running\n\n# Asyncio configuration\nasyncio_mode"
+    },
+    "conftest": {
+      "conftest_found": true,
+      "conftest_path": "C:\\Users\\SakethN\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\conftest.py",
+      "has_fixtures": true,
+      "has_pytest_imports": true
+    },
+    "file_indicators": {
+      "pytest": {
+        "files_with_import": 13,
+        "files_with_markers": 7,
+        "files_with_fixtures": 10,
+        "total_indicators": 30
+      },
+      "unittest": {
+        "files_with_import": 13,
+        "files_with_testcase": 0,
+        "total_indicators": 13
+      }
+    },
+    "indicators": [
+      "pytest.ini found",
+      "conftest.py found",
+      "conftest.py uses pytest"
+    ]
+  }
+}
