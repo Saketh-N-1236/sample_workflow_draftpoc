@@ -1,7 +1,7 @@
 ================================================================================
 TEST SELECTION RESULTS
 ================================================================================
-Generated: 2026-03-02 15:22:28
+Generated: 2026-03-02 17:48:37
 Diff File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\git_diff_processor\sample_diffs\diff_commit1.txt
 
 Found 10 affected test(s)
@@ -22,19 +22,7 @@ RANKED TEST LIST (sorted by confidence score 0-100)
          File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\integration\test_agent_workflow.py
          Semantic similarity: 32%
 
-  [ 19] test_0006: TestLangGraphAgent.test_agent_stream_invoke (unit)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py
-         Semantic similarity: 32%
-
-  [ 19] test_0001: TestLangGraphAgent.test_agent_initialization (unit)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py
-         Semantic similarity: 32%
-
-  [ 19] test_0060: TestAgentWorkflow.test_agent_initialization_workflow (integration)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\integration\test_agent_workflow.py
-         Semantic similarity: 31%
-
-  [ 18] test_0007: TestLangGraphAgent.test_agent_stream_invoke_error (unit)
+  [ 18] test_0011: TestLangGraphAgent.test_agent_extract_stage_info_tool_executing (unit)
          File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py
          Semantic similarity: 31%
 
@@ -42,7 +30,19 @@ RANKED TEST LIST (sorted by confidence score 0-100)
          File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py
          Semantic similarity: 31%
 
-  [ 18] test_0011: TestLangGraphAgent.test_agent_extract_stage_info_tool_executing (unit)
+  [ 18] test_0060: TestAgentWorkflow.test_agent_initialization_workflow (integration)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\integration\test_agent_workflow.py
+         Semantic similarity: 31%
+
+  [ 18] test_0001: TestLangGraphAgent.test_agent_initialization (unit)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py
+         Semantic similarity: 31%
+
+  [ 18] test_0012: TestLangGraphAgent.test_agent_extract_stage_info_tool_completed (unit)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py
+         Semantic similarity: 31%
+
+  [ 18] test_0006: TestLangGraphAgent.test_agent_stream_invoke (unit)
          File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py
          Semantic similarity: 30%
 
@@ -71,12 +71,12 @@ Run ALL selected (10 of 74 tests, 86.5% reduction):
 pytest C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_invoke_with_session_id \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_invoke \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\integration\test_agent_workflow.py::TestAgentWorkflow::test_agent_invocation_workflow \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_stream_invoke \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_initialization \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\integration\test_agent_workflow.py::TestAgentWorkflow::test_agent_initialization_workflow \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_stream_invoke_error \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_initialization_no_tools \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_extract_stage_info_tool_executing \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_initialization_no_tools \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\integration\test_agent_workflow.py::TestAgentWorkflow::test_agent_initialization_workflow \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_initialization \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_extract_stage_info_tool_completed \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_stream_invoke \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_close -v
 
 Run HIGH PRIORITY only (score >= 60, 0 tests):
@@ -95,11 +95,11 @@ Total unused tests: 64
 Unit tests (unused): 64
   test_0002: TestLangGraphAgent.test_agent_initialization_failure_no_servers
     File: unknown
+  test_0007: TestLangGraphAgent.test_agent_stream_invoke_error
+    File: unknown
   test_0009: TestLangGraphAgent.test_agent_context_manager
     File: unknown
   test_0010: TestLangGraphAgent.test_agent_extract_stage_info_agent_thinking
-    File: unknown
-  test_0012: TestLangGraphAgent.test_agent_extract_stage_info_tool_completed
     File: unknown
   test_0013: TestLangGraphBuilder.test_builder_initialization
     File: unknown

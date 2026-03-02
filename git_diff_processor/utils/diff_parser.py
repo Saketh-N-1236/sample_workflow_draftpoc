@@ -451,15 +451,70 @@ def build_search_queries(file_changes: List[Dict]) -> Dict[str, List[str]]:
     }
 
 
-def extract_changed_functions_with_modules(file_changes: List[Dict]) -> List[Dict[str, str]]:
+def extract_definitions_from_diff(diff_content: str, file_path: str) -> Dict[str, List[str]]:
+    """
+    Extract class and function definitions from diff content for new files.
+    
+    Parses +class and +def lines from git diff to build function mappings
+    for files that don't exist in the database yet.
+    
+    Args:
+        diff_content: Full git diff content as string
+        file_path: Path of the file being analyzed
+    
+    Returns:
+        Dictionary with:
+        - 'classes': List of class names found
+        - 'functions': List of function names found
+    """
+    classes = []
+    functions = []
+    
+    # Find the section for this file in the diff
+    file_section = False
+    in_hunk = False
+    
+    for line in diff_content.split('\n'):
+        # Check if we're in the section for this file
+        if line.startswith('diff --git'):
+            file_section = False
+            in_hunk = False
+            # Check if this is our file
+            if file_path in line:
+                file_section = True
+        elif file_section and line.startswith('@@'):
+            in_hunk = True
+        elif file_section and in_hunk:
+            # Look for added lines with class or function definitions
+            if line.startswith('+') and not line.startswith('+++'):
+                # Extract class definition: +class ClassName
+                class_match = re.search(r'^\+.*class\s+(\w+)', line)
+                if class_match:
+                    classes.append(class_match.group(1))
+                
+                # Extract function definition: +def function_name
+                func_match = re.search(r'^\+.*def\s+(\w+)', line)
+                if func_match:
+                    functions.append(func_match.group(1))
+    
+    return {
+        'classes': list(set(classes)),
+        'functions': list(set(functions))
+    }
+
+
+def extract_changed_functions_with_modules(file_changes: List[Dict], diff_content: str = None) -> List[Dict[str, str]]:
     """
     Extract changed functions with their module names from file changes.
     
     Converts file paths and changed methods to module.function format
     that can be used to query the test_function_mapping table.
     
+    For new files (status='added'), extracts definitions from diff content.
+    
     Args:
         file_changes: List of file change dictionaries from parse_git_diff
+        diff_content: Optional full diff content for parsing new files
     
     Returns:
         List of dictionaries with:
@@ -469,9 +524,10 @@ def extract_changed_functions_with_modules(file_changes: List[Dict]) -> List[Dic
     Example:
         >>> file_changes = [{
         ...     'file': 'agent/langgraph_agent.py',
-        ...     'changed_methods': ['initialize', 'invoke']
+        ...     'changed_methods': ['initialize', 'invoke'],
+        ...     'status': 'added'
         ... }]
-        >>> extract_changed_functions_with_modules(file_changes)
+        >>> extract_changed_functions_with_modules(file_changes, diff_content)
         [
         ...     {'module': 'agent.langgraph_agent', 'function': 'initialize'},
         ...     {'module': 'agent.langgraph_agent', 'function': 'invoke'}
@@ -481,23 +537,34 @@ def extract_changed_functions_with_modules(file_changes: List[Dict]) -> List[Dic
     
     for file_change in file_changes:
         file_path = file_change['file']
+        status = file_change.get('status', 'modified')
         
         # Skip non-Python files
         if not file_path.endswith('.py'):
             continue
         
-        # Skip import-only changes
-        change_type = analyze_file_change_type(file_change)
-        if change_type == 'import_only':
-            continue
+        # Skip import-only changes (unless it's a new file)
+        if status != 'added':
+            change_type = analyze_file_change_type(file_change)
+            if change_type == 'import_only':
+                continue
         
         # Only process production Python files
         if not is_production_python_file(file_path):
             continue
         
-        # Get changed methods from this file
-        changed_methods = file_change.get('changed_methods', [])
-        if not changed_methods:
+        # For new files, extract definitions from diff
+        if status == 'added' and diff_content:
+            definitions = extract_definitions_from_diff(diff_content, file_path)
+            # Use extracted functions if available, otherwise use changed_methods
+            functions_to_process = definitions.get('functions', [])
+            if not functions_to_process:
+                functions_to_process = file_change.get('changed_methods', [])
+        else:
+            # For modified files, use changed_methods from diff parser
+            functions_to_process = file_change.get('changed_methods', [])
+        
+        if not functions_to_process:
             continue
         
         # Convert file path to module name
@@ -509,8 +576,8 @@ def extract_changed_functions_with_modules(file_changes: List[Dict]) -> List[Dic
         # Use the first (most specific) module name
         primary_module = module_name[0] if isinstance(module_name, list) else module_name
         
-        # Create module.function entries for each changed method
-        for method_name in changed_methods:
+        # Create module.function entries for each function
+        for method_name in functions_to_process:
             changed_functions.append({
                 'module': primary_module,
                 'function': method_name

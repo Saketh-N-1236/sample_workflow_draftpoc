@@ -238,18 +238,20 @@ def query_tests_for_classes(conn, production_classes: List[str]) -> Dict[str, Li
 
 
 def query_tests_module_pattern(conn, module_pattern: str, prefer_direct: bool = True, 
-                                specific_classes: List[str] = None) -> List[Dict]:
+                                specific_classes: List[str] = None, require_direct: bool = False) -> List[Dict]:
     """
     Query database for tests matching a module pattern (e.g., 'agent.*').
     
     Prefers direct references (direct_import, string_ref) over indirect ones.
     If specific_classes is provided, only matches tests referencing those specific classes.
+    If require_direct is True, only returns tests with at least one direct reference.
     
     Args:
         conn: Database connection
         module_pattern: Pattern like 'agent.*'
         prefer_direct: If True, prefer direct references over indirect
         specific_classes: Optional list of specific class names to match (filters broad module matches)
+        require_direct: If True, only return tests with direct references (filters false positives)
     
     Returns:
         List of test dictionaries with reference_type
@@ -257,7 +259,7 @@ def query_tests_module_pattern(conn, module_pattern: str, prefer_direct: bool = 
     module_prefix = module_pattern.replace('.*', '')
     
     with conn.cursor() as cursor:
-        if prefer_direct:
+        if prefer_direct or require_direct:
             # Build WHERE clause with optional specific class filtering
             if specific_classes and len(specific_classes) > 0:
                 # Only match specific classes within the module
@@ -499,7 +501,7 @@ def find_direct_test_files(conn, test_file_candidates: List[str]) -> List[Dict]:
     return find_direct_test_files_enhanced(conn, test_file_candidates)
 
 
-def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = None) -> Dict[str, Any]:
+def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = None, prefer_function_level: bool = True) -> Dict[str, Any]:
     """
     Find all affected tests using multiple search strategies with enhanced matching.
     
@@ -514,12 +516,14 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
         conn: Database connection
         search_queries: Dictionary with search strategies
         file_changes: List of file change dictionaries (for filtering import-only changes)
+        prefer_function_level: If True, only use module patterns if no function matches found
     
     Returns:
         Dictionary with test results and metadata
     """
     all_tests = {}  # test_id -> test info with match details
     match_details = {}  # test_id -> list of match reasons
+    has_function_matches = False
     
     # Strategy 0: Function-level matching (very high confidence) - NEW
     if search_queries.get('changed_functions'):
@@ -527,6 +531,7 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
         function_tests = query_tests_for_functions(conn, search_queries['changed_functions'])
         
         if function_tests:
+            has_function_matches = True
             print_item(f"  Found {len(function_tests)} test(s) via function-level matching", "")
             
             # Group by function to show what matched
@@ -787,11 +792,12 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
             # Get specific classes that changed in this module for better filtering
             specific_classes = list(module_to_classes.get(module_prefix, []))
             
-            # Use prefer_direct=True and filter by specific changed classes
+            # Use prefer_direct=True, require_direct=True, and filter by specific changed classes
             module_tests = query_tests_module_pattern(
                 conn, module_pattern, 
                 prefer_direct=True,
-                specific_classes=specific_classes if specific_classes else None
+                specific_classes=specific_classes if specific_classes else None,
+                require_direct=True  # Only return tests with direct references
             )
             
             # Count by reference type
@@ -819,35 +825,69 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
                 })
         print()
     
-    # Strategy 4: Semantic search (catches what name matching misses)
+    # Strategy 4: Semantic search - combine with AST results
     changed_functions_for_semantic = search_queries.get('changed_functions', [])
+    semantic_test_ids = set()
+    semantic_added = 0
+    semantic_merged = 0
+    
     if changed_functions_for_semantic:
         print_section("Querying database (Semantic search - meaning-based)...")
         try:
             semantic_matches = asyncio.run(
-                find_tests_semantic(conn, changed_functions_for_semantic)
+                find_tests_semantic(conn, changed_functions_for_semantic, file_changes)
             )
 
-            # Only add tests NOT already found by strategies 0-3
-            semantic_added = 0
+            # Combine AST and semantic results (not just add missing)
             for test in semantic_matches:
                 test_id = test['test_id']
+                similarity = test.get('similarity', 0)
+                semantic_test_ids.add(test_id)
+                
                 if test_id not in all_tests:
+                    # New test from semantic - add it with full test data
                     all_tests[test_id] = test
                     match_details[test_id] = [{
-                        'type':       'semantic',
-                        'similarity': test['similarity'],
+                        'type': 'semantic',
+                        'similarity': similarity,
                         'confidence': 'medium'
                     }]
                     semantic_added += 1
+                else:
+                    # Test already found by AST - merge semantic match details
+                    if test_id not in match_details:
+                        match_details[test_id] = []
+                    
+                    # Check if semantic match already exists in match_details
+                    has_semantic = any(m.get('type') == 'semantic' for m in match_details[test_id])
+                    if not has_semantic:
+                        # Add semantic match to existing match_details
+                        match_details[test_id].append({
+                            'type': 'semantic',
+                            'similarity': similarity,
+                            'confidence': 'medium'
+                        })
+                        semantic_merged += 1
+                    else:
+                        # Update similarity if higher
+                        for m in match_details[test_id]:
+                            if m.get('type') == 'semantic':
+                                old_sim = m.get('similarity', 0)
+                                m['similarity'] = max(old_sim, similarity)
+                                break
 
             if semantic_added > 0:
                 print_item(
                     f"  Found {semantic_added} additional test(s) via semantic search",
-                    "(not found by name matching)"
+                    "(not found by AST matching)"
                 )
-            else:
-                print_item("  Semantic search: no additional tests found", "")
+            if semantic_merged > 0:
+                print_item(
+                    f"  Enhanced {semantic_merged} test(s) with semantic match details",
+                    "(found by both AST and semantic)"
+                )
+            if semantic_added == 0 and semantic_merged == 0:
+                print_item("  Semantic search: no new or enhanced tests", "")
 
         except Exception as e:
             # Semantic is optional — don't fail if Ollama is not running
@@ -855,10 +895,22 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
         print()
     
     # Attach confidence score to every matched test
+    # Use both AST and semantic match details for scoring
     for test_id, test in all_tests.items():
         matches   = match_details.get(test_id, [])
         test_type = test.get('test_type')
-        test['confidence_score'] = calculate_confidence_score(matches, test_type)
+        base_score = calculate_confidence_score(matches, test_type)
+        
+        # Hybrid scoring: boost tests found by both AST and semantic
+        # Check if this test has both AST and semantic matches
+        has_ast_match = any(m.get('type') != 'semantic' for m in matches)
+        has_semantic_match = any(m.get('type') == 'semantic' for m in matches)
+        
+        if has_ast_match and has_semantic_match:
+            # Test found by both methods - boost score
+            base_score += 5  # Bonus for being found by both methods
+        
+        test['confidence_score'] = min(100, base_score)
 
     # Sort by score descending — highest confidence runs first
     sorted_tests = sorted(
@@ -1380,60 +1432,141 @@ def calculate_confidence_score(
     test_type: str,
 ) -> int:
     """
-    Calculate 0-100 confidence score from match_details list.
+    Calculate 0-100 confidence score from match_details list with granular bands.
 
-    Scoring:
-      Match type weights (cumulative — a test can have multiple matches):
-        function_level                        → +50
-        exact + direct_import                 → +45
-        exact + string_ref  (via patch/Mock)  → +40
-        direct_file                           → +35
-        integration                           → +25
-        module pattern                        → +15
+    Scoring (7 distinct bands):
+      Base scores (before multipliers):
+        function_level (exact)              → 95-100
+        function_level (indirect)           → 85-94
+        exact + direct_import                → 75-84
+        exact + string_ref (patch/Mock)     → 65-74
+        module pattern + direct_import       → 55-64
+        module pattern (indirect)            → 45-54
+        semantic matches                     → 35-60 (capped)
+        direct_file                          → 50-60
+        integration                          → 40-50
 
-      Function-level precision bonus:
-        any match of type 'function_level'    → +20 extra
+      Match quality multipliers:
+        direct_import: 1.0x
+        string_ref (patch): 0.9x
+        indirect_import: 0.8x
+        module pattern only: 0.7x
+
+      Bonuses:
+        Multiple match types: +5
+        Function-level match: +10 (on top of base)
+
+      Penalties:
+        Only module patterns: -10
+        No function-level matches: -5
 
       Test type bonus (applied once):
-        unit                                  → +15
-        integration                           → +5
-        e2e / unknown / None                  → +0
+        unit: +5
+        integration: +3
+        e2e / unknown / None: +0
 
     Capped at 100.
     """
-    score = 0
+    if not match_details:
+        return 0
+    
+    base_score = 0
     has_function_level = False
-
+    has_exact_match = False
+    has_direct_reference = False
+    has_module_pattern_only = False
+    match_types = set()
+    
+    # First pass: determine base score and match characteristics
     for match in match_details:
-        mtype    = match.get('type', '')
+        mtype = match.get('type', '')
         ref_type = match.get('reference_type', '')
-
+        match_types.add(mtype)
+        
+        # Determine base score based on match type
         if mtype == 'function_level':
-            score += 50
             has_function_level = True
-        elif mtype == 'exact' and ref_type == 'direct_import':
-            score += 45
-        elif mtype == 'exact' and ref_type == 'string_ref':
-            score += 40
+            # Check if it's direct (patch_ref) or indirect (function_call)
+            source = match.get('source', '')
+            if source == 'patch_ref':
+                base_score = max(base_score, 95)  # Exact function-level match
+            else:
+                base_score = max(base_score, 85)  # Indirect function-level match
+            has_exact_match = True
+            if ref_type == 'direct_import' or source == 'patch_ref':
+                has_direct_reference = True
+                
+        elif mtype == 'exact':
+            has_exact_match = True
+            if ref_type == 'direct_import':
+                base_score = max(base_score, 75)
+                has_direct_reference = True
+            elif ref_type == 'string_ref':
+                base_score = max(base_score, 65)
+                has_direct_reference = True
+            else:
+                base_score = max(base_score, 60)
+                
         elif mtype == 'direct_file':
-            score += 35
+            base_score = max(base_score, 50)
+            has_direct_reference = True
+            
         elif mtype == 'integration':
-            score += 25
+            base_score = max(base_score, 40)
+            
         elif mtype == 'module':
-            score += 15
-
-    # Function-level precision bonus
+            if base_score == 0:  # Only module pattern, no other matches
+                has_module_pattern_only = True
+            if ref_type == 'direct_import':
+                base_score = max(base_score, 55)
+                has_direct_reference = True
+            else:
+                base_score = max(base_score, 45)
+                
+        elif mtype == 'semantic':
+            # Semantic matches capped at 60
+            similarity = match.get('similarity', 0)
+            semantic_score = int(similarity * 100) if similarity else 35
+            base_score = max(base_score, min(semantic_score, 60))
+    
+    # Apply multipliers based on reference quality
+    multiplier = 1.0
+    for match in match_details:
+        ref_type = match.get('reference_type', '')
+        if ref_type == 'direct_import':
+            multiplier = max(multiplier, 1.0)
+        elif ref_type == 'string_ref':
+            multiplier = max(multiplier, 0.9)
+        elif ref_type == 'indirect_import':
+            multiplier = max(multiplier, 0.8)
+        elif match.get('type') == 'module' and not has_direct_reference:
+            multiplier = max(multiplier, 0.7)
+    
+    score = int(base_score * multiplier)
+    
+    # Apply bonuses
     if has_function_level:
-        score += 20
-
+        score += 10
+    if len(match_types) > 1:
+        score += 5
+    
+    # Apply penalties
+    if has_module_pattern_only:
+        score -= 10
+    if not has_function_level and not has_exact_match:
+        score -= 5
+    
     # Test type bonus
     test_type_lower = (test_type or '').lower()
     if test_type_lower == 'unit':
-        score += 15
-    elif test_type_lower == 'integration':
         score += 5
-
-    return min(score, 100)
+    elif test_type_lower == 'integration':
+        score += 3
+    
+    # Ensure score is within valid range
+    score = max(0, min(100, score))
+    
+    return score
 
 
 def get_total_test_count(conn) -> int:
@@ -1587,22 +1720,26 @@ def display_results(results: Dict, conn=None) -> None:
 
     print()
     print_item("Score guide:",
-        "85-100: function+unit  |  60-84: exact match  |  35-59: direct file  |  <35: module/pattern")
+        "90-100: Very High  |  70-89: High  |  50-69: Medium  |  30-49: Low  |  0-29: Very Low")
     print()
     
-    # Score-based summary
+    # Score-based summary with 5 confidence bands
     scores = [t.get('confidence_score', 0) for t in results['tests']]
     print_section("Summary:")
     print_item("Total tests to run", results['total_tests'])
     if scores:
-        band_85 = sum(1 for s in scores if s >= 85)
-        band_60 = sum(1 for s in scores if 60 <= s < 85)
-        band_35 = sum(1 for s in scores if 35 <= s < 60)
-        band_lo = sum(1 for s in scores if s < 35)
-        if band_85: print_item("Score 85-100 (function-level precision)", band_85)
-        if band_60: print_item("Score 60-84  (exact class/import match)", band_60)
-        if band_35: print_item("Score 35-59  (direct file match)", band_35)
-        if band_lo: print_item("Score  0-34  (module/pattern match)", band_lo)
+        band_vh = sum(1 for s in scores if 90 <= s <= 100)  # Very High
+        band_h = sum(1 for s in scores if 70 <= s < 90)    # High
+        band_m = sum(1 for s in scores if 50 <= s < 70)    # Medium
+        band_l = sum(1 for s in scores if 30 <= s < 50)    # Low
+        band_vl = sum(1 for s in scores if 0 <= s < 30)    # Very Low
+        
+        if band_vh: print_item("Very High (90-100): function-level exact match", band_vh)
+        if band_h: print_item("High (70-89): exact class/import match", band_h)
+        if band_m: print_item("Medium (50-69): direct file/module pattern", band_m)
+        if band_l: print_item("Low (30-49): indirect/module pattern", band_l)
+        if band_vl: print_item("Very Low (0-29): semantic/broad pattern", band_vl)
+        
         print_item("Highest score", max(scores))
         print_item("Lowest score",  min(scores))
     print()

@@ -28,3 +28,9 @@ BATCH_SIZE = 10
 
 # Semantic score cap (so semantic never outranks exact matches)
 SEMANTIC_SCORE_CAP = 60
+
+# Adaptive similarity thresholds (tiered fallback)
+SEMANTIC_THRESHOLD_STRICT = 0.5
+SEMANTIC_THRESHOLD_MODERATE = 0.4
+SEMANTIC_THRESHOLD_LENIENT = 0.3
+MIN_RESULTS_PER_TIER = 5

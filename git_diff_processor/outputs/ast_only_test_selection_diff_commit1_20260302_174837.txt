@@ -1,7 +1,7 @@
 ================================================================================
 TEST SELECTION RESULTS
 ================================================================================
-Generated: 2026-03-02 15:22:28
+Generated: 2026-03-02 17:48:37
 Diff File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\git_diff_processor\sample_diffs\diff_commit1.txt
 
 Found 58 affected test(s)
@@ -10,61 +10,13 @@ Found 58 affected test(s)
 RANKED TEST LIST (sorted by confidence score 0-100)
 --------------------------------------------------------------------------------
 
-  [100] test_0050: TestSettings.test_settings_default_values (unit)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py
-         Matched via: exact_filename
-         Matched class: config (via import)
-         Matched class: config.settings (via import)
-         Module pattern: config.*
-
-  [100] test_0051: TestSettings.test_settings_from_env (unit)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py
-         Matched via: exact_filename
-         Matched class: config (via import)
-         Matched class: config.settings (via import)
-         Module pattern: config.*
-
-  [100] test_0052: TestSettings.test_settings_validate_llm_provider (unit)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py
-         Matched via: exact_filename
-         Matched class: config (via import)
-         Matched class: config.settings (via import)
-         Module pattern: config.*
-
-  [100] test_0053: TestSettings.test_settings_validate_embedding_provider (unit)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py
-         Matched via: exact_filename
-         Matched class: config (via import)
-         Matched class: config.settings (via import)
-         Module pattern: config.*
-
-  [100] test_0054: TestSettings.test_get_settings_singleton (unit)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py
-         Matched via: exact_filename
-         Matched class: config (via import)
-         Matched class: config.settings (via import)
-         Module pattern: config.*
-
-  [100] test_0055: TestSettings.test_clear_settings_cache (unit)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py
-         Matched via: exact_filename
-         Matched class: config (via import)
-         Matched class: config.settings (via import)
-         Module pattern: config.*
-
-  [100] test_0056: TestSettings.test_settings_optional_fields (unit)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py
-         Matched via: exact_filename
-         Matched class: config (via import)
-         Matched class: config.settings (via import)
-         Module pattern: config.*
-
   [100] test_0062: TestLLMFactory.test_create_provider_gemini (unit)
          File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py
+         Matched function: llm.factory.create_provider (via call)
          Matched via: exact_filename
-         Matched class: config (via import)
          Matched class: llm.factory (via import)
          Matched class: llm (via patch/Mock)
+         Matched class: config (via import)
          Matched class: config.settings (via import)
          Module pattern: config.*
          Module pattern: llm.*
@@ -72,10 +24,11 @@ RANKED TEST LIST (sorted by confidence score 0-100)
 
   [100] test_0063: TestLLMFactory.test_create_provider_gemini_missing_key (unit)
          File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py
+         Matched function: llm.factory.create_provider (via call)
          Matched via: exact_filename
-         Matched class: config (via import)
          Matched class: llm.factory (via import)
          Matched class: llm (via patch/Mock)
+         Matched class: config (via import)
          Matched class: config.settings (via import)
          Module pattern: config.*
          Module pattern: llm.*
@@ -83,10 +36,11 @@ RANKED TEST LIST (sorted by confidence score 0-100)
 
   [100] test_0064: TestLLMFactory.test_create_provider_ollama (unit)
          File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py
+         Matched function: llm.factory.create_provider (via call)
          Matched via: exact_filename
-         Matched class: config (via import)
          Matched class: llm.factory (via import)
          Matched class: llm (via patch/Mock)
+         Matched class: config (via import)
          Matched class: config.settings (via import)
          Module pattern: config.*
          Module pattern: llm.*
@@ -94,10 +48,11 @@ RANKED TEST LIST (sorted by confidence score 0-100)
 
   [100] test_0065: TestLLMFactory.test_create_provider_invalid (unit)
          File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py
+         Matched function: llm.factory.create_provider (via call)
          Matched via: exact_filename
-         Matched class: config (via import)
          Matched class: llm.factory (via import)
          Matched class: llm (via patch/Mock)
+         Matched class: config (via import)
          Matched class: config.settings (via import)
          Module pattern: config.*
          Module pattern: llm.*
@@ -105,10 +60,11 @@ RANKED TEST LIST (sorted by confidence score 0-100)
 
   [100] test_0066: TestLLMFactory.test_get_available_providers (unit)
          File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py
+         Matched function: llm.factory.get_available_providers (via call)
          Matched via: exact_filename
-         Matched class: config (via import)
          Matched class: llm.factory (via import)
          Matched class: llm (via patch/Mock)
+         Matched class: config (via import)
          Matched class: config.settings (via import)
          Module pattern: config.*
          Module pattern: llm.*
@@ -116,10 +72,11 @@ RANKED TEST LIST (sorted by confidence score 0-100)
 
   [100] test_0067: TestLLMFactory.test_create_embedding_provider_gemini (unit)
          File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py
+         Matched function: llm.factory.create_embedding_provider (via call)
          Matched via: exact_filename
-         Matched class: config (via import)
          Matched class: llm.factory (via import)
          Matched class: llm (via patch/Mock)
+         Matched class: config (via import)
          Matched class: config.settings (via import)
          Module pattern: config.*
          Module pattern: llm.*
@@ -127,10 +84,11 @@ RANKED TEST LIST (sorted by confidence score 0-100)
 
   [100] test_0068: TestLLMFactory.test_create_embedding_provider_ollama (unit)
          File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py
+         Matched function: llm.factory.create_embedding_provider (via call)
          Matched via: exact_filename
-         Matched class: config (via import)
          Matched class: llm.factory (via import)
          Matched class: llm (via patch/Mock)
+         Matched class: config (via import)
          Matched class: config.settings (via import)
          Module pattern: config.*
          Module pattern: llm.*
@@ -138,16 +96,66 @@ RANKED TEST LIST (sorted by confidence score 0-100)
 
   [100] test_0069: TestLLMFactory.test_create_embedding_provider_invalid (unit)
          File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py
+         Matched function: llm.factory.create_embedding_provider (via call)
          Matched via: exact_filename
-         Matched class: config (via import)
          Matched class: llm.factory (via import)
          Matched class: llm (via patch/Mock)
+         Matched class: config (via import)
          Matched class: config.settings (via import)
          Module pattern: config.*
          Module pattern: llm.*
          Module pattern: llm.*
 
-  [100] test_0070: TestCatalogServer.test_list_tables_tool (unit)
+  [ 85] test_0050: TestSettings.test_settings_default_values (unit)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py
+         Matched via: exact_filename
+         Matched class: config (via import)
+         Matched class: config.settings (via import)
+         Module pattern: config.*
+
+  [ 85] test_0051: TestSettings.test_settings_from_env (unit)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py
+         Matched via: exact_filename
+         Matched class: config (via import)
+         Matched class: config.settings (via import)
+         Module pattern: config.*
+
+  [ 85] test_0052: TestSettings.test_settings_validate_llm_provider (unit)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py
+         Matched via: exact_filename
+         Matched class: config (via import)
+         Matched class: config.settings (via import)
+         Module pattern: config.*
+
+  [ 85] test_0053: TestSettings.test_settings_validate_embedding_provider (unit)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py
+         Matched via: exact_filename
+         Matched class: config (via import)
+         Matched class: config.settings (via import)
+         Module pattern: config.*
+
+  [ 85] test_0054: TestSettings.test_get_settings_singleton (unit)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py
+         Matched via: exact_filename
+         Matched class: config (via import)
+         Matched class: config.settings (via import)
+         Module pattern: config.*
+
+  [ 85] test_0055: TestSettings.test_clear_settings_cache (unit)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py
+         Matched via: exact_filename
+         Matched class: config (via import)
+         Matched class: config.settings (via import)
+         Module pattern: config.*
+
+  [ 85] test_0056: TestSettings.test_settings_optional_fields (unit)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py
+         Matched via: exact_filename
+         Matched class: config (via import)
+         Matched class: config.settings (via import)
+         Module pattern: config.*
+
+  [ 85] test_0070: TestCatalogServer.test_list_tables_tool (unit)
          File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\mcp_servers\test_catalog_server.py
          Matched via: pattern_match
          Matched class: mcp_servers.catalog_server.tools (via import)
@@ -155,7 +163,7 @@ RANKED TEST LIST (sorted by confidence score 0-100)
          Module pattern: mcp_servers.*
          Module pattern: mcp_servers.*
 
-  [100] test_0071: TestCatalogServer.test_describe_table_tool (unit)
+  [ 85] test_0071: TestCatalogServer.test_describe_table_tool (unit)
          File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\mcp_servers\test_catalog_server.py
          Matched via: pattern_match
          Matched class: mcp_servers.catalog_server.tools (via import)
@@ -163,13 +171,113 @@ RANKED TEST LIST (sorted by confidence score 0-100)
          Module pattern: mcp_servers.*
          Module pattern: mcp_servers.*
 
-  [100] test_0072: TestCatalogServer.test_get_table_row_count_tool (unit)
+  [ 85] test_0072: TestCatalogServer.test_get_table_row_count_tool (unit)
          File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\mcp_servers\test_catalog_server.py
          Matched via: pattern_match
          Matched class: mcp_servers.catalog_server.tools (via import)
          Matched class: mcp_servers (via patch/Mock)
          Module pattern: mcp_servers.*
          Module pattern: mcp_servers.*
+
+  [ 80] test_0019: TestStateConverter.test_normalize_message_content_string (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0020: TestStateConverter.test_normalize_message_content_list (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0021: TestStateConverter.test_normalize_message_content_list_simple (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0022: TestStateConverter.test_normalize_message_content_none (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0023: TestStateConverter.test_normalize_message_content_dict_with_text (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0024: TestStateConverter.test_convert_to_langchain_messages (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0025: TestStateConverter.test_convert_to_langchain_messages_tool (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0026: TestStateConverter.test_convert_from_langchain_messages (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0027: TestStateConverter.test_convert_from_langchain_messages_with_tool_calls (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0028: TestStateConverter.test_convert_langgraph_state_to_agent (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0029: TestStateConverter.test_convert_langgraph_state_to_agent_with_tool_calls (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0030: TestToolConverter.test_json_schema_to_pydantic_string (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0031: TestToolConverter.test_json_schema_to_pydantic_integer (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0032: TestToolConverter.test_json_schema_to_pydantic_array (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0033: TestToolConverter.test_json_schema_to_pydantic_empty (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0034: TestToolConverter.test_mcp_tool_to_langchain (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0035: TestToolConverter.test_mcp_tool_to_langchain_error_handling (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0036: TestToolConverter.test_convert_mcp_tools_to_langchain (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0037: TestToolConverter.test_convert_mcp_tools_to_langchain_empty (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
+
+  [ 80] test_0038: TestToolConverter.test_convert_mcp_tools_to_langchain_conversion_error (unknown)
+         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
+         Matched class: agent (via import)
+         Module pattern: agent.*
 
   [ 70] test_0001: TestLangGraphAgent.test_agent_initialization (unknown)
          File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py
@@ -291,112 +399,12 @@ RANKED TEST LIST (sorted by confidence score 0-100)
          Module pattern: agent.*
          Module pattern: agent.*
 
-  [ 60] test_0019: TestStateConverter.test_normalize_message_content_string (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0020: TestStateConverter.test_normalize_message_content_list (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0021: TestStateConverter.test_normalize_message_content_list_simple (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0022: TestStateConverter.test_normalize_message_content_none (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0023: TestStateConverter.test_normalize_message_content_dict_with_text (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0024: TestStateConverter.test_convert_to_langchain_messages (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0025: TestStateConverter.test_convert_to_langchain_messages_tool (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0026: TestStateConverter.test_convert_from_langchain_messages (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0027: TestStateConverter.test_convert_from_langchain_messages_with_tool_calls (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0028: TestStateConverter.test_convert_langgraph_state_to_agent (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0029: TestStateConverter.test_convert_langgraph_state_to_agent_with_tool_calls (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0030: TestToolConverter.test_json_schema_to_pydantic_string (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0031: TestToolConverter.test_json_schema_to_pydantic_integer (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0032: TestToolConverter.test_json_schema_to_pydantic_array (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0033: TestToolConverter.test_json_schema_to_pydantic_empty (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0034: TestToolConverter.test_mcp_tool_to_langchain (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0035: TestToolConverter.test_mcp_tool_to_langchain_error_handling (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0036: TestToolConverter.test_convert_mcp_tools_to_langchain (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0037: TestToolConverter.test_convert_mcp_tools_to_langchain_empty (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
-  [ 60] test_0038: TestToolConverter.test_convert_mcp_tools_to_langchain_conversion_error (unknown)
-         File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py
-         Matched class: agent (via import)
-         Module pattern: agent.*
-
 --------------------------------------------------------------------------------
 SUMMARY
 --------------------------------------------------------------------------------
 Total tests to run: 58
 Highest score: 100
-Lowest score:  60
+Lowest score:  70
 Score 85-100:  18
 Score 60-84:   40
 Score 35-59:   0
@@ -409,14 +417,7 @@ PYTEST COMMANDS
 
 Run ALL selected (58 of 74 tests, 21.6% reduction):
 
-pytest C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_default_values \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_from_env \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_validate_llm_provider \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_validate_embedding_provider \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_get_settings_singleton \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_clear_settings_cache \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_optional_fields \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_provider_gemini \
+pytest C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_provider_gemini \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_provider_gemini_missing_key \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_provider_ollama \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_provider_invalid \
@@ -424,29 +425,16 @@ pytest C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_w
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_embedding_provider_gemini \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_embedding_provider_ollama \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_embedding_provider_invalid \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_default_values \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_from_env \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_validate_llm_provider \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_validate_embedding_provider \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_get_settings_singleton \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_clear_settings_cache \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_optional_fields \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\mcp_servers\test_catalog_server.py::TestCatalogServer::test_list_tables_tool \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\mcp_servers\test_catalog_server.py::TestCatalogServer::test_describe_table_tool \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\mcp_servers\test_catalog_server.py::TestCatalogServer::test_get_table_row_count_tool \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_initialization \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_initialization_failure_no_servers \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_initialization_no_tools \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_invoke \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_invoke_with_session_id \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_stream_invoke \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_stream_invoke_error \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_close \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_context_manager \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_extract_stage_info_agent_thinking \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_extract_stage_info_tool_executing \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_extract_stage_info_tool_completed \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_builder_initialization \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_builder_initialization_no_tools \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_build_graph \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_build_graph_no_tools \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_get_graph \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_get_graph_not_built \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\integration\test_agent_workflow.py::TestAgentWorkflow::test_agent_initialization_workflow \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\integration\test_agent_workflow.py::TestAgentWorkflow::test_agent_invocation_workflow \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py::TestStateConverter::test_normalize_message_content_string \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py::TestStateConverter::test_normalize_message_content_list \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py::TestStateConverter::test_normalize_message_content_list_simple \
@@ -466,18 +454,31 @@ pytest C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_w
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py::TestToolConverter::test_mcp_tool_to_langchain_error_handling \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py::TestToolConverter::test_convert_mcp_tools_to_langchain \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py::TestToolConverter::test_convert_mcp_tools_to_langchain_empty \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py::TestToolConverter::test_convert_mcp_tools_to_langchain_conversion_error -v
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py::TestToolConverter::test_convert_mcp_tools_to_langchain_conversion_error \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_initialization \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_initialization_failure_no_servers \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_initialization_no_tools \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_invoke \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_invoke_with_session_id \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_stream_invoke \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_stream_invoke_error \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_close \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_context_manager \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_extract_stage_info_agent_thinking \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_extract_stage_info_tool_executing \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_extract_stage_info_tool_completed \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_builder_initialization \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_builder_initialization_no_tools \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_build_graph \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_build_graph_no_tools \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_get_graph \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_get_graph_not_built \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\integration\test_agent_workflow.py::TestAgentWorkflow::test_agent_initialization_workflow \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\integration\test_agent_workflow.py::TestAgentWorkflow::test_agent_invocation_workflow -v
 
 Run HIGH PRIORITY only (score >= 60, 58 tests):
 
-pytest C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_default_values \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_from_env \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_validate_llm_provider \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_validate_embedding_provider \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_get_settings_singleton \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_clear_settings_cache \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_optional_fields \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_provider_gemini \
+pytest C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_provider_gemini \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_provider_gemini_missing_key \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_provider_ollama \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_provider_invalid \
@@ -485,29 +486,16 @@ pytest C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_w
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_embedding_provider_gemini \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_embedding_provider_ollama \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_embedding_provider_invalid \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_default_values \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_from_env \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_validate_llm_provider \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_validate_embedding_provider \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_get_settings_singleton \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_clear_settings_cache \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_optional_fields \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\mcp_servers\test_catalog_server.py::TestCatalogServer::test_list_tables_tool \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\mcp_servers\test_catalog_server.py::TestCatalogServer::test_describe_table_tool \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\mcp_servers\test_catalog_server.py::TestCatalogServer::test_get_table_row_count_tool \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_initialization \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_initialization_failure_no_servers \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_initialization_no_tools \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_invoke \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_invoke_with_session_id \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_stream_invoke \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_stream_invoke_error \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_close \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_context_manager \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_extract_stage_info_agent_thinking \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_extract_stage_info_tool_executing \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_extract_stage_info_tool_completed \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_builder_initialization \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_builder_initialization_no_tools \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_build_graph \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_build_graph_no_tools \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_get_graph \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_get_graph_not_built \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\integration\test_agent_workflow.py::TestAgentWorkflow::test_agent_initialization_workflow \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\integration\test_agent_workflow.py::TestAgentWorkflow::test_agent_invocation_workflow \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py::TestStateConverter::test_normalize_message_content_string \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py::TestStateConverter::test_normalize_message_content_list \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_state_converter.py::TestStateConverter::test_normalize_message_content_list_simple \
@@ -527,18 +515,31 @@ pytest C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_w
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py::TestToolConverter::test_mcp_tool_to_langchain_error_handling \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py::TestToolConverter::test_convert_mcp_tools_to_langchain \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py::TestToolConverter::test_convert_mcp_tools_to_langchain_empty \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py::TestToolConverter::test_convert_mcp_tools_to_langchain_conversion_error -v
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_tool_converter.py::TestToolConverter::test_convert_mcp_tools_to_langchain_conversion_error \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_initialization \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_initialization_failure_no_servers \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_initialization_no_tools \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_invoke \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_invoke_with_session_id \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_stream_invoke \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_stream_invoke_error \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_close \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_context_manager \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_extract_stage_info_agent_thinking \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_extract_stage_info_tool_executing \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_agent.py::TestLangGraphAgent::test_agent_extract_stage_info_tool_completed \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_builder_initialization \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_builder_initialization_no_tools \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_build_graph \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_build_graph_no_tools \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_get_graph \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\agent\test_langgraph_builder.py::TestLangGraphBuilder::test_get_graph_not_built \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\integration\test_agent_workflow.py::TestAgentWorkflow::test_agent_initialization_workflow \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\integration\test_agent_workflow.py::TestAgentWorkflow::test_agent_invocation_workflow -v
 
 Run FAST subset (unit + score >= 60, 18 tests):
 
-pytest C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_default_values \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_from_env \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_validate_llm_provider \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_validate_embedding_provider \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_get_settings_singleton \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_clear_settings_cache \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_optional_fields \
-       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_provider_gemini \
+pytest C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_provider_gemini \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_provider_gemini_missing_key \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_provider_ollama \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_provider_invalid \
@@ -546,6 +547,13 @@ pytest C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_w
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_embedding_provider_gemini \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_embedding_provider_ollama \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\llm\test_factory.py::TestLLMFactory::test_create_embedding_provider_invalid \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_default_values \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_from_env \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_validate_llm_provider \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_validate_embedding_provider \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_get_settings_singleton \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_clear_settings_cache \
+       C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\config\test_settings.py::TestSettings::test_settings_optional_fields \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\mcp_servers\test_catalog_server.py::TestCatalogServer::test_list_tables_tool \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\mcp_servers\test_catalog_server.py::TestCatalogServer::test_describe_table_tool \
        C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\test_repository\mcp_servers\test_catalog_server.py::TestCatalogServer::test_get_table_row_count_tool -v
