@@ -3,30 +3,80 @@ File scanning utilities for discovering test files.
 
 This module provides functions to:
 - Recursively scan directories for test files
-- Match test file patterns (test_*.py, *_test.py)
+- Match test file patterns (configurable per language)
 - Extract file metadata (size, line count)
 - Categorize files by directory structure
+
+Now supports multi-language test discovery through configuration.
 """
 
 from pathlib import Path
 from typing import List, Dict, Optional
 import re
+import sys
 
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 
-# Common test file patterns
-TEST_FILE_PATTERNS = [
+try:
+    from config.config_loader import load_language_configs, get_test_patterns, get_file_extensions
+    from parsers.registry import detect_language, initialize_registry
+    CONFIG_AVAILABLE = True
+except ImportError:
+    CONFIG_AVAILABLE = False
+
+# Default test file patterns (Python, for backward compatibility)
+DEFAULT_TEST_FILE_PATTERNS = [
     r'test_.*\.py$',      # test_*.py
     r'.*_test\.py$',      # *_test.py
     r'.*Test\.py$',       # *Test.py (Java-style, but sometimes used in Python)
 ]
 
+# Global cache for language configs
+_language_config_cache = None
+_config_path_cache = None
 
-def is_test_file(filepath: Path) -> bool:
+
+def _load_language_configs(config_path: Path = None) -> Optional[Dict]:
+    """Load language configs (cached)."""
+    global _language_config_cache, _config_path_cache
+    
+    if not CONFIG_AVAILABLE:
+        return None
+    
+    # Use cached config if path matches
+    if config_path and config_path == _config_path_cache and _language_config_cache:
+        return _language_config_cache
+    
+    try:
+        if config_path is None:
+            default_path = project_root / "config" / "language_configs.yaml"
+            if default_path.exists():
+                config_path = default_path
+            else:
+                return None
+        
+        if config_path.exists():
+            config = load_language_configs(config_path)
+            _language_config_cache = config
+            _config_path_cache = config_path
+            return config
+    except Exception:
+        pass
+    
+    return None
+
+
+def is_test_file(filepath: Path, config_path: Path = None) -> bool:
     """
     Check if a file matches test file patterns.
     
+    Now supports multi-language patterns from configuration.
+    
     Args:
         filepath: Path to the file to check
+        config_path: Optional path to language config YAML file
     
     Returns:
         True if the file matches test patterns, False otherwise
@@ -39,8 +89,30 @@ def is_test_file(filepath: Path) -> bool:
     """
     filename = filepath.name
     
-    # Check against all test patterns
-    for pattern in TEST_FILE_PATTERNS:
+    # Try to use language-specific patterns
+    if CONFIG_AVAILABLE:
+        config = _load_language_configs(config_path)
+        if config:
+            # Initialize registry if needed
+            try:
+                initialize_registry(config_path)
+            except Exception:
+                pass
+            
+            # Detect language
+            language = detect_language(filepath)
+            if language:
+                # Get test patterns for this language
+                patterns = get_test_patterns(config, language)
+                if patterns:
+                    # Convert glob patterns to regex
+                    for pattern in patterns:
+                        regex = pattern.replace('.', r'\.').replace('*', '.*')
+                        if re.match(regex, filename, re.IGNORECASE):
+                            return True
+    
+    # Fallback to default Python patterns
+    for pattern in DEFAULT_TEST_FILE_PATTERNS:
         if re.match(pattern, filename, re.IGNORECASE):
             return True
     
@@ -81,8 +153,8 @@ def scan_directory(root_dir: Path, exclude_dirs: Optional[List[str]] = None) -> 
         if item.suffix == '.pyc':
             continue
         
-        # Check if it's a test file
-        if is_test_file(item):
+        # Check if it's a test file (using language-aware detection)
+        if is_test_file(item, config_path):
             file_str = str(item.resolve())
             if file_str not in seen_files:
                 seen_files.add(file_str)
@@ -93,41 +165,47 @@ def scan_directory(root_dir: Path, exclude_dirs: Optional[List[str]] = None) -> 
     for dir_name in common_test_dirs:
         test_dir = root_dir / dir_name
         if test_dir.exists() and test_dir.is_dir():
-            for item in test_dir.rglob('*.py'):
-                # Skip excluded directories
-                if any(excluded in item.parts for excluded in exclude_dirs):
-                    continue
-                
-                # Skip .pyc files
-                if item.suffix == '.pyc':
-                    continue
-                
-                file_str = str(item.resolve())
-                if file_str not in seen_files:
-                    seen_files.add(file_str)
-                    test_files.append(item)
+            for ext in extensions_to_scan:
+                for item in test_dir.rglob(f'*{ext}'):
+                    # Skip excluded directories
+                    if any(excluded in item.parts for excluded in exclude_dirs):
+                        continue
+                    
+                    # Skip .pyc files
+                    if item.suffix == '.pyc':
+                        continue
+                    
+                    # Check if it's a test file (using language-aware detection)
+                    if is_test_file(item, config_path):
+                        file_str = str(item.resolve())
+                        if file_str not in seen_files:
+                            seen_files.add(file_str)
+                            test_files.append(item)
     
     # Strategy 3: Look for files in test/test directories even if they don't match patterns
     # This catches files that might be tests but don't follow naming conventions
-    for item in root_dir.rglob('*.py'):
-        if any(excluded in item.parts for excluded in exclude_dirs):
-            continue
-        
-        if item.suffix == '.pyc':
-            continue
-        
-        # If file is in a test directory, include it even if name doesn't match pattern
-        path_str = str(item).lower()
-        if any(test_dir in path_str for test_dir in ['/test/', '/tests/', '\\test\\', '\\tests\\']):
-            file_str = str(item.resolve())
-            if file_str not in seen_files:
-                seen_files.add(file_str)
-                test_files.append(item)
+    for ext in extensions_to_scan:
+        for item in root_dir.rglob(f'*{ext}'):
+            if any(excluded in item.parts for excluded in exclude_dirs):
+                continue
+            
+            if item.suffix == '.pyc':
+                continue
+            
+            # If file is in a test directory, include it even if name doesn't match pattern
+            # But still check if it's a test file using language-aware detection
+            path_str = str(item).lower()
+            if any(test_dir in path_str for test_dir in ['/test/', '/tests/', '\\test\\', '\\tests\\']):
+                if is_test_file(item, config_path):
+                    file_str = str(item.resolve())
+                    if file_str not in seen_files:
+                        seen_files.add(file_str)
+                        test_files.append(item)
     
     return sorted(test_files)  # Return sorted list for consistency
 
 
-def scan_directory_comprehensive(root_dir: Path, exclude_dirs: Optional[List[str]] = None) -> List[Path]:
+def scan_directory_comprehensive(root_dir: Path, exclude_dirs: Optional[List[str]] = None, config_path: Path = None) -> List[Path]:
     """
     Comprehensive test file scanner that finds ALL test files.
     
@@ -141,7 +219,7 @@ def scan_directory_comprehensive(root_dir: Path, exclude_dirs: Optional[List[str
     Returns:
         List of Path objects for all test files found
     """
-    return scan_directory(root_dir, exclude_dirs)
+    return scan_directory(root_dir, exclude_dirs, config_path)
 
 
 def get_file_metadata(filepath: Path) -> Dict[str, any]:

@@ -54,7 +54,8 @@ def count_all_tables(conn) -> dict:
         'test_dependencies',
         'reverse_index',
         'test_metadata',
-        'test_structure'
+        'test_structure',
+        'test_function_mapping'
     ]
     
     counts = {}
@@ -114,6 +115,19 @@ def verify_foreign_keys(conn) -> dict:
         results['test_metadata'] = {
             'orphaned': orphaned_metadata,
             'valid': orphaned_metadata == 0
+        }
+        
+        # Check test_function_mapping -> test_registry
+        cursor.execute("""
+            SELECT COUNT(*) 
+            FROM test_function_mapping tfm
+            LEFT JOIN test_registry tr ON tfm.test_id = tr.test_id
+            WHERE tr.test_id IS NULL
+        """)
+        orphaned_function_mapping = cursor.fetchone()[0]
+        results['test_function_mapping'] = {
+            'orphaned': orphaned_function_mapping,
+            'valid': orphaned_function_mapping == 0
         }
     
     return results
@@ -200,6 +214,57 @@ def run_sample_queries(conn) -> dict:
             'tests_with_metadata': coverage[1],
             'coverage_percentage': coverage[2]
         }
+        
+        # Query 5: Function mapping coverage and sample
+        cursor.execute("""
+            SELECT 
+                COUNT(DISTINCT tr.test_id) as total_tests,
+                COUNT(DISTINCT tfm.test_id) as tests_with_function_calls,
+                ROUND(100.0 * COUNT(DISTINCT tfm.test_id) / COUNT(DISTINCT tr.test_id), 2) as coverage_pct
+            FROM test_registry tr
+            LEFT JOIN test_function_mapping tfm ON tr.test_id = tfm.test_id
+        """)
+        func_coverage = cursor.fetchone()
+        results['function_mapping_coverage'] = {
+            'total_tests': func_coverage[0],
+            'tests_with_function_calls': func_coverage[1],
+            'coverage_percentage': func_coverage[2]
+        }
+        
+        # Get most called function
+        cursor.execute("""
+            SELECT module_name, function_name, COUNT(*) as test_count
+            FROM test_function_mapping
+            GROUP BY module_name, function_name
+            ORDER BY test_count DESC
+            LIMIT 1
+        """)
+        top_function = cursor.fetchone()
+        if top_function:
+            results['top_function'] = {
+                'module': top_function[0],
+                'function': top_function[1],
+                'test_count': top_function[2]
+            }
+            
+            # Get sample tests for this function
+            cursor.execute("""
+                SELECT DISTINCT tr.test_id, tr.class_name, tr.method_name
+                FROM test_function_mapping tfm
+                JOIN test_registry tr ON tfm.test_id = tr.test_id
+                WHERE tfm.module_name = %s
+                AND tfm.function_name = %s
+                LIMIT 3
+            """, (top_function[0], top_function[1]))
+            sample_tests = cursor.fetchall()
+            results['top_function']['sample_tests'] = [
+                {
+                    'test_id': row[0],
+                    'class_name': row[1],
+                    'method_name': row[2]
+                }
+                for row in sample_tests
+            ]
     
     return results
 
@@ -283,6 +348,25 @@ def main():
                           f"({coverage['tests_with_metadata']}/{coverage['total_tests']} tests)")
             print()
             
+            if 'function_mapping_coverage' in query_results:
+                func_coverage = query_results['function_mapping_coverage']
+                print_item("Function mapping coverage:", 
+                          f"{func_coverage['coverage_percentage']}% "
+                          f"({func_coverage['tests_with_function_calls']}/{func_coverage['total_tests']} tests)")
+            print()
+            
+            if 'top_function' in query_results:
+                top_func = query_results['top_function']
+                func_name = f"{top_func['module']}.{top_func['function']}"
+                print_item("Most called function:", 
+                          f"{func_name} ({top_func['test_count']} tests)")
+                if top_func.get('sample_tests'):
+                    print_item("  Sample tests:", "")
+                    for test in top_func['sample_tests']:
+                        test_name = f"{test['class_name']}.{test['method_name']}" if test['class_name'] else test['method_name']
+                        print_item(f"    - {test['test_id']}:", test_name)
+            print()
+            
             # Step 5: Summary
             print_section("Verification Summary:")
             total_records = sum(counts.values())
@@ -297,6 +381,7 @@ def main():
             print("Database is ready for:")
             print("  - Deterministic test selection queries")
             print("  - Fast code -> tests lookups")
+            print("  - Function-level test selection (precise matching)")
             print("  - Test metadata queries")
             print("  - Future semantic/vector data integration")
             

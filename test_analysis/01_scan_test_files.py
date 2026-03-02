@@ -33,6 +33,10 @@ TEST_REPO_PATH = Path(__file__).parent.parent / "test_repository"
 OUTPUT_DIR = Path(__file__).parent / "outputs"
 OUTPUT_FILE = OUTPUT_DIR / "01_test_files.json"
 
+# Add project root to path for multi-language support
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
+
 
 def main():
     """
@@ -58,9 +62,41 @@ def main():
     print_section(f"Scanning directory: {TEST_REPO_PATH}")
     print()
     
-    # Step 1: Scan for test files
-    print_section("Discovering test files...")
-    test_files = scan_directory(TEST_REPO_PATH)
+    # Try to detect languages and use multi-language scanning
+    try:
+        from test_analysis.language_detector import get_active_languages
+        from test_analysis.multi_language_scanner import get_test_files_by_language
+        
+        config_path = project_root / "config" / "language_configs.yaml"
+        active_languages = get_active_languages(TEST_REPO_PATH, config_path if config_path.exists() else None)
+        
+        if active_languages:
+            print_item("Detected languages", ", ".join(active_languages))
+            print()
+            
+            # Use multi-language scanner
+            if config_path.exists():
+                test_files_by_lang = get_test_files_by_language(TEST_REPO_PATH, config_path)
+                test_files = []
+                for lang, files in test_files_by_lang.items():
+                    test_files.extend(files)
+                    print_item(f"  {lang} tests", len(files))
+                test_files = sorted(test_files)
+            else:
+                # Fallback to regular scanning
+                test_files = scan_directory(TEST_REPO_PATH)
+        else:
+            # Fallback to regular scanning
+            test_files = scan_directory(TEST_REPO_PATH)
+    except Exception as e:
+        # Fallback to regular scanning if multi-language fails
+        print_item("Note", "Using standard Python-only scanning (multi-language unavailable)")
+        test_files = scan_directory(TEST_REPO_PATH)
+    
+    # Step 1: Scan for test files (if not already done)
+    if 'test_files' not in locals():
+        print_section("Discovering test files...")
+        test_files = scan_directory(TEST_REPO_PATH)
     
     if not test_files:
         print("No test files found!")

@@ -6,20 +6,35 @@ This module provides functions to:
 - Extract imports and dependencies
 - Extract class and method definitions
 - Extract test-related information from AST nodes
+
+NOTE: This module now uses the new PythonParser class for implementation.
+All functions are maintained for backward compatibility.
 """
 
-import ast
+import sys
 from pathlib import Path
-from typing import List, Dict, Set, Optional, Any
-import re
+from typing import List, Dict, Optional, Any
+import ast
+# Add project root to path for imports
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
+
+from parsers.python_parser import PythonParser
+
+# Create a singleton parser instance
+_parser = PythonParser()
 
 
-def parse_file(filepath: Path) -> Optional[ast.Module]:
+def parse_file(filepath: Path, max_retries: int = 3, retry_delay: float = 0.5):
     """
     Parse a Python file into an AST (Abstract Syntax Tree).
     
+    Handles OneDrive file locking issues with retry logic.
+    
     Args:
         filepath: Path to the Python file
+        max_retries: Maximum number of retry attempts (default: 3)
+        retry_delay: Initial delay between retries in seconds (default: 0.5)
     
     Returns:
         AST Module node, or None if parsing fails
@@ -28,20 +43,10 @@ def parse_file(filepath: Path) -> Optional[ast.Module]:
         tree = parse_file(Path("test_agent.py"))
         # Returns an ast.Module object if successful
     """
-    try:
-        with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-            content = f.read()
-        
-        return ast.parse(content, filename=str(filepath))
-    except SyntaxError as e:
-        print(f"Warning: Could not parse {filepath}: {e}")
-        return None
-    except Exception as e:
-        print(f"Warning: Error reading {filepath}: {e}")
-        return None
+    return _parser.parse_file(filepath, max_retries, retry_delay)
 
 
-def extract_imports(tree: ast.Module) -> Dict[str, List[str]]:
+def extract_imports(tree) -> Dict[str, List[str]]:
     """
     Extract all import statements from an AST.
     
@@ -60,33 +65,10 @@ def extract_imports(tree: ast.Module) -> Dict[str, List[str]]:
         # imports = extract_imports(tree)
         # 'os' will be in imports['imports']
     """
-    imports = []
-    from_imports = []
-    
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            # Handle: import module
-            for alias in node.names:
-                imports.append(alias.name)
-        
-        elif isinstance(node, ast.ImportFrom):
-            # Handle: from module import name
-            if node.module:  # module can be None for relative imports
-                imported_names = [alias.name for alias in node.names]
-                from_imports.append((node.module, imported_names))
-                imports.append(node.module)  # Also add the module itself
-    
-    # Combine all unique imports
-    all_imports = list(set(imports))
-    
-    return {
-        'imports': imports,
-        'from_imports': from_imports,
-        'all_imports': all_imports
-    }
+    return _parser.extract_imports(tree)
 
 
-def extract_classes(tree: ast.Module) -> List[Dict[str, Any]]:
+def extract_classes(tree) -> List[Dict[str, Any]]:
     """
     Extract all class definitions from an AST.
     
@@ -106,36 +88,10 @@ def extract_classes(tree: ast.Module) -> List[Dict[str, Any]]:
         # classes = extract_classes(tree)
         # classes[0]['name'] will be 'TestAgent'
     """
-    classes = []
-    
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ClassDef):
-            # Get base class names
-            bases = []
-            for base in node.bases:
-                if isinstance(base, ast.Name):
-                    bases.append(base.id)
-                elif isinstance(base, ast.Attribute):
-                    # Handle dotted names like unittest.TestCase
-                    bases.append(_get_attr_name(base))
-            
-            # Get method names (including async methods)
-            methods = []
-            for item in node.body:
-                if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                    methods.append(item.name)
-            
-            classes.append({
-                'name': node.name,
-                'bases': bases,
-                'methods': methods,
-                'line_number': node.lineno
-            })
-    
-    return classes
+    return _parser.extract_classes(tree)
 
 
-def extract_functions(tree: ast.Module) -> List[Dict[str, Any]]:
+def extract_functions(tree) -> List[Dict[str, Any]]:
     """
     Extract all function definitions from an AST.
     
@@ -156,39 +112,10 @@ def extract_functions(tree: ast.Module) -> List[Dict[str, Any]]:
         # funcs = extract_functions(tree)
         # funcs[0]['name'] will be 'test_func'
     """
-    functions = []
-    
-    for node in ast.walk(tree):
-        if isinstance(node, ast.FunctionDef) or isinstance(node, ast.AsyncFunctionDef):
-            is_async = isinstance(node, ast.AsyncFunctionDef)
-            
-            # Get parameter names
-            parameters = [arg.arg for arg in node.args.args]
-            
-            # Get decorator names
-            decorators = []
-            for decorator in node.decorator_list:
-                if isinstance(decorator, ast.Name):
-                    decorators.append(decorator.id)
-                elif isinstance(decorator, ast.Attribute):
-                    decorators.append(_get_attr_name(decorator))
-                elif isinstance(decorator, ast.Call):
-                    # Handle @pytest.mark.asyncio() style
-                    if isinstance(decorator.func, ast.Attribute):
-                        decorators.append(_get_attr_name(decorator.func))
-            
-            functions.append({
-                'name': node.name,
-                'is_async': is_async,
-                'parameters': parameters,
-                'line_number': node.lineno,
-                'decorators': decorators
-            })
-    
-    return functions
+    return _parser.extract_functions(tree)
 
 
-def extract_test_classes(tree: ast.Module) -> List[Dict[str, Any]]:
+def extract_test_classes(tree) -> List[Dict[str, Any]]:
     """
     Extract test classes (classes that start with 'Test' or inherit from TestCase).
     
@@ -204,6 +131,7 @@ def extract_test_classes(tree: ast.Module) -> List[Dict[str, Any]]:
         # test_classes = extract_test_classes(tree)
         # len(test_classes) will be 1
     """
+    import ast
     all_classes = extract_classes(tree)
     
     # Filter for test classes
@@ -219,7 +147,7 @@ def extract_test_classes(tree: ast.Module) -> List[Dict[str, Any]]:
     return test_classes
 
 
-def extract_test_methods(tree: ast.Module) -> List[Dict[str, Any]]:
+def extract_test_methods(tree) -> List[Dict[str, Any]]:
     """
     Extract test methods (methods that start with 'test_').
     
@@ -235,18 +163,10 @@ def extract_test_methods(tree: ast.Module) -> List[Dict[str, Any]]:
         # test_methods = extract_test_methods(tree)
         # len(test_methods) will be 1
     """
-    all_functions = extract_functions(tree)
-    
-    # Filter for test methods
-    test_methods = []
-    for func in all_functions:
-        if func['name'].startswith('test_'):
-            test_methods.append(func)
-    
-    return test_methods
+    return _parser.extract_test_methods(tree)
 
 
-def extract_docstrings(tree: ast.Module) -> Dict[str, str]:
+def extract_docstrings(tree) -> Dict[str, str]:
     """
     Extract docstrings from module, classes, and functions.
     
@@ -285,7 +205,7 @@ def extract_docstrings(tree: ast.Module) -> Dict[str, str]:
     return result
 
 
-def _get_attr_name(node: ast.Attribute) -> str:
+def _get_attr_name(node) -> str:
     """
     Helper function to get full attribute name (e.g., 'pytest.mark.asyncio').
     
@@ -295,20 +215,11 @@ def _get_attr_name(node: ast.Attribute) -> str:
     Returns:
         Full attribute name as string
     """
-    parts = []
-    current = node
-    
-    while isinstance(current, ast.Attribute):
-        parts.append(current.attr)
-        current = current.value
-    
-    if isinstance(current, ast.Name):
-        parts.append(current.id)
-    
-    return '.'.join(reversed(parts))
+    import ast
+    return _parser._get_attr_name(node)
 
 
-def extract_string_references(tree: ast.Module) -> List[str]:
+def extract_string_references(tree) -> List[str]:
     """
     Extract string-based references from function calls like:
     - patch('agent.agent_pool.LangGraphAgent')
@@ -331,49 +242,38 @@ def extract_string_references(tree: ast.Module) -> List[str]:
         # refs = extract_string_references(tree)
         # refs will contain 'agent.agent_pool.LangGraphAgent'
     """
-    string_refs = []
+    return _parser.extract_string_references(tree)
+
+
+def extract_function_calls(tree) -> List[Dict[str, Any]]:
+    """
+    Extract all function calls made inside each test method.
     
-    def is_patch_function(node) -> bool:
-        """Check if a node represents a patch/mock function call."""
-        if isinstance(node, ast.Name):
-            return node.id in ('patch', 'Mock', 'MagicMock', 'PropertyMock', 'AsyncMock')
-        elif isinstance(node, ast.Attribute):
-            # Handle mock.patch, unittest.mock.patch, etc.
-            return node.attr in ('patch', 'Mock', 'MagicMock', 'PropertyMock', 'AsyncMock')
-        return False
+    For each test method, finds:
+    - What functions it directly calls (e.g., initialize())
+    - What methods it calls on objects (e.g., agent.initialize())
+    - Filters out test framework calls (assert, patch, Mock, etc.)
     
-    def extract_string_from_node(node) -> Optional[str]:
-        """Extract string value from various AST node types."""
-        if isinstance(node, ast.Constant):
-            if isinstance(node.value, str):
-                return node.value
-        elif isinstance(node, ast.Str):  # Python < 3.8 compatibility
-            return node.s
-        return None
+    Args:
+        tree: AST Module node
     
-    for node in ast.walk(tree):
-        # Check function calls (patch('module.Class'))
-        if isinstance(node, ast.Call):
-            if is_patch_function(node.func):
-                # Extract string arguments
-                for arg in node.args:
-                    ref = extract_string_from_node(arg)
-                    if ref and '.' in ref and not ref.startswith('http'):
-                        # Filter out URLs and non-module strings
-                        # Module paths typically have dots and don't start with http
-                        if not ref.startswith('/') and not ref.startswith('\\'):
-                            string_refs.append(ref)
-        
-        # Check decorators with string arguments (@patch('module.Class'))
-        if isinstance(node, (ast.FunctionDef, ast.ClassDef, ast.AsyncFunctionDef)):
-            for decorator in node.decorator_list:
-                if isinstance(decorator, ast.Call):
-                    if is_patch_function(decorator.func):
-                        for arg in decorator.args:
-                            ref = extract_string_from_node(arg)
-                            if ref and '.' in ref and not ref.startswith('http'):
-                                if not ref.startswith('/') and not ref.startswith('\\'):
-                                    string_refs.append(ref)
+    Returns:
+        List of dictionaries, one per test method:
+        - test_method: Name of the test method
+        - calls: List of call dictionaries with:
+            - function: Function/method name
+            - object: Object name (if method call, e.g., 'agent')
+            - type: 'direct' or 'method'
+            - line_number: Line where call occurs
     
-    # Remove duplicates and return
-    return sorted(list(set(string_refs)))
+    Example:
+        # Code: 
+        # def test_agent_initialization(self, agent):
+        #     await agent.initialize()
+        #     assert agent._initialized is True
+        # 
+        # tree = ast.parse("...")
+        # calls = extract_function_calls(tree)
+        # calls[0]['calls'] will contain {'function': 'initialize', 'object': 'agent', 'type': 'method'}
+    """
+    return _parser.extract_function_calls(tree)

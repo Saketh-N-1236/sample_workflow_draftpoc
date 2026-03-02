@@ -324,6 +324,56 @@ def get_tests_for_production_class(conn, production_class: str, schema: str = 'p
         ]
 
 
+def batch_insert_test_function_mapping(conn, mappings: List[Dict[str, Any]]) -> int:
+    """
+    Insert multiple test function mappings in batch.
+    
+    Args:
+        conn: Database connection
+        mappings: List of function mapping dictionaries with:
+            - test_id: Test identifier
+            - module_name: Production module name (e.g., agent.langgraph_agent)
+            - function_name: Function name (e.g., initialize)
+            - call_type: Type of call (direct_call, method_call, patch_ref)
+            - source: Source of mapping (method_call, patch_ref)
+    
+    Returns:
+        Number of mappings inserted
+    """
+    if not mappings:
+        return 0
+    
+    try:
+        with conn.cursor() as cursor:
+            values = [
+                (
+                    m['test_id'],
+                    m['module_name'],
+                    m['function_name'],
+                    m.get('call_type'),
+                    m.get('source')
+                )
+                for m in mappings
+            ]
+            
+            execute_values(
+                cursor,
+                """
+                INSERT INTO test_function_mapping 
+                (test_id, module_name, function_name, call_type, source)
+                VALUES %s
+                ON CONFLICT DO NOTHING
+                """,
+                values
+            )
+            conn.commit()
+            return len(mappings)
+    except Exception as e:
+        conn.rollback()
+        print(f"Error in batch insert function mappings: {e}")
+        return 0
+
+
 def count_table_records(conn, table_name: str) -> int:
     """
     Count records in a table.

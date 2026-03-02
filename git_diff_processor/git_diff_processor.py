@@ -20,6 +20,7 @@ Usage:
 """
 
 import sys
+import asyncio
 from pathlib import Path
 from typing import Dict, List, Any
 
@@ -39,6 +40,9 @@ from utils.diff_parser import (
     extract_production_classes_from_file,
     extract_test_file_candidates
 )
+
+# Import semantic search
+from semantic_retrieval.semantic_search import find_tests_semantic
 
 
 def print_header(title: str, width: int = 50) -> None:
@@ -108,6 +112,16 @@ def display_search_strategy(search_queries: Dict) -> None:
     print_section("What We'll Search in Database:")
     print()
     
+    # Show function-level changes first (highest precision)
+    if search_queries.get('changed_functions'):
+        print_item("Function-level changes (highest precision)", len(search_queries['changed_functions']))
+        for func_change in search_queries['changed_functions'][:10]:
+            func_name = f"{func_change['module']}.{func_change['function']}"
+            print_item(f"  - {func_name}", "(will match tests that call/patch this function)")
+        if len(search_queries['changed_functions']) > 10:
+            print_item(f"  ... and {len(search_queries['changed_functions']) - 10} more", "")
+        print()
+    
     if search_queries['exact_matches']:
         print_item("Exact production class matches", len(search_queries['exact_matches']))
         for match in search_queries['exact_matches'][:10]:
@@ -131,9 +145,75 @@ def display_search_strategy(search_queries: Dict) -> None:
         print()
     
     print_item("Database tables to query", "")
-    print_item("  - reverse_index", "(primary - fast lookup)")
+    if search_queries.get('changed_functions'):
+        print_item("  - test_function_mapping", "(function-level - highest precision)")
+    print_item("  - reverse_index", "(class/module-level - fast lookup)")
     print_item("  - test_registry", "(for direct test file matching)")
     print()
+
+
+def query_tests_for_functions(conn, changed_functions: List[Dict[str, str]]) -> List[Dict]:
+    """
+    Query database for tests that call/patch specific functions.
+    
+    This is the most precise matching strategy - only selects tests that
+    actually call or patch the changed functions.
+    
+    Args:
+        conn: Database connection
+        changed_functions: List of {'module': 'agent.langgraph_agent', 'function': 'initialize'}
+    
+    Returns:
+        List of test dictionaries with match details
+    """
+    if not changed_functions:
+        return []
+    
+    all_tests = []
+    seen_test_ids = set()
+    
+    with conn.cursor() as cursor:
+        for func_change in changed_functions:
+            module_name = func_change['module']
+            function_name = func_change['function']
+            
+            # Query test_function_mapping table
+            cursor.execute(f"""
+                SELECT DISTINCT 
+                    tr.test_id, 
+                    tr.class_name, 
+                    tr.method_name, 
+                    tr.file_path,
+                    tr.test_type,
+                    tfm.call_type,
+                    tfm.source,
+                    CASE WHEN tfm.source = 'patch_ref' THEN 1 ELSE 2 END as source_priority
+                FROM {DB_SCHEMA}.test_function_mapping tfm
+                JOIN {DB_SCHEMA}.test_registry tr ON tfm.test_id = tr.test_id
+                WHERE tfm.module_name = %s
+                AND tfm.function_name = %s
+                ORDER BY 
+                    source_priority,
+                    tr.test_id
+            """, (module_name, function_name))
+            
+            for row in cursor.fetchall():
+                test_id = row[0]
+                if test_id not in seen_test_ids:
+                    seen_test_ids.add(test_id)
+                    all_tests.append({
+                        'test_id': test_id,
+                        'class_name': row[1],
+                        'method_name': row[2],
+                        'test_file_path': row[3],
+                        'test_type': row[4],
+                        'call_type': row[5],
+                        'source': row[6],
+                        'matched_module': module_name,
+                        'matched_function': function_name
+                    })
+    
+    return all_tests
 
 
 def query_tests_for_classes(conn, production_classes: List[str]) -> Dict[str, List[Dict]]:
@@ -424,9 +504,11 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
     Find all affected tests using multiple search strategies with enhanced matching.
     
     Strategies (in priority order):
-    1. Direct test files (highest confidence)
-    2. Exact class/module matches (high confidence)
-    3. Module patterns with direct references (medium confidence)
+    0. Function-level matching (very high confidence) - NEW
+    1. Direct test files (high confidence)
+    2. Integration/e2e tests (high confidence)
+    3. Exact class/module matches (high confidence)
+    4. Module patterns with direct references (medium confidence)
     
     Args:
         conn: Database connection
@@ -439,7 +521,53 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
     all_tests = {}  # test_id -> test info with match details
     match_details = {}  # test_id -> list of match reasons
     
-    # Strategy 1: Direct test files (highest confidence) - Enhanced
+    # Strategy 0: Function-level matching (very high confidence) - NEW
+    if search_queries.get('changed_functions'):
+        print_section("Querying database (Function-level matching - highest precision)...")
+        function_tests = query_tests_for_functions(conn, search_queries['changed_functions'])
+        
+        if function_tests:
+            print_item(f"  Found {len(function_tests)} test(s) via function-level matching", "")
+            
+            # Group by function to show what matched
+            by_function = {}
+            for test in function_tests:
+                func_key = f"{test['matched_module']}.{test['matched_function']}"
+                if func_key not in by_function:
+                    by_function[func_key] = []
+                by_function[func_key].append(test)
+            
+            # Show which functions matched (first 10)
+            print_item("  Matched functions", "")
+            for func_key, tests in list(by_function.items())[:10]:
+                test_count = len(tests)
+                test_names = [f"{t.get('class_name', '')}.{t.get('method_name', '')}" if t.get('class_name') else t.get('method_name', '') for t in tests[:3]]
+                test_list = ", ".join(test_names)
+                if test_count > 3:
+                    test_list += f" ... (+{test_count - 3} more)"
+                print_item(f"    - {func_key}", f"({test_count} test(s): {test_list})")
+            if len(by_function) > 10:
+                print_item(f"    ... and {len(by_function) - 10} more functions", "")
+            
+            for test in function_tests:
+                test_id = test['test_id']
+                if test_id not in all_tests:
+                    all_tests[test_id] = test
+                    match_details[test_id] = []
+                match_details[test_id].append({
+                    'type': 'function_level',
+                    'module': test['matched_module'],
+                    'function': test['matched_function'],
+                    'call_type': test.get('call_type'),
+                    'source': test.get('source'),
+                    'confidence': 'very_high'
+                })
+        else:
+            print_item("  No function-level matches found", "")
+            print_item("  (Falling back to file-level matching)", "")
+        print()
+    
+    # Strategy 1: Direct test files (high confidence) - Enhanced
     if search_queries.get('test_file_candidates'):
         print_section("Querying database (Direct test files - enhanced multi-strategy)...")
         
@@ -691,11 +819,357 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
                 })
         print()
     
+    # Strategy 4: Semantic search (catches what name matching misses)
+    changed_functions_for_semantic = search_queries.get('changed_functions', [])
+    if changed_functions_for_semantic:
+        print_section("Querying database (Semantic search - meaning-based)...")
+        try:
+            semantic_matches = asyncio.run(
+                find_tests_semantic(conn, changed_functions_for_semantic)
+            )
+
+            # Only add tests NOT already found by strategies 0-3
+            semantic_added = 0
+            for test in semantic_matches:
+                test_id = test['test_id']
+                if test_id not in all_tests:
+                    all_tests[test_id] = test
+                    match_details[test_id] = [{
+                        'type':       'semantic',
+                        'similarity': test['similarity'],
+                        'confidence': 'medium'
+                    }]
+                    semantic_added += 1
+
+            if semantic_added > 0:
+                print_item(
+                    f"  Found {semantic_added} additional test(s) via semantic search",
+                    "(not found by name matching)"
+                )
+            else:
+                print_item("  Semantic search: no additional tests found", "")
+
+        except Exception as e:
+            # Semantic is optional — don't fail if Ollama is not running
+            print_item("  Semantic search skipped", f"(Ollama unavailable: {e})")
+        print()
+    
+    # Attach confidence score to every matched test
+    for test_id, test in all_tests.items():
+        matches   = match_details.get(test_id, [])
+        test_type = test.get('test_type')
+        test['confidence_score'] = calculate_confidence_score(matches, test_type)
+
+    # Sort by score descending — highest confidence runs first
+    sorted_tests = sorted(
+        all_tests.values(),
+        key=lambda t: t.get('confidence_score', 0),
+        reverse=True
+    )
+
     return {
-        'tests': list(all_tests.values()),
+        'tests':         sorted_tests,
         'match_details': match_details,
-        'total_tests': len(all_tests)
+        'total_tests':   len(all_tests)
     }
+
+
+def find_tests_ast_only(conn, search_queries: Dict, file_changes: List[Dict] = None) -> Dict[str, Any]:
+    """
+    Find tests using only AST-based strategies (0-3), excluding semantic search.
+    
+    Returns:
+        Dictionary with test results from AST-based matching only
+    """
+    all_tests = {}
+    match_details = {}
+    
+    # Strategy 0: Function-level matching
+    if search_queries.get('changed_functions'):
+        function_tests = query_tests_for_functions(conn, search_queries['changed_functions'])
+        for test in function_tests:
+            test_id = test['test_id']
+            if test_id not in all_tests:
+                all_tests[test_id] = test
+                match_details[test_id] = []
+            match_details[test_id].append({
+                'type': 'function_level',
+                'module': test.get('matched_module', ''),
+                'function': test.get('matched_function', ''),
+                'source': test.get('source', ''),
+                'confidence': 'very_high'
+            })
+    
+    # Strategy 1: Direct test files
+    if search_queries.get('test_file_candidates'):
+        direct_tests = find_direct_test_files_enhanced(
+            conn, 
+            search_queries['test_file_candidates']
+        )
+        for test in direct_tests:
+            test_id = test['test_id']
+            if test_id not in all_tests:
+                all_tests[test_id] = test
+                match_details[test_id] = []
+            match_details[test_id].append({
+                'type': 'direct_file',
+                'test_file': test.get('test_file_path', ''),
+                'match_strategy': test.get('match_strategy', 'exact_filename'),
+                'confidence': 'very_high'
+            })
+    
+    # Strategy 1.5: Integration tests
+    if file_changes:
+        for file_change in file_changes:
+            file_path = file_change.get('file', '')
+            if file_path and file_path.endswith('.py'):
+                from utils.diff_parser import extract_production_classes_from_file, analyze_file_change_type
+                change_type = analyze_file_change_type(file_change)
+                if change_type != 'import_only':
+                    classes = extract_production_classes_from_file(file_path)
+                    for module_name in classes[:1]:
+                        integration_tests = find_integration_tests_for_module(conn, module_name)
+                        for test in integration_tests:
+                            test_id = test['test_id']
+                            if test_id not in all_tests:
+                                all_tests[test_id] = test
+                                match_details[test_id] = []
+                            match_details[test_id].append({
+                                'type': 'integration',
+                                'module': module_name,
+                                'confidence': 'high'
+                            })
+    
+    # Strategy 2: Exact matches
+    if search_queries.get('exact_matches'):
+        for prod_class in search_queries['exact_matches']:
+            exact_tests = query_tests_for_classes(conn, [prod_class])
+            for test_list in exact_tests.values():
+                for test in test_list:
+                    test_id = test['test_id']
+                    if test_id not in all_tests:
+                        all_tests[test_id] = test
+                        match_details[test_id] = []
+                    match_details[test_id].append({
+                        'type': 'exact',
+                        'class': prod_class,
+                        'reference_type': test.get('reference_type', 'direct_import'),
+                        'confidence': 'high'
+                    })
+    
+    # Strategy 3: Module patterns
+    if search_queries.get('module_matches'):
+        for module_pattern in search_queries['module_matches']:
+            module_tests = query_tests_module_pattern(conn, module_pattern, prefer_direct=True)
+            for test in module_tests:
+                test_id = test['test_id']
+                if test_id not in all_tests:
+                    all_tests[test_id] = test
+                    match_details[test_id] = []
+                match_details[test_id].append({
+                    'type': 'module',
+                    'pattern': module_pattern,
+                    'reference_type': test.get('reference_type', 'direct_import'),
+                    'confidence': 'medium'
+                })
+    
+    # Calculate scores
+    for test_id, test in all_tests.items():
+        matches = match_details.get(test_id, [])
+        test_type = test.get('test_type')
+        test['confidence_score'] = calculate_confidence_score(matches, test_type)
+    
+    # Sort by score
+    sorted_tests = sorted(
+        all_tests.values(),
+        key=lambda t: t.get('confidence_score', 0),
+        reverse=True
+    )
+    
+    return {
+        'tests': sorted_tests,
+        'match_details': match_details,
+        'total_tests': len(all_tests),
+        'method': 'AST'
+    }
+
+
+def find_tests_semantic_only(conn, search_queries: Dict) -> Dict[str, Any]:
+    """
+    Find tests using only semantic search (vector embeddings).
+    
+    Returns:
+        Dictionary with test results from semantic search only
+    """
+    all_tests = {}
+    match_details = {}
+    
+    changed_functions = search_queries.get('changed_functions', [])
+    if not changed_functions:
+        return {
+            'tests': [],
+            'match_details': {},
+            'total_tests': 0,
+            'method': 'Semantic'
+        }
+    
+    try:
+        semantic_matches = asyncio.run(
+            find_tests_semantic(conn, changed_functions)
+        )
+        
+        for test in semantic_matches:
+            test_id = test['test_id']
+            all_tests[test_id] = test
+            match_details[test_id] = [{
+                'type': 'semantic',
+                'similarity': test.get('similarity', 0),
+                'confidence': 'medium'
+            }]
+        
+        # Sort by similarity (descending)
+        sorted_tests = sorted(
+            all_tests.values(),
+            key=lambda t: t.get('similarity', 0),
+            reverse=True
+        )
+        
+        return {
+            'tests': sorted_tests,
+            'match_details': match_details,
+            'total_tests': len(all_tests),
+            'method': 'Semantic'
+        }
+    except Exception as e:
+        return {
+            'tests': [],
+            'match_details': {},
+            'total_tests': 0,
+            'method': 'Semantic',
+            'error': str(e)
+        }
+
+
+def compare_ast_vs_semantic(ast_results: Dict, semantic_results: Dict) -> Dict[str, Any]:
+    """
+    Compare results from AST-based matching vs semantic search.
+    
+    Returns:
+        Dictionary with comparison statistics
+    """
+    ast_test_ids = {t['test_id'] for t in ast_results['tests']}
+    semantic_test_ids = {t['test_id'] for t in semantic_results['tests']}
+    
+    only_ast = ast_test_ids - semantic_test_ids
+    only_semantic = semantic_test_ids - ast_test_ids
+    both = ast_test_ids & semantic_test_ids
+    
+    return {
+        'ast_only': list(only_ast),
+        'semantic_only': list(only_semantic),
+        'both': list(both),
+        'ast_count': len(ast_test_ids),
+        'semantic_count': len(semantic_test_ids),
+        'overlap_count': len(both),
+        'ast_only_count': len(only_ast),
+        'semantic_only_count': len(only_semantic),
+        'overlap_percentage': round((len(both) / max(len(ast_test_ids), 1)) * 100, 1) if ast_test_ids else 0
+    }
+
+
+def save_comparison_report(ast_results: Dict, semantic_results: Dict, 
+                          comparison: Dict, diff_file_path: str = None, 
+                          output_dir: Path = None) -> Path:
+    """
+    Save comparison report between AST and semantic methods.
+    """
+    from datetime import datetime
+    
+    if output_dir is None:
+        output_dir = Path(__file__).parent / "outputs"
+    output_dir.mkdir(exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    if diff_file_path:
+        diff_name = Path(diff_file_path).stem
+        output_filename = f"comparison_ast_vs_semantic_{diff_name}_{timestamp}.txt"
+    else:
+        output_filename = f"comparison_ast_vs_semantic_{timestamp}.txt"
+    
+    output_path = output_dir / output_filename
+    
+    lines = []
+    lines.append("=" * 80)
+    lines.append("AST vs SEMANTIC SEARCH COMPARISON REPORT")
+    lines.append("=" * 80)
+    lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    if diff_file_path:
+        lines.append(f"Diff File: {diff_file_path}")
+    lines.append("")
+    
+    # Summary statistics
+    lines.append("-" * 80)
+    lines.append("SUMMARY STATISTICS")
+    lines.append("-" * 80)
+    lines.append("")
+    lines.append(f"AST-based matching found:     {comparison['ast_count']} tests")
+    lines.append(f"Semantic search found:        {comparison['semantic_count']} tests")
+    lines.append(f"Found by both methods:        {comparison['overlap_count']} tests")
+    lines.append(f"Found only by AST:            {comparison['ast_only_count']} tests")
+    lines.append(f"Found only by Semantic:       {comparison['semantic_only_count']} tests")
+    if comparison['ast_count'] > 0:
+        lines.append(f"Overlap percentage:           {comparison['overlap_percentage']}%")
+    lines.append("")
+    
+    # Tests found by both
+    if comparison['both']:
+        lines.append("-" * 80)
+        lines.append(f"TESTS FOUND BY BOTH METHODS ({len(comparison['both'])} tests)")
+        lines.append("-" * 80)
+        lines.append("")
+        for test_id in comparison['both']:
+            ast_test = next((t for t in ast_results['tests'] if t['test_id'] == test_id), None)
+            semantic_test = next((t for t in semantic_results['tests'] if t['test_id'] == test_id), None)
+            if ast_test and semantic_test:
+                test_name = f"{ast_test.get('class_name', '')}.{ast_test.get('method_name', '')}" if ast_test.get('class_name') else ast_test.get('method_name', '')
+                ast_score = ast_test.get('confidence_score', 0)
+                semantic_sim = int(semantic_test.get('similarity', 0) * 100)
+                lines.append(f"  {test_id}: {test_name}")
+                lines.append(f"    AST Score: {ast_score} | Semantic Similarity: {semantic_sim}%")
+        lines.append("")
+    
+    # Tests found only by AST
+    if comparison['ast_only']:
+        lines.append("-" * 80)
+        lines.append(f"TESTS FOUND ONLY BY AST ({len(comparison['ast_only'])} tests)")
+        lines.append("-" * 80)
+        lines.append("")
+        for test_id in comparison['ast_only']:
+            test = next((t for t in ast_results['tests'] if t['test_id'] == test_id), None)
+            if test:
+                test_name = f"{test.get('class_name', '')}.{test.get('method_name', '')}" if test.get('class_name') else test.get('method_name', '')
+                score = test.get('confidence_score', 0)
+                lines.append(f"  [{score:3d}] {test_id}: {test_name}")
+        lines.append("")
+    
+    # Tests found only by Semantic
+    if comparison['semantic_only']:
+        lines.append("-" * 80)
+        lines.append(f"TESTS FOUND ONLY BY SEMANTIC SEARCH ({len(comparison['semantic_only'])} tests)")
+        lines.append("-" * 80)
+        lines.append("")
+        for test_id in comparison['semantic_only']:
+            test = next((t for t in semantic_results['tests'] if t['test_id'] == test_id), None)
+            if test:
+                test_name = f"{test.get('class_name', '')}.{test.get('method_name', '')}" if test.get('class_name') else test.get('method_name', '')
+                similarity = int(test.get('similarity', 0) * 100)
+                lines.append(f"  [{similarity:3d}%] {test_id}: {test_name}")
+        lines.append("")
+    
+    with open(output_path, 'w', encoding='utf-8') as f:
+        f.write('\n'.join(lines))
+    
+    return output_path
 
 
 def get_all_tests_from_database(conn) -> Dict[str, Dict]:
@@ -901,6 +1375,131 @@ def find_unused_tests(conn, affected_test_ids: set) -> List[Dict]:
     return unused_tests
 
 
+def calculate_confidence_score(
+    match_details: list,
+    test_type: str,
+) -> int:
+    """
+    Calculate 0-100 confidence score from match_details list.
+
+    Scoring:
+      Match type weights (cumulative — a test can have multiple matches):
+        function_level                        → +50
+        exact + direct_import                 → +45
+        exact + string_ref  (via patch/Mock)  → +40
+        direct_file                           → +35
+        integration                           → +25
+        module pattern                        → +15
+
+      Function-level precision bonus:
+        any match of type 'function_level'    → +20 extra
+
+      Test type bonus (applied once):
+        unit                                  → +15
+        integration                           → +5
+        e2e / unknown / None                  → +0
+
+    Capped at 100.
+    """
+    score = 0
+    has_function_level = False
+
+    for match in match_details:
+        mtype    = match.get('type', '')
+        ref_type = match.get('reference_type', '')
+
+        if mtype == 'function_level':
+            score += 50
+            has_function_level = True
+        elif mtype == 'exact' and ref_type == 'direct_import':
+            score += 45
+        elif mtype == 'exact' and ref_type == 'string_ref':
+            score += 40
+        elif mtype == 'direct_file':
+            score += 35
+        elif mtype == 'integration':
+            score += 25
+        elif mtype == 'module':
+            score += 15
+
+    # Function-level precision bonus
+    if has_function_level:
+        score += 20
+
+    # Test type bonus
+    test_type_lower = (test_type or '').lower()
+    if test_type_lower == 'unit':
+        score += 15
+    elif test_type_lower == 'integration':
+        score += 5
+
+    return min(score, 100)
+
+
+def get_total_test_count(conn) -> int:
+    """Get total number of tests in test_registry for reduction % calculation."""
+    with conn.cursor() as cursor:
+        cursor.execute(f"SELECT COUNT(*) FROM {DB_SCHEMA}.test_registry")
+        return cursor.fetchone()[0]
+
+
+def generate_pytest_commands(scored_tests: list, total_in_repo: int) -> dict:
+    """
+    Convert scored test list into three ready-to-run pytest commands.
+
+    scored_tests — already sorted by confidence_score descending.
+    Each test dict must have: test_file_path, class_name, method_name,
+                              confidence_score, test_type
+
+    Returns dict:
+      run_all   — all selected tests
+      run_high  — score >= 60 only
+      run_fast  — score >= 60 AND test_type == 'unit' only
+      stats     — counts and reduction percentage
+    """
+
+    def to_node_id(t: dict) -> str:
+        # test_file_path is the correct key (not file_path) for all strategies
+        # But some strategies return file_path, so use fallback
+        file_path  = t.get('test_file_path') or t.get('file_path', '')
+        class_name = t.get('class_name', '')
+        method     = t.get('method_name', '')
+        if class_name:
+            return f"{file_path}::{class_name}::{method}"
+        return f"{file_path}::{method}"
+
+    all_tests  = scored_tests
+    high_tests = [t for t in scored_tests
+                  if t.get('confidence_score', 0) >= 60]
+    fast_tests = [t for t in high_tests
+                  if (t.get('test_type') or '').lower() == 'unit']
+
+    def build_cmd(tests: list) -> str:
+        if not tests:
+            return "# No tests matched this filter"
+        node_ids = [to_node_id(t) for t in tests]
+        return "pytest " + " \\\n       ".join(node_ids) + " -v"
+
+    selected      = len(all_tests)
+    reduction_pct = (
+        round((1 - selected / total_in_repo) * 100, 1)
+        if total_in_repo > 0 else 0.0
+    )
+
+    return {
+        "run_all":  build_cmd(all_tests),
+        "run_high": build_cmd(high_tests),
+        "run_fast": build_cmd(fast_tests),
+        "stats": {
+            "total_in_repo": total_in_repo,
+            "selected":      selected,
+            "high_priority": len(high_tests),
+            "fast_subset":   len(fast_tests),
+            "reduction_pct": reduction_pct,
+        }
+    }
+
+
 def display_results(results: Dict, conn=None) -> None:
     """
     Display test selection results in a beginner-friendly way.
@@ -934,73 +1533,116 @@ def display_results(results: Dict, conn=None) -> None:
                     print_item(f"  {test['test_id']}", f"{test_name} ({test_type})")
         return
     
-    print_item(f"Found {results['total_tests']} affected test(s)", "")
+    # Score-based display — tests already sorted by score from find_affected_tests()
+    affected_test_ids = set()
+
+    print_item(f"Found {results['total_tests']} affected test(s) — ranked by confidence", "")
+    print()
+
+    for test in results['tests']:
+        test_id   = test['test_id']
+        affected_test_ids.add(test_id)
+        score     = test.get('confidence_score', 0)
+        test_name = (
+            f"{test['class_name']}.{test['method_name']}"
+            if test.get('class_name')
+            else test.get('method_name', '')
+        )
+        test_type = test.get('test_type') or 'unknown'
+        matches   = results['match_details'].get(test_id, [])
+
+        print_item(f"  [{score:3d}] {test_id}:", f"{test_name} ({test_type})")
+
+        # Show top 2 match reasons
+        shown = 0
+        for m in matches:
+            if shown >= 2:
+                break
+            mtype    = m.get('type', '')
+            ref_type = m.get('reference_type', '')
+
+            if mtype == 'function_level':
+                func  = f"{m.get('module', '')}.{m.get('function', '')}"
+                src   = m.get('source', '')
+                label = '(via patch)' if src == 'patch_ref' else '(via call)'
+                print_item(f"       -> function:", f"{func} {label}")
+                shown += 1
+            elif mtype == 'exact':
+                label = '(via patch/Mock)' if ref_type == 'string_ref' else '(via import)'
+                print_item(f"       -> class:", f"{m.get('class', '')} {label}")
+                shown += 1
+            elif mtype == 'direct_file':
+                print_item(f"       -> direct file:", m.get('match_strategy', ''))
+                shown += 1
+            elif mtype == 'integration':
+                print_item(f"       -> integration for:", m.get('module', ''))
+                shown += 1
+            elif mtype == 'module':
+                print_item(f"       -> module pattern:", m.get('pattern', ''))
+                shown += 1
+            elif mtype == 'semantic':
+                sim_pct = int(m.get('similarity', 0) * 100)
+                print_item(f"       -> semantic similarity:", f"{sim_pct}%")
+                shown += 1
+
+    print()
+    print_item("Score guide:",
+        "85-100: function+unit  |  60-84: exact match  |  35-59: direct file  |  <35: module/pattern")
     print()
     
-    # Group by confidence
-    high_confidence = []
-    medium_confidence = []
-    affected_test_ids = set()
-    
-    for test in results['tests']:
-        test_id = test['test_id']
-        affected_test_ids.add(test_id)
-        matches = results['match_details'].get(test_id, [])
-        
-        # Determine overall confidence
-        has_exact = any(m['type'] == 'exact' for m in matches)
-        confidence = 'high' if has_exact else 'medium'
-        
-        test_info = {
-            'test': test,
-            'matches': matches,
-            'confidence': confidence
-        }
-        
-        if confidence == 'high':
-            high_confidence.append(test_info)
-        else:
-            medium_confidence.append(test_info)
-    
-    # Display high confidence first
-    if high_confidence:
-        print_item("High Confidence Matches (Exact class matches)", len(high_confidence))
-        for test_info in high_confidence[:10]:
-            test = test_info['test']
-            test_name = f"{test['class_name']}.{test['method_name']}" if test['class_name'] else test['method_name']
-            print_item(f"  {test['test_id']}:", test_name)
-            
-            # Show match reasons with reference types
-            exact_matches = [m for m in test_info['matches'] if m['type'] == 'exact']
-            if exact_matches:
-                matched_classes = []
-                for m in exact_matches[:3]:
-                    class_name = m['class']
-                    ref_type = m.get('reference_type', 'direct_import')
-                    if ref_type == 'string_ref':
-                        matched_classes.append(f"{class_name} (via patch/Mock)")
-                    else:
-                        matched_classes.append(class_name)
-                if len(exact_matches) > 3:
-                    matched_classes.append(f"... (+{len(exact_matches) - 3} more)")
-                print_item(f"    Matched classes", ", ".join(matched_classes))
-        print()
-    
-    # Display medium confidence
-    if medium_confidence:
-        print_item("Medium Confidence Matches (Module patterns)", len(medium_confidence))
-        for test_info in medium_confidence[:10]:
-            test = test_info['test']
-            test_name = f"{test['class_name']}.{test['method_name']}" if test['class_name'] else test['method_name']
-            print_item(f"  {test['test_id']}:", test_name)
-        print()
-    
-    # Summary
+    # Score-based summary
+    scores = [t.get('confidence_score', 0) for t in results['tests']]
     print_section("Summary:")
     print_item("Total tests to run", results['total_tests'])
-    print_item("High confidence", len(high_confidence))
-    print_item("Medium confidence", len(medium_confidence))
+    if scores:
+        band_85 = sum(1 for s in scores if s >= 85)
+        band_60 = sum(1 for s in scores if 60 <= s < 85)
+        band_35 = sum(1 for s in scores if 35 <= s < 60)
+        band_lo = sum(1 for s in scores if s < 35)
+        if band_85: print_item("Score 85-100 (function-level precision)", band_85)
+        if band_60: print_item("Score 60-84  (exact class/import match)", band_60)
+        if band_35: print_item("Score 35-59  (direct file match)", band_35)
+        if band_lo: print_item("Score  0-34  (module/pattern match)", band_lo)
+        print_item("Highest score", max(scores))
+        print_item("Lowest score",  min(scores))
     print()
+    
+    # Pytest commands
+    if results['tests'] and conn:
+        try:
+            total_in_repo = get_total_test_count(conn)
+            commands      = generate_pytest_commands(results['tests'], total_in_repo)
+            stats         = commands['stats']
+
+            print()
+            print("=" * 70)
+            print("PYTEST COMMANDS")
+            print("=" * 70)
+            print()
+            print(
+                f"Run ALL selected "
+                f"({stats['selected']} of {stats['total_in_repo']} tests, "
+                f"{stats['reduction_pct']}% reduction):"
+            )
+            print()
+            print(commands['run_all'])
+            print()
+            print(
+                f"Run HIGH PRIORITY only "
+                f"(score >= 60, {stats['high_priority']} tests):"
+            )
+            print()
+            print(commands['run_high'])
+            print()
+            print(
+                f"Run FAST subset "
+                f"(unit + score >= 60, {stats['fast_subset']} tests):"
+            )
+            print()
+            print(commands['run_fast'])
+            print()
+        except Exception as e:
+            print_item("Pytest command generation skipped", str(e))
     
     # Display unused tests if connection available
     if conn:
@@ -1102,116 +1744,114 @@ def save_results_to_file(results: Dict, conn=None, diff_file_path: str = None, o
                     test_type = test.get('test_type') or 'unknown'
                     lines.append(f"  {test['test_id']}: {test_name} ({test_type})")
     else:
+        # Tests already sorted by score from find_affected_tests()
+        affected_test_ids = set()
+        for test in results['tests']:
+            affected_test_ids.add(test['test_id'])
+
+        scores = [t.get('confidence_score', 0) for t in results['tests']]
+
         lines.append(f"Found {results['total_tests']} affected test(s)")
         lines.append("")
-        
-        # Group by confidence
-        high_confidence = []
-        medium_confidence = []
-        affected_test_ids = set()
-        
+        lines.append("-" * 80)
+        lines.append(f"RANKED TEST LIST (sorted by confidence score 0-100)")
+        lines.append("-" * 80)
+        lines.append("")
+
         for test in results['tests']:
-            test_id = test['test_id']
-            affected_test_ids.add(test_id)
-            matches = results['match_details'].get(test_id, [])
-            
-            # Determine overall confidence
-            has_exact = any(m['type'] == 'exact' for m in matches)
-            confidence = 'high' if has_exact else 'medium'
-            
-            test_info = {
-                'test': test,
-                'matches': matches,
-                'confidence': confidence
-            }
-            
-            if confidence == 'high':
-                high_confidence.append(test_info)
-            else:
-                medium_confidence.append(test_info)
-        
-        # Write high confidence tests (ALL of them, not just first 10)
-        if high_confidence:
-            lines.append("-" * 80)
-            lines.append(f"HIGH CONFIDENCE MATCHES (Exact class matches): {len(high_confidence)}")
-            lines.append("-" * 80)
+            test_id   = test['test_id']
+            score     = test.get('confidence_score', 0)
+            test_name = (
+                f"{test['class_name']}.{test['method_name']}"
+                if test.get('class_name')
+                else test.get('method_name', '')
+            )
+            test_type = test.get('test_type') or 'unknown'
+            test_file = test.get('test_file_path', 'unknown')
+            matches   = results['match_details'].get(test_id, [])
+
+            lines.append(f"  [{score:3d}] {test_id}: {test_name} ({test_type})")
+            lines.append(f"         File: {test_file}")
+
+            for m in matches:
+                mtype    = m.get('type', '')
+                ref_type = m.get('reference_type', '')
+
+                if mtype == 'function_level':
+                    func  = f"{m.get('module', '')}.{m.get('function', '')}"
+                    src   = m.get('source', '')
+                    label = '(via patch)' if src == 'patch_ref' else '(via call)'
+                    lines.append(f"         Matched function: {func} {label}")
+                elif mtype == 'exact':
+                    label = '(via patch/Mock)' if ref_type == 'string_ref' else '(via import)'
+                    lines.append(f"         Matched class: {m.get('class', '')} {label}")
+                elif mtype == 'direct_file':
+                    lines.append(
+                        f"         Matched via: {m.get('match_strategy', 'direct_file')}")
+                elif mtype == 'integration':
+                    lines.append(f"         Integration test for: {m.get('module', '')}")
+                elif mtype == 'module':
+                    lines.append(f"         Module pattern: {m.get('pattern', '')}")
+                elif mtype == 'semantic':
+                    sim_pct = int(m.get('similarity', 0) * 100)
+                    lines.append(f"         Semantic similarity: {sim_pct}%")
+
             lines.append("")
-            
-            for test_info in high_confidence:
-                test = test_info['test']
-                test_name = f"{test['class_name']}.{test['method_name']}" if test['class_name'] else test['method_name']
-                test_type = test.get('test_type') or 'unknown'
-                test_file = test.get('test_file_path', 'unknown')
-                
-                lines.append(f"  {test['test_id']}: {test_name}")
-                lines.append(f"    Test Type: {test_type}")
-                lines.append(f"    File: {test_file}")
-                
-                # Show all match reasons
-                exact_matches = [m for m in test_info['matches'] if m['type'] == 'exact']
-                if exact_matches:
-                    matched_classes = []
-                    for m in exact_matches:
-                        class_name = m['class']
-                        ref_type = m.get('reference_type', 'direct_import')
-                        if ref_type == 'string_ref':
-                            matched_classes.append(f"{class_name} (via patch/Mock)")
-                        else:
-                            matched_classes.append(f"{class_name} (via import)")
-                    lines.append(f"    Matched classes: {', '.join(matched_classes)}")
-                
-                # Show other match types
-                other_matches = [m for m in test_info['matches'] if m['type'] != 'exact']
-                if other_matches:
-                    match_types = {}
-                    for m in other_matches:
-                        match_type = m.get('type', 'unknown')
-                        if match_type not in match_types:
-                            match_types[match_type] = []
-                        if match_type == 'direct_file':
-                            match_types[match_type].append(m.get('test_file', ''))
-                        elif match_type == 'integration':
-                            match_types[match_type].append(m.get('module', ''))
-                    for match_type, values in match_types.items():
-                        lines.append(f"    Also matched via: {match_type} ({', '.join(set(values))})")
-                
-                lines.append("")
         
-        # Write medium confidence tests (ALL of them)
-        if medium_confidence:
-            lines.append("-" * 80)
-            lines.append(f"MEDIUM CONFIDENCE MATCHES (Module patterns): {len(medium_confidence)}")
-            lines.append("-" * 80)
-            lines.append("")
-            
-            for test_info in medium_confidence:
-                test = test_info['test']
-                test_name = f"{test['class_name']}.{test['method_name']}" if test['class_name'] else test['method_name']
-                test_type = test.get('test_type') or 'unknown'
-                test_file = test.get('test_file_path', 'unknown')
-                
-                lines.append(f"  {test['test_id']}: {test_name}")
-                lines.append(f"    Test Type: {test_type}")
-                lines.append(f"    File: {test_file}")
-                
-                # Show match reasons
-                for m in test_info['matches']:
-                    match_type = m.get('type', 'unknown')
-                    if match_type == 'module_pattern':
-                        lines.append(f"    Matched via module pattern: {m.get('pattern', 'unknown')}")
-                    elif match_type == 'direct_file':
-                        lines.append(f"    Matched via direct file: {m.get('test_file', 'unknown')}")
-                
-                lines.append("")
-        
-        # Summary
         lines.append("-" * 80)
         lines.append("SUMMARY")
         lines.append("-" * 80)
         lines.append(f"Total tests to run: {results['total_tests']}")
-        lines.append(f"High confidence: {len(high_confidence)}")
-        lines.append(f"Medium confidence: {len(medium_confidence)}")
+        if scores:
+            lines.append(f"Highest score: {max(scores)}")
+            lines.append(f"Lowest score:  {min(scores)}")
+            lines.append(
+                f"Score 85-100:  {sum(1 for s in scores if s >= 85)}")
+            lines.append(
+                f"Score 60-84:   {sum(1 for s in scores if 60 <= s < 85)}")
+            lines.append(
+                f"Score 35-59:   {sum(1 for s in scores if 35 <= s < 60)}")
+            lines.append(
+                f"Score  0-34:   {sum(1 for s in scores if s < 35)}")
         lines.append("")
+        
+        # Pytest commands section
+        if conn:
+            try:
+                total_in_repo = get_total_test_count(conn)
+                commands      = generate_pytest_commands(results['tests'], total_in_repo)
+                stats         = commands['stats']
+
+                lines.append("")
+                lines.append("=" * 70)
+                lines.append("PYTEST COMMANDS")
+                lines.append("=" * 70)
+                lines.append("")
+                lines.append(
+                    f"Run ALL selected ({stats['selected']} of "
+                    f"{stats['total_in_repo']} tests, "
+                    f"{stats['reduction_pct']}% reduction):"
+                )
+                lines.append("")
+                lines.append(commands['run_all'])
+                lines.append("")
+                lines.append(
+                    f"Run HIGH PRIORITY only "
+                    f"(score >= 60, {stats['high_priority']} tests):"
+                )
+                lines.append("")
+                lines.append(commands['run_high'])
+                lines.append("")
+                lines.append(
+                    f"Run FAST subset "
+                    f"(unit + score >= 60, {stats['fast_subset']} tests):"
+                )
+                lines.append("")
+                lines.append(commands['run_fast'])
+                lines.append("")
+            except Exception as e:
+                lines.append(f"# Pytest command generation skipped: {e}")
+                lines.append("")
         
         # Write unused tests (ALL of them)
         if conn:
@@ -1511,6 +2151,74 @@ def main():
                     print_item(f"Database status", f"{reverse_index_count} reverse_index entries, {test_registry_count} tests")
                     print()
             
+            # Step 4a: Run AST-based matching separately
+            print_section("Step 4a: AST-Based Matching (Strategies 0-3)...")
+            ast_results = find_tests_ast_only(conn, search_queries, parsed_diff.get('file_changes', []))
+            print_item(f"AST-based matching found", f"{ast_results['total_tests']} tests")
+            print()
+            
+            # Step 4b: Run Semantic search separately
+            print_section("Step 4b: Semantic Search (Vector Embeddings)...")
+            semantic_results = find_tests_semantic_only(conn, search_queries)
+            if semantic_results.get('error'):
+                print_item("Semantic search failed", semantic_results['error'])
+            else:
+                print_item(f"Semantic search found", f"{semantic_results['total_tests']} tests")
+            print()
+            
+            # Step 4c: Compare results
+            print_section("Step 4c: Comparing AST vs Semantic Results...")
+            comparison = compare_ast_vs_semantic(ast_results, semantic_results)
+            print_item("AST-based matching found", f"{comparison['ast_count']} tests")
+            print_item("Semantic search found", f"{comparison['semantic_count']} tests")
+            print_item("Found by both methods", f"{comparison['overlap_count']} tests")
+            print_item("Found only by AST", f"{comparison['ast_only_count']} tests")
+            print_item("Found only by Semantic", f"{comparison['semantic_only_count']} tests")
+            if comparison['ast_count'] > 0:
+                print_item("Overlap percentage", f"{comparison['overlap_percentage']}%")
+            print()
+            
+            # Step 4d: Save separate output files
+            print_section("Step 4d: Saving Separate Results...")
+            
+            # Save AST results
+            ast_output = save_results_to_file(
+                ast_results, 
+                conn, 
+                diff_file_path,
+                output_dir=Path(__file__).parent / "outputs"
+            )
+            # Rename to include method
+            ast_final = ast_output.parent / f"ast_only_{ast_output.name}"
+            ast_output.rename(ast_final)
+            print_item("AST results saved to", str(ast_final))
+            
+            # Save Semantic results
+            if semantic_results['total_tests'] > 0:
+                semantic_output = save_results_to_file(
+                    semantic_results,
+                    conn,
+                    diff_file_path,
+                    output_dir=Path(__file__).parent / "outputs"
+                )
+                semantic_final = semantic_output.parent / f"semantic_only_{semantic_output.name}"
+                semantic_output.rename(semantic_final)
+                print_item("Semantic results saved to", str(semantic_final))
+            else:
+                print_item("Semantic results", "No tests found, skipping file save")
+            
+            # Save comparison report
+            comparison_output = save_comparison_report(
+                ast_results,
+                semantic_results,
+                comparison,
+                diff_file_path,
+                output_dir=Path(__file__).parent / "outputs"
+            )
+            print_item("Comparison report saved to", str(comparison_output))
+            print()
+            
+            # Step 4e: Run combined results (original behavior)
             results = find_affected_tests(conn, search_queries, parsed_diff.get('file_changes', []))
             
             # Step 6.5: Run diagnostics if tests seem missing

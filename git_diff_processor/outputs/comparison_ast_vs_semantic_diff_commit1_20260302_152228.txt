@@ -1,0 +1,94 @@
+================================================================================
+AST vs SEMANTIC SEARCH COMPARISON REPORT
+================================================================================
+Generated: 2026-03-02 15:22:28
+Diff File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\git_diff_processor\sample_diffs\diff_commit1.txt
+
+--------------------------------------------------------------------------------
+SUMMARY STATISTICS
+--------------------------------------------------------------------------------
+
+AST-based matching found:     58 tests
+Semantic search found:        10 tests
+Found by both methods:        10 tests
+Found only by AST:            48 tests
+Found only by Semantic:       0 tests
+Overlap percentage:           17.2%
+
+--------------------------------------------------------------------------------
+TESTS FOUND BY BOTH METHODS (10 tests)
+--------------------------------------------------------------------------------
+
+  test_0007: TestLangGraphAgent.test_agent_stream_invoke_error
+    AST Score: 70 | Semantic Similarity: 31%
+  test_0008: TestLangGraphAgent.test_agent_close
+    AST Score: 70 | Semantic Similarity: 30%
+  test_0005: TestLangGraphAgent.test_agent_invoke_with_session_id
+    AST Score: 70 | Semantic Similarity: 33%
+  test_0001: TestLangGraphAgent.test_agent_initialization
+    AST Score: 70 | Semantic Similarity: 32%
+  test_0061: TestAgentWorkflow.test_agent_invocation_workflow
+    AST Score: 70 | Semantic Similarity: 32%
+  test_0060: TestAgentWorkflow.test_agent_initialization_workflow
+    AST Score: 70 | Semantic Similarity: 31%
+  test_0011: TestLangGraphAgent.test_agent_extract_stage_info_tool_executing
+    AST Score: 70 | Semantic Similarity: 30%
+  test_0006: TestLangGraphAgent.test_agent_stream_invoke
+    AST Score: 70 | Semantic Similarity: 32%
+  test_0003: TestLangGraphAgent.test_agent_initialization_no_tools
+    AST Score: 70 | Semantic Similarity: 31%
+  test_0004: TestLangGraphAgent.test_agent_invoke
+    AST Score: 70 | Semantic Similarity: 32%
+
+--------------------------------------------------------------------------------
+TESTS FOUND ONLY BY AST (48 tests)
+--------------------------------------------------------------------------------
+
+  [100] test_0053: TestSettings.test_settings_validate_embedding_provider
+  [ 60] test_0021: TestStateConverter.test_normalize_message_content_list_simple
+  [100] test_0054: TestSettings.test_get_settings_singleton
+  [100] test_0052: TestSettings.test_settings_validate_llm_provider
+  [100] test_0071: TestCatalogServer.test_describe_table_tool
+  [ 70] test_0012: TestLangGraphAgent.test_agent_extract_stage_info_tool_completed
+  [100] test_0050: TestSettings.test_settings_default_values
+  [ 60] test_0029: TestStateConverter.test_convert_langgraph_state_to_agent_with_tool_calls
+  [100] test_0072: TestCatalogServer.test_get_table_row_count_tool
+  [100] test_0056: TestSettings.test_settings_optional_fields
+  [ 70] test_0013: TestLangGraphBuilder.test_builder_initialization
+  [100] test_0051: TestSettings.test_settings_from_env
+  [ 70] test_0014: TestLangGraphBuilder.test_builder_initialization_no_tools
+  [ 70] test_0016: TestLangGraphBuilder.test_build_graph_no_tools
+  [ 60] test_0038: TestToolConverter.test_convert_mcp_tools_to_langchain_conversion_error
+  [100] test_0064: TestLLMFactory.test_create_provider_ollama
+  [100] test_0065: TestLLMFactory.test_create_provider_invalid
+  [100] test_0070: TestCatalogServer.test_list_tables_tool
+  [ 70] test_0009: TestLangGraphAgent.test_agent_context_manager
+  [ 60] test_0032: TestToolConverter.test_json_schema_to_pydantic_array
+  [100] test_0055: TestSettings.test_clear_settings_cache
+  [100] test_0067: TestLLMFactory.test_create_embedding_provider_gemini
+  [ 60] test_0019: TestStateConverter.test_normalize_message_content_string
+  [ 70] test_0018: TestLangGraphBuilder.test_get_graph_not_built
+  [ 70] test_0015: TestLangGraphBuilder.test_build_graph
+  [ 70] test_0002: TestLangGraphAgent.test_agent_initialization_failure_no_servers
+  [ 60] test_0022: TestStateConverter.test_normalize_message_content_none
+  [ 60] test_0034: TestToolConverter.test_mcp_tool_to_langchain
+  [ 60] test_0031: TestToolConverter.test_json_schema_to_pydantic_integer
+  [100] test_0062: TestLLMFactory.test_create_provider_gemini
+  [ 60] test_0036: TestToolConverter.test_convert_mcp_tools_to_langchain
+  [ 60] test_0028: TestStateConverter.test_convert_langgraph_state_to_agent
+  [ 60] test_0027: TestStateConverter.test_convert_from_langchain_messages_with_tool_calls
+  [100] test_0063: TestLLMFactory.test_create_provider_gemini_missing_key
+  [ 60] test_0023: TestStateConverter.test_normalize_message_content_dict_with_text
+  [ 60] test_0025: TestStateConverter.test_convert_to_langchain_messages_tool
+  [ 60] test_0026: TestStateConverter.test_convert_from_langchain_messages
+  [ 60] test_0035: TestToolConverter.test_mcp_tool_to_langchain_error_handling
+  [ 60] test_0024: TestStateConverter.test_convert_to_langchain_messages
+  [ 70] test_0017: TestLangGraphBuilder.test_get_graph
+  [100] test_0068: TestLLMFactory.test_create_embedding_provider_ollama
+  [100] test_0066: TestLLMFactory.test_get_available_providers
+  [ 70] test_0010: TestLangGraphAgent.test_agent_extract_stage_info_agent_thinking
+  [ 60] test_0037: TestToolConverter.test_convert_mcp_tools_to_langchain_empty
+  [ 60] test_0020: TestStateConverter.test_normalize_message_content_list
+  [ 60] test_0033: TestToolConverter.test_json_schema_to_pydantic_empty
+  [ 60] test_0030: TestToolConverter.test_json_schema_to_pydantic_string
+  [100] test_0069: TestLLMFactory.test_create_embedding_provider_invalid

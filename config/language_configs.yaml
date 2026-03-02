@@ -1,0 +1,63 @@
+# Language Configuration File
+# Defines language-specific rules for parsing, test discovery, and analysis
+
+languages:
+  python:
+    extensions: [.py]
+    test_patterns:
+      - "test_*.py"
+      - "*_test.py"
+    test_frameworks:
+      - pytest
+      - unittest
+      - nose
+    test_method_prefix: "test_"
+    test_class_prefix: "Test"
+    parser_module: "parsers.python_parser"
+    parser_class: "PythonParser"
+    
+  # Java configuration (for future implementation)
+  java:
+    extensions: [.java]
+    test_patterns:
+      - "*Test.java"
+      - "*Tests.java"
+      - "Test*.java"
+    test_frameworks:
+      - junit
+      - testng
+      - spock
+    test_method_prefix: "test"
+    test_class_suffix: "Test"
+    parser_module: "parsers.java_parser"
+    parser_class: "JavaParser"
+    
+  # TypeScript configuration (for future implementation)
+  typescript:
+    extensions: [.ts, .tsx]
+    test_patterns:
+      - "*.test.ts"
+      - "*.test.tsx"
+      - "*.spec.ts"
+      - "*.spec.tsx"
+    test_frameworks:
+      - jest
+      - mocha
+      - vitest
+    test_method_prefix: "test"
+    parser_module: "parsers.typescript_parser"
+    parser_class: "TypeScriptParser"
+    
+  # JavaScript configuration (for future implementation)
+  javascript:
+    extensions: [.js, .jsx]
+    test_patterns:
+      - "*.test.js"
+      - "*.test.jsx"
+      - "*.spec.js"
+      - "*.spec.jsx"
+    test_frameworks:
+      - jest
+      - mocha
+    parser_module: "parsers.javascript_parser"
+    parser_class: "JavaScriptParser"

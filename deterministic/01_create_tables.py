@@ -306,6 +306,92 @@ def create_test_structure_table(conn):
         print(f"  - Indexes: category, directory_path")
 
 
+def create_test_function_mapping_table(conn):
+    """
+    Create the test_function_mapping table.
+    
+    This table stores function-level mappings:
+    - test_id: Foreign key to test_registry
+    - module_name: Production module name (e.g., agent.langgraph_agent)
+    - function_name: Function name (e.g., initialize)
+    - call_type: Type of call (direct_call, method_call, patch_ref)
+    - source: Source of mapping (method_call, patch_ref)
+    """
+    with conn.cursor() as cursor:
+        # Drop table if exists
+        cursor.execute(f"DROP TABLE IF EXISTS {SCHEMA}.test_function_mapping CASCADE")
+        
+        # Create table
+        cursor.execute(f"""
+            CREATE TABLE {SCHEMA}.test_function_mapping (
+                id SERIAL PRIMARY KEY,
+                test_id VARCHAR(50) NOT NULL,
+                module_name TEXT NOT NULL,
+                function_name VARCHAR(255) NOT NULL,
+                call_type VARCHAR(50),
+                source VARCHAR(50),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (test_id) REFERENCES {SCHEMA}.test_registry(test_id) ON DELETE CASCADE
+            )
+        """)
+        
+        # Create composite index for fast lookups (module_name, function_name)
+        cursor.execute(f"""
+            CREATE INDEX idx_func_mapping_module_func 
+            ON {SCHEMA}.test_function_mapping(module_name, function_name)
+        """)
+        
+        # Create index on test_id for reverse lookups
+        cursor.execute(f"""
+            CREATE INDEX idx_func_mapping_test 
+            ON {SCHEMA}.test_function_mapping(test_id)
+        """)
+        
+        # Create index on function_name alone for broader searches
+        cursor.execute(f"""
+            CREATE INDEX idx_func_mapping_function 
+            ON {SCHEMA}.test_function_mapping(function_name)
+        """)
+        
+        conn.commit()
+        print(f"[OK] Created table: {SCHEMA}.test_function_mapping")
+        print(f"  - Foreign key: test_id -> test_registry")
+        print(f"  - Indexes: (module_name, function_name), test_id, function_name")
+
+
+def enable_pgvector_and_embedding_column(conn):
+    """
+    Enable pgvector extension and add embedding column to test_metadata.
+
+    Uses ADD COLUMN IF NOT EXISTS — safe to run multiple times.
+    nomic-embed-text produces 768-dimensional vectors.
+    Does NOT drop or recreate test_metadata — only adds a column.
+    """
+    with conn.cursor() as cursor:
+        # Enable pgvector (once per DB, safe to repeat)
+        cursor.execute("CREATE EXTENSION IF NOT EXISTS vector")
+
+        # Add 768-dim embedding column to existing test_metadata
+        cursor.execute(f"""
+            ALTER TABLE {SCHEMA}.test_metadata
+            ADD COLUMN IF NOT EXISTS embedding vector(768)
+        """)
+
+        # ivfflat index — right for datasets under 1 million rows
+        # lists=10 is appropriate for ~100-500 tests
+        cursor.execute(f"""
+            CREATE INDEX IF NOT EXISTS idx_metadata_embedding
+            ON {SCHEMA}.test_metadata
+            USING ivfflat (embedding vector_cosine_ops)
+            WITH (lists = 10)
+        """)
+
+        conn.commit()
+        print(f"[OK] pgvector extension enabled")
+        print(f"[OK] embedding column (vector(768)) added to {SCHEMA}.test_metadata")
+        print(f"[OK] ivfflat cosine index created on test_metadata.embedding")
+
+
 def verify_tables_created(conn):
     """
     Verify all tables were created successfully.
@@ -332,7 +418,8 @@ def verify_tables_created(conn):
             'test_dependencies',
             'reverse_index',
             'test_metadata',
-            'test_structure'
+            'test_structure',
+            'test_function_mapping'
         ]
         
         result = {
@@ -341,6 +428,17 @@ def verify_tables_created(conn):
             'all_present': all(table in tables for table in expected_tables),
             'missing_tables': [t for t in expected_tables if t not in tables]
         }
+        
+        # ADD at end before return:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = %s
+                  AND table_name   = 'test_metadata'
+                  AND column_name  = 'embedding'
+            """, (SCHEMA,))
+            result['embedding_column_exists'] = cursor.fetchone() is not None
         
         return result
 
@@ -384,6 +482,20 @@ def main():
             print()
             
             create_test_structure_table(conn)
+            print()
+            
+            create_test_function_mapping_table(conn)
+            print()
+
+            # NEW — add after function mapping table
+            # pgvector is optional — don't fail if extension not installed
+            print_section("Enabling pgvector and adding embedding column...")
+            try:
+                enable_pgvector_and_embedding_column(conn)
+                print()
+            except Exception as e:
+                print(f"[WARN] pgvector setup skipped: {e}")
+                print("  Note: You can use ChromaDB backend instead (set VECTOR_BACKEND=chromadb)")
             print()
             
             # Step 3: Verify tables

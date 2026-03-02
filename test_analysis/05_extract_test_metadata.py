@@ -22,7 +22,7 @@ from pathlib import Path
 import sys
 import json
 import re
-
+import ast
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent))
 

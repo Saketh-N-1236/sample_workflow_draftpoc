@@ -439,12 +439,93 @@ def build_search_queries(file_changes: List[Dict]) -> Dict[str, List[str]]:
         test_candidates = extract_test_file_candidates(file_path)
         test_file_candidates.extend(test_candidates)
     
+    # Extract changed functions with modules (for function-level matching)
+    changed_functions = extract_changed_functions_with_modules(file_changes)
+    
     return {
         'exact_matches': list(set(exact_matches)),
         'module_matches': list(set(module_matches)),
         'file_patterns': list(set(file_patterns)),
-        'test_file_candidates': list(set(test_file_candidates))
+        'test_file_candidates': list(set(test_file_candidates)),
+        'changed_functions': changed_functions  # NEW: Function-level changes
     }
+
+
+def extract_changed_functions_with_modules(file_changes: List[Dict]) -> List[Dict[str, str]]:
+    """
+    Extract changed functions with their module names from file changes.
+    
+    Converts file paths and changed methods to module.function format
+    that can be used to query the test_function_mapping table.
+    
+    Args:
+        file_changes: List of file change dictionaries from parse_git_diff
+    
+    Returns:
+        List of dictionaries with:
+        - module: Module name (e.g., 'agent.langgraph_agent')
+        - function: Function name (e.g., 'initialize')
+    
+    Example:
+        >>> file_changes = [{
+        ...     'file': 'agent/langgraph_agent.py',
+        ...     'changed_methods': ['initialize', 'invoke']
+        ... }]
+        >>> extract_changed_functions_with_modules(file_changes)
+        [
+        ...     {'module': 'agent.langgraph_agent', 'function': 'initialize'},
+        ...     {'module': 'agent.langgraph_agent', 'function': 'invoke'}
+        ... ]
+    """
+    changed_functions = []
+    
+    for file_change in file_changes:
+        file_path = file_change['file']
+        
+        # Skip non-Python files
+        if not file_path.endswith('.py'):
+            continue
+        
+        # Skip import-only changes
+        change_type = analyze_file_change_type(file_change)
+        if change_type == 'import_only':
+            continue
+        
+        # Only process production Python files
+        if not is_production_python_file(file_path):
+            continue
+        
+        # Get changed methods from this file
+        changed_methods = file_change.get('changed_methods', [])
+        if not changed_methods:
+            continue
+        
+        # Convert file path to module name
+        # e.g., 'agent/langgraph_agent.py' -> 'agent.langgraph_agent'
+        module_name = extract_production_classes_from_file(file_path)
+        if not module_name:
+            continue
+        
+        # Use the first (most specific) module name
+        primary_module = module_name[0] if isinstance(module_name, list) else module_name
+        
+        # Create module.function entries for each changed method
+        for method_name in changed_methods:
+            changed_functions.append({
+                'module': primary_module,
+                'function': method_name
+            })
+    
+    # Remove duplicates (same module.function combination)
+    seen = set()
+    unique_functions = []
+    for func in changed_functions:
+        key = (func['module'], func['function'])
+        if key not in seen:
+            seen.add(key)
+            unique_functions.append(func)
+    
+    return unique_functions
 
 
 def read_diff_file(file_path: Path) -> str:
