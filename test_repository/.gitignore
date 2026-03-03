@@ -1,0 +1,35 @@
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+
+# Coverage reports
+coverage.xml
+.coverage.*
+*.cover
+
+# Test databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db

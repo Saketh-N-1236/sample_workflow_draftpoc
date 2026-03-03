@@ -208,3 +208,13 @@ __marimo__/
 
 # ChromaDB data directory
 semantic_retrieval/chromadb_data/
+
+# Tree-sitter build artifacts
+tree-sitter-*/
+*.so
+*.dylib
+*.dll
+
+# Generated output files (optional - uncomment to ignore)
+# git_diff_processor/outputs/*.txt
+# test_analysis/outputs/*.json

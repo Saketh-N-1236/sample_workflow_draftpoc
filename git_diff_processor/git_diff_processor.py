@@ -120,7 +120,7 @@ def display_search_strategy(search_queries: Dict) -> None:
             print_item(f"  - {func_name}", "(will match tests that call/patch this function)")
         if len(search_queries['changed_functions']) > 10:
             print_item(f"  ... and {len(search_queries['changed_functions']) - 10} more", "")
-        print()
+    print()
     
     if search_queries['exact_matches']:
         print_item("Exact production class matches", len(search_queries['exact_matches']))
@@ -732,30 +732,50 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
                     })
         else:
             print_item("  No exact matches found", "")
-            # Debug: Check what's actually in the database
+            # Debug: Show what we searched for and what's in the database
             if search_queries['exact_matches']:
                 with conn.cursor() as cursor:
+                    # Show what we searched for
+                    print_item("  Searched for:", ", ".join(search_queries['exact_matches'][:5]))
+                    
+                    # Check for similar matches (case-insensitive, partial)
                     first_match = search_queries['exact_matches'][0]
+                    # Extract component name (last part after dots)
+                    component_name = first_match.split('.')[-1] if '.' in first_match else first_match
+                    
                     cursor.execute(f"""
                         SELECT DISTINCT production_class, reference_type
                         FROM {DB_SCHEMA}.reverse_index 
-                        WHERE production_class LIKE %s OR production_class = %s
-                        LIMIT 5
-                    """, (f"{first_match}%", first_match))
+                        WHERE LOWER(production_class) LIKE LOWER(%s) 
+                           OR LOWER(production_class) LIKE LOWER(%s)
+                        LIMIT 10
+                    """, (f"%{component_name}%", f"%{first_match}%"))
                     sample_classes = cursor.fetchall()
                     if sample_classes:
-                        print_item("  Sample production classes in database", 
-                                  ", ".join([f"{row[0]} ({row[1]})" for row in sample_classes[:3]]))
+                        print_item("  Similar entries in database", 
+                                  ", ".join([f"{row[0]}" for row in sample_classes[:5]]))
                     else:
-                        # Check if database has any data
-                        cursor.execute(f"SELECT COUNT(*) FROM {DB_SCHEMA}.reverse_index")
-                        count = cursor.fetchone()[0]
-                        if count == 0:
-                            print_item("  WARNING: reverse_index table is empty!", "")
-                            print_item("    Re-run test analysis to extract string references", "")
-                            print_item("      1. python test_analysis/04_extract_static_dependencies.py", "")
-                            print_item("      2. python test_analysis/06_build_reverse_index.py", "")
-                            print_item("      3. python deterministic/04_load_reverse_index.py", "")
+                        # Show sample of what's actually in the database
+                        cursor.execute(f"""
+                            SELECT DISTINCT production_class 
+                            FROM {DB_SCHEMA}.reverse_index 
+                            ORDER BY production_class 
+                            LIMIT 10
+                        """)
+                        sample_all = cursor.fetchall()
+                        if sample_all:
+                            print_item("  Sample production classes in database", 
+                                      ", ".join([f"{row[0]}" for row in sample_all[:5]]))
+                        else:
+                            # Check if database has any data
+                            cursor.execute(f"SELECT COUNT(*) FROM {DB_SCHEMA}.reverse_index")
+                            count = cursor.fetchone()[0]
+                            if count == 0:
+                                print_item("  WARNING: reverse_index table is empty!", "")
+                                print_item("    Re-run test analysis to extract string references", "")
+                                print_item("      1. python test_analysis/04_extract_static_dependencies.py", "")
+                                print_item("      2. python test_analysis/06_build_reverse_index.py", "")
+                                print_item("      3. python deterministic/04_load_reverse_index.py", "")
         print()
     
     # Strategy 3: Module-level matches (prefer direct references, skip import-only changes)
@@ -918,7 +938,7 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
         key=lambda t: t.get('confidence_score', 0),
         reverse=True
     )
-
+    
     return {
         'tests':         sorted_tests,
         'match_details': match_details,
@@ -1647,10 +1667,13 @@ def display_results(results: Dict, conn=None) -> None:
     if results['total_tests'] == 0:
         print_item("No tests found!", "")
         print()
-        print_item("Possible reasons", "")
-        print_item("  - Changed files are not referenced by any tests", "")
+        print_item("Possible reasons:", "")
+        print_item("  - Changed files are not referenced by any tests in the test repository", "")
         print_item("  - Changed files are test files themselves", "")
-        print_item("  - Production class names don't match database", "")
+        print_item("  - Production class/module names don't match what's stored in the database", "")
+        print_item("  - Test repository doesn't contain tests for the changed code", "")
+        print_item("    (e.g., frontend component changes but only backend tests exist)", "")
+        print_item("  - Check debug output above: 'Searched for' vs 'Sample production classes'", "")
         
         # Show unused tests if connection available
         if conn:
@@ -1671,7 +1694,7 @@ def display_results(results: Dict, conn=None) -> None:
 
     print_item(f"Found {results['total_tests']} affected test(s) — ranked by confidence", "")
     print()
-
+    
     for test in results['tests']:
         test_id   = test['test_id']
         affected_test_ids.add(test_id)
@@ -1685,7 +1708,7 @@ def display_results(results: Dict, conn=None) -> None:
         matches   = results['match_details'].get(test_id, [])
 
         print_item(f"  [{score:3d}] {test_id}:", f"{test_name} ({test_type})")
-
+    
         # Show top 2 match reasons
         shown = 0
         for m in matches:
@@ -1718,7 +1741,7 @@ def display_results(results: Dict, conn=None) -> None:
                 print_item(f"       -> semantic similarity:", f"{sim_pct}%")
                 shown += 1
 
-    print()
+        print()
     print_item("Score guide:",
         "90-100: Very High  |  70-89: High  |  50-69: Medium  |  30-49: Low  |  0-29: Very Low")
     print()
@@ -1894,7 +1917,7 @@ def save_results_to_file(results: Dict, conn=None, diff_file_path: str = None, o
         lines.append(f"RANKED TEST LIST (sorted by confidence score 0-100)")
         lines.append("-" * 80)
         lines.append("")
-
+        
         for test in results['tests']:
             test_id   = test['test_id']
             score     = test.get('confidence_score', 0)
@@ -1909,7 +1932,7 @@ def save_results_to_file(results: Dict, conn=None, diff_file_path: str = None, o
 
             lines.append(f"  [{score:3d}] {test_id}: {test_name} ({test_type})")
             lines.append(f"         File: {test_file}")
-
+                
             for m in matches:
                 mtype    = m.get('type', '')
                 ref_type = m.get('reference_type', '')
@@ -1932,10 +1955,10 @@ def save_results_to_file(results: Dict, conn=None, diff_file_path: str = None, o
                 elif mtype == 'semantic':
                     sim_pct = int(m.get('similarity', 0) * 100)
                     lines.append(f"         Semantic similarity: {sim_pct}%")
-
-            lines.append("")
+                
+                lines.append("")
         
-        lines.append("-" * 80)
+            lines.append("-" * 80)
         lines.append("SUMMARY")
         lines.append("-" * 80)
         lines.append(f"Total tests to run: {results['total_tests']}")
@@ -1950,15 +1973,15 @@ def save_results_to_file(results: Dict, conn=None, diff_file_path: str = None, o
                 f"Score 35-59:   {sum(1 for s in scores if 35 <= s < 60)}")
             lines.append(
                 f"Score  0-34:   {sum(1 for s in scores if s < 35)}")
-        lines.append("")
-        
+            lines.append("")
+            
         # Pytest commands section
         if conn:
             try:
                 total_in_repo = get_total_test_count(conn)
                 commands      = generate_pytest_commands(results['tests'], total_in_repo)
                 stats         = commands['stats']
-
+                
                 lines.append("")
                 lines.append("=" * 70)
                 lines.append("PYTEST COMMANDS")
@@ -1988,7 +2011,7 @@ def save_results_to_file(results: Dict, conn=None, diff_file_path: str = None, o
                 lines.append("")
             except Exception as e:
                 lines.append(f"# Pytest command generation skipped: {e}")
-                lines.append("")
+        lines.append("")
         
         # Write unused tests (ALL of them)
         if conn:
@@ -2041,6 +2064,23 @@ def save_results_to_file(results: Dict, conn=None, diff_file_path: str = None, o
 def main():
     """Main function to process git diff and find affected tests."""
     import argparse
+    
+    # Initialize parser registry for multi-language support
+    from parsers.registry import initialize_registry, get_registry
+    from config.config_loader import load_language_configs
+    
+    project_root = Path(__file__).parent.parent
+    config_path = project_root / "config" / "language_configs.yaml"
+    
+    # Initialize parser registry
+    if config_path.exists():
+        initialize_registry(config_path)
+        config = load_language_configs(config_path)
+    else:
+        initialize_registry()
+        config = {}
+    
+    parser_registry = get_registry()
     
     parser = argparse.ArgumentParser(description='Git Diff to Test Selection')
     parser.add_argument('diff_file', nargs='?', help='Path to git diff file')
@@ -2239,12 +2279,12 @@ def main():
     print_section("Step 2: Parsing git diff...")
     parsed_diff = parse_git_diff(diff_content)
     
-    # Filter and show production Python files
-    from utils.diff_parser import is_production_python_file
+    # Filter and show production files (language-agnostic)
+    from utils.diff_parser import is_production_file
     production_files = [f for f in parsed_diff['file_changes'] 
-                       if is_production_python_file(f['file'])]
+                       if is_production_file(f['file'], parser_registry, config)]
     non_production_files = [f for f in parsed_diff['file_changes'] 
-                            if not is_production_python_file(f['file'])]
+                            if not is_production_file(f['file'], parser_registry, config)]
     
     print_item("Total changed files", len(parsed_diff['file_changes']))
     print_item("Production Python files", len(production_files))
@@ -2257,7 +2297,13 @@ def main():
     
     # Step 5: Build search queries
     print_section("Step 3: Building search strategy...")
-    search_queries = build_search_queries(parsed_diff['file_changes'])
+    search_queries = build_search_queries(
+        parsed_diff['file_changes'],
+        parser_registry=parser_registry,
+        project_root=project_root,
+        config=config,
+        diff_content=diff_content
+    )
     display_search_strategy(search_queries)
     
     # Step 6: Query database

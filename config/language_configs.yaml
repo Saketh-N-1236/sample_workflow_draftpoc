@@ -15,6 +15,18 @@ languages:
     test_class_prefix: "Test"
     parser_module: "parsers.python_parser"
     parser_class: "PythonParser"
+    syntax_patterns:
+      class: "^\\+.*class\\s+(\\w+)"
+      function: "^\\+.*def\\s+(\\w+)"
+    module_resolution:
+      style: "dot_notation"
+      remove_prefixes: ["backend."]
+    test_directories:
+      - "test"
+      - "tests"
+      - "unit"
+      - "integration"
+      - "e2e"
     
   # Java configuration (for future implementation)
   java:
@@ -31,6 +43,15 @@ languages:
     test_class_suffix: "Test"
     parser_module: "parsers.java_parser"
     parser_class: "JavaParser"
+    syntax_patterns:
+      class: "^\\+.*class\\s+(\\w+)"
+      function: "^\\+.*(?:public|private|protected)?\\s*\\w*\\s*(\\w+)\\s*\\("
+    module_resolution:
+      style: "package_notation"
+      source_dirs: ["src/main/java", "src"]
+    test_directories:
+      - "src/test/java"
+      - "test"
     
   # TypeScript configuration (for future implementation)
   typescript:
@@ -47,6 +68,16 @@ languages:
     test_method_prefix: "test"
     parser_module: "parsers.typescript_parser"
     parser_class: "TypeScriptParser"
+    syntax_patterns:
+      class: "^\\+.*class\\s+(\\w+)"
+      function: "^\\+.*(?:export\\s+)?(?:async\\s+)?function\\s+(\\w+)"
+    module_resolution:
+      style: "es6_import"
+      base_path: "src"
+    test_directories:
+      - "__tests__"
+      - "test"
+      - "tests"
     
   # JavaScript configuration (for future implementation)
   javascript:

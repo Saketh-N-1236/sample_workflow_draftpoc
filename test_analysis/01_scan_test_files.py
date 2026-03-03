@@ -27,14 +27,15 @@ from utils.output_formatter import (
     print_header, print_section, print_item, print_list, 
     print_summary, save_json, print_progress
 )
+from utils.config import get_test_repo_path, get_project_root, get_language_config_path
 
-# Configuration: Path to test repository
-TEST_REPO_PATH = Path(__file__).parent.parent / "test_repository"
+# Configuration: Path to test repository (configurable via TEST_REPO_PATH env var)
+TEST_REPO_PATH = get_test_repo_path()
 OUTPUT_DIR = Path(__file__).parent / "outputs"
 OUTPUT_FILE = OUTPUT_DIR / "01_test_files.json"
 
 # Add project root to path for multi-language support
-project_root = Path(__file__).parent.parent
+project_root = get_project_root()
 sys.path.insert(0, str(project_root))
 
 
@@ -67,8 +68,8 @@ def main():
         from test_analysis.language_detector import get_active_languages
         from test_analysis.multi_language_scanner import get_test_files_by_language
         
-        config_path = project_root / "config" / "language_configs.yaml"
-        active_languages = get_active_languages(TEST_REPO_PATH, config_path if config_path.exists() else None)
+        config_path = get_language_config_path()
+        active_languages = get_active_languages(TEST_REPO_PATH, config_path)
         
         if active_languages:
             print_item("Detected languages", ", ".join(active_languages))

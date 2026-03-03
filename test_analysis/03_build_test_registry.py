@@ -26,14 +26,15 @@ import json
 sys.path.insert(0, str(Path(__file__).parent))
 
 from utils.file_scanner import scan_directory, get_file_metadata
-from utils.ast_parser import parse_file, extract_test_classes, extract_test_methods
+from utils.language_parser import parse_file, extract_test_classes, extract_test_methods
 from utils.output_formatter import (
     print_header, print_section, print_item, print_list,
     save_json, print_progress, print_summary
 )
+from utils.config import get_test_repo_path
 
 # Configuration
-TEST_REPO_PATH = Path(__file__).parent.parent / "test_repository"
+TEST_REPO_PATH = get_test_repo_path()
 OUTPUT_DIR = Path(__file__).parent / "outputs"
 STEP1_OUTPUT = OUTPUT_DIR / "01_test_files.json"
 OUTPUT_FILE = OUTPUT_DIR / "03_test_registry.json"
@@ -104,11 +105,11 @@ def extract_tests_from_file(filepath: Path, test_id_counter: int) -> tuple:
     # Use enhanced test type detection
     test_type = extract_test_type_enhanced(filepath)
     
-    # Extract test classes
-    test_classes = extract_test_classes(tree)
+    # Extract test classes (language-agnostic)
+    test_classes = extract_test_classes(tree, filepath)
     
-    # Extract standalone test methods (not in classes)
-    all_test_methods = extract_test_methods(tree)
+    # Extract standalone test methods (language-agnostic)
+    all_test_methods = extract_test_methods(tree, filepath)
     
     # If there are test classes, extract methods from classes
     if test_classes:

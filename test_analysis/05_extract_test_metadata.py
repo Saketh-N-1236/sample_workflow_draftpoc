@@ -26,7 +26,8 @@ import ast
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils.ast_parser import parse_file, extract_functions, extract_docstrings
+from utils.language_parser import parse_file, extract_test_methods
+from utils.ast_parser import extract_functions, extract_docstrings
 from utils.output_formatter import (
     print_header, print_section, print_item, print_list,
     save_json, print_progress, print_summary
@@ -53,72 +54,130 @@ def extract_test_metadata_from_file(filepath: Path, test_methods: list) -> dict:
     if not tree:
         return {}
     
-    # Extract all functions
-    all_functions = extract_functions(tree)
+    # Get language-specific test methods with metadata
+    extracted_tests = extract_test_methods(tree, filepath)
     
-    # Extract docstrings
-    docstrings = extract_docstrings(tree)
+    # For Python files, also extract functions and docstrings
+    all_functions = []
+    docstrings = {'functions': {}}
+    if filepath.suffix == '.py':
+        try:
+            from utils.ast_parser import extract_functions, extract_docstrings
+            all_functions = extract_functions(tree)
+            docstrings = extract_docstrings(tree)
+        except Exception:
+            pass
     
     # Build metadata for each test method
     metadata = {}
     
-    for func in all_functions:
-        func_name = func['name']
-        if func_name.startswith('test_'):
-            # Extract markers from decorators
-            markers = []
-            for decorator in func['decorators']:
-                if 'pytest.mark' in decorator.lower():
-                    # Extract marker name (e.g., @pytest.mark.asyncio -> asyncio)
-                    marker_match = re.search(r'mark\.(\w+)', decorator, re.IGNORECASE)
-                    if marker_match:
-                        markers.append(marker_match.group(1).lower())
-            
-            # Get docstring
-            description = docstrings['functions'].get(func_name, '')
+    # Create a map of test names to extracted test data
+    test_map = {test['name']: test for test in extracted_tests}
+    
+    if filepath.suffix == '.py':
+        # For Python files, use function-based extraction
+        for func in all_functions:
+            func_name = func['name']
+            if func_name.startswith('test_'):
+                # Extract markers from decorators
+                markers = []
+                for decorator in func.get('decorators', []):
+                    if 'pytest.mark' in str(decorator).lower():
+                        marker_match = re.search(r'mark\.(\w+)', str(decorator), re.IGNORECASE)
+                        if marker_match:
+                            markers.append(marker_match.group(1).lower())
+                
+                # Get docstring
+                description = docstrings.get('functions', {}).get(func_name, '')
+                
+                # Identify test pattern from name
+                pattern = _identify_test_pattern(func_name)
+                
+                # Check if async
+                is_async = func.get('is_async', False)
+                
+                # Check if parameterized
+                is_parameterized = len(func.get('parameters', [])) > 1 or 'parametrize' in str(func.get('decorators', [])).lower()
+                
+                metadata[func_name] = {
+                    "name": func_name,
+                    "description": description,
+                    "markers": markers,
+                    "is_async": is_async,
+                    "is_parameterized": is_parameterized,
+                    "pattern": pattern,
+                    "line_number": func.get('line_number')
+                }
+    else:
+        # For JavaScript and other languages, use extracted test data
+        for test_name in test_methods:
+            test_data = test_map.get(test_name, {})
             
             # Identify test pattern from name
-            pattern = _identify_test_pattern(func_name)
+            pattern = _identify_test_pattern(test_name)
             
-            # Check if async
-            is_async = func['is_async']
+            # Get async status from extracted test data
+            is_async = test_data.get('is_async', False)
             
-            # Check if parameterized (has parameters beyond self)
-            is_parameterized = len(func['parameters']) > 1 or 'parametrize' in str(func['decorators']).lower()
+            # Check if test name suggests parameterized (contains "with" or "for")
+            is_parameterized = 'with' in test_name.lower() or 'for' in test_name.lower()
             
-            metadata[func_name] = {
-                "name": func_name,
-                "description": description,
-                "markers": markers,
+            metadata[test_name] = {
+                "name": test_name,
+                "description": "",  # JavaScript tests don't have docstrings in the same way
+                "markers": [],  # Jest/Mocha markers would need special extraction
                 "is_async": is_async,
                 "is_parameterized": is_parameterized,
-                "parameters": func['parameters'],
-                "decorators": func['decorators'],
                 "pattern": pattern,
-                "line_number": func['line_number']
+                "line_number": test_data.get('line_number')
             }
+        
+        # Also add metadata for tests that were extracted but not in test_methods list
+        for test_data in extracted_tests:
+            test_name = test_data.get('name')
+            if test_name and test_name not in metadata:
+                pattern = _identify_test_pattern(test_name)
+                is_async = test_data.get('is_async', False)
+                is_parameterized = 'with' in test_name.lower() or 'for' in test_name.lower()
+                
+                metadata[test_name] = {
+                    "name": test_name,
+                    "description": "",
+                    "markers": [],
+                    "is_async": is_async,
+                    "is_parameterized": is_parameterized,
+                    "pattern": pattern,
+                    "line_number": test_data.get('line_number')
+                }
     
     return metadata
 
 
 def _identify_test_pattern(test_name: str) -> str:
     """
-    Identify test pattern from test name.
+    Identify test pattern from test name (language-agnostic).
     
     Args:
         test_name: Name of the test method
     
     Returns:
-        Pattern identifier (e.g., 'should', 'when', 'test_', etc.)
+        Pattern identifier (e.g., 'should', 'when', 'test_', 'jest', etc.)
     """
     test_name_lower = test_name.lower()
     
+    # BDD patterns (common in JavaScript/Jest)
     if 'should' in test_name_lower:
         return 'should_pattern'
     elif 'when' in test_name_lower or 'given' in test_name_lower:
         return 'bdd_pattern'
     elif test_name.startswith('test_'):
         return 'test_prefix'
+    # Jest/Mocha patterns
+    elif test_name.startswith('test(') or test_name.startswith('it('):
+        return 'jest_pattern'
+    # Generic test patterns
+    elif 'test' in test_name_lower:
+        return 'test_pattern'
     else:
         return 'other'
 
@@ -169,6 +228,14 @@ def build_test_metadata() -> dict:
             method_name = test['method_name']
             method_metadata = file_metadata.get(method_name, {})
             
+            # Use line_number from test registry if not in metadata
+            line_number = method_metadata.get('line_number') or test.get('line_number')
+            
+            # Get pattern - use from metadata or identify from name
+            pattern = method_metadata.get('pattern')
+            if not pattern or pattern == 'unknown':
+                pattern = _identify_test_pattern(method_name)
+            
             test_metadata = {
                 "test_id": test['test_id'],
                 "file_path": test['file_path'],
@@ -179,8 +246,8 @@ def build_test_metadata() -> dict:
                 "markers": method_metadata.get('markers', []),
                 "is_async": method_metadata.get('is_async', False),
                 "is_parameterized": method_metadata.get('is_parameterized', False),
-                "pattern": method_metadata.get('pattern', 'unknown'),
-                "line_number": method_metadata.get('line_number')
+                "pattern": pattern,
+                "line_number": line_number
             }
             
             all_metadata.append(test_metadata)

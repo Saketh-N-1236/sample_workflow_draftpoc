@@ -29,24 +29,30 @@ def insert_test_registry(conn, test_data: Dict[str, Any]) -> bool:
         True if successful, False otherwise
     """
     try:
+        from db_connection import DB_SCHEMA
+        
         with conn.cursor() as cursor:
-            cursor.execute("""
-                INSERT INTO test_registry 
-                (test_id, file_path, class_name, method_name, test_type, line_number)
-                VALUES (%s, %s, %s, %s, %s, %s)
+            cursor.execute(f"""
+                INSERT INTO {DB_SCHEMA}.test_registry 
+                (test_id, file_path, class_name, method_name, test_type, line_number, language, repository_path)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (test_id) DO UPDATE SET
                     file_path = EXCLUDED.file_path,
                     class_name = EXCLUDED.class_name,
                     method_name = EXCLUDED.method_name,
                     test_type = EXCLUDED.test_type,
-                    line_number = EXCLUDED.line_number
+                    line_number = EXCLUDED.line_number,
+                    language = EXCLUDED.language,
+                    repository_path = EXCLUDED.repository_path
             """, (
                 test_data['test_id'],
                 test_data['file_path'],
                 test_data.get('class_name'),
                 test_data['method_name'],
                 test_data.get('test_type'),
-                test_data.get('line_number')
+                test_data.get('line_number'),
+                test_data.get('language', 'python'),
+                test_data.get('repository_path')
             ))
             conn.commit()
             return True
@@ -80,24 +86,31 @@ def batch_insert_test_registry(conn, tests: List[Dict[str, Any]]) -> int:
                     t.get('class_name'),
                     t['method_name'],
                     t.get('test_type'),
-                    t.get('line_number')
+                    t.get('line_number'),
+                    t.get('language', 'python'),  # Default to python
+                    t.get('repository_path')  # Optional repository path
                 )
                 for t in tests
             ]
             
+            # Get schema from db_connection
+            from db_connection import DB_SCHEMA
+            
             # Use execute_values for efficient batch insert
             execute_values(
                 cursor,
-                """
-                INSERT INTO test_registry 
-                (test_id, file_path, class_name, method_name, test_type, line_number)
+                f"""
+                INSERT INTO {DB_SCHEMA}.test_registry 
+                (test_id, file_path, class_name, method_name, test_type, line_number, language, repository_path)
                 VALUES %s
                 ON CONFLICT (test_id) DO UPDATE SET
                     file_path = EXCLUDED.file_path,
                     class_name = EXCLUDED.class_name,
                     method_name = EXCLUDED.method_name,
                     test_type = EXCLUDED.test_type,
-                    line_number = EXCLUDED.line_number
+                    line_number = EXCLUDED.line_number,
+                    language = EXCLUDED.language,
+                    repository_path = EXCLUDED.repository_path
                 """,
                 values
             )

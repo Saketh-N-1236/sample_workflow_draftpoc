@@ -1,0 +1,125 @@
+{
+  "connection_errors": {
+    "mcp_server_unavailable": {
+      "error_type": "ConnectionError",
+      "message": "Cannot connect to MCP server 'catalog' at http://localhost:8001/sse. Make sure the server is running.",
+      "retryable": true,
+      "max_retries": 2
+    },
+    "timeout_error": {
+      "error_type": "TimeoutError",
+      "message": "Request timed out after 30 seconds",
+      "retryable": true,
+      "max_retries": 2
+    },
+    "connection_refused": {
+      "error_type": "ConnectionRefusedError",
+      "message": "Connection refused to MCP server",
+      "retryable": true,
+      "max_retries": 2
+    }
+  },
+  "validation_errors": {
+    "missing_required_field": {
+      "error_type": "ValueError",
+      "message": "Invalid input: missing required field 'query'",
+      "field": "query",
+      "retryable": false
+    },
+    "invalid_type": {
+      "error_type": "TypeError",
+      "message": "Invalid type for 'limit': expected integer, got string",
+      "field": "limit",
+      "retryable": false
+    },
+    "invalid_format": {
+      "error_type": "ValueError",
+      "message": "Invalid collection name format: must be 3-63 alphanumeric characters",
+      "field": "collection_name",
+      "retryable": false
+    }
+  },
+  "execution_errors": {
+    "sql_syntax_error": {
+      "error_type": "RuntimeError",
+      "message": "SQL query execution failed: syntax error near 'FRO'",
+      "query": "SELECT * FRO users",
+      "retryable": false
+    },
+    "read_only_violation": {
+      "error_type": "RuntimeError",
+      "message": "Write operations are not allowed. Only SELECT queries are permitted.",
+      "query": "DELETE FROM users",
+      "retryable": false
+    },
+    "table_not_found": {
+      "error_type": "RuntimeError",
+      "message": "Table 'nonexistent_table' does not exist",
+      "query": "SELECT * FROM nonexistent_table",
+      "retryable": false
+    },
+    "tool_execution_failed": {
+      "error_type": "RuntimeError",
+      "message": "Tool execution failed: internal error",
+      "tool_name": "catalog_list_tables",
+      "retryable": true
+    }
+  },
+  "llm_errors": {
+    "api_key_invalid": {
+      "error_type": "ValueError",
+      "message": "Invalid API key provided",
+      "provider": "gemini",
+      "retryable": false
+    },
+    "rate_limit_exceeded": {
+      "error_type": "RuntimeError",
+      "message": "Rate limit exceeded. Please try again later.",
+      "provider": "openai",
+      "retryable": true,
+      "retry_after": 60
+    },
+    "model_not_found": {
+      "error_type": "ValueError",
+      "message": "Model 'invalid-model' not found",
+      "provider": "ollama",
+      "retryable": false
+    },
+    "timeout": {
+      "error_type": "TimeoutError",
+      "message": "LLM request timed out after 60 seconds",
+      "provider": "anthropic",
+      "retryable": true
+    }
+  },
+  "state_errors": {
+    "invalid_state_format": {
+      "error_type": "ValueError",
+      "message": "Invalid state format: missing required field 'messages'",
+      "retryable": false
+    },
+    "checkpoint_load_failed": {
+      "error_type": "RuntimeError",
+      "message": "Failed to load checkpoint for thread_id 'session-123'",
+      "retryable": true
+    },
+    "checkpoint_save_failed": {
+      "error_type": "RuntimeError",
+      "message": "Failed to save checkpoint: database locked",
+      "retryable": true
+    }
+  },
+  "tool_conversion_errors": {
+    "invalid_schema": {
+      "error_type": "ValueError",
+      "message": "Invalid JSON schema: missing 'type' field",
+      "retryable": false
+    },
+    "conversion_failed": {
+      "error_type": "RuntimeError",
+      "message": "Failed to convert MCP tool to LangChain tool",
+      "tool_name": "invalid_tool",
+      "retryable": false
+    }
+  }
+}

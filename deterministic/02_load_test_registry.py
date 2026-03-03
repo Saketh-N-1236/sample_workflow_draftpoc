@@ -55,12 +55,13 @@ def load_test_registry_json() -> dict:
         return data.get('data', data)
 
 
-def prepare_test_data(registry_data: dict) -> list:
+def prepare_test_data(registry_data: dict, parser_registry=None) -> list:
     """
     Prepare test data for database insertion.
     
     Args:
         registry_data: Dictionary from JSON file
+        parser_registry: Optional parser registry for language detection
     
     Returns:
         List of test dictionaries ready for database insertion
@@ -70,13 +71,26 @@ def prepare_test_data(registry_data: dict) -> list:
     # Ensure all required fields are present
     prepared_tests = []
     for test in tests:
+        file_path = test.get('file_path', '')
+        
+        # Detect language if parser registry available
+        language = 'python'  # Default
+        if parser_registry and file_path:
+            from pathlib import Path
+            filepath = Path(file_path)
+            parser = parser_registry.get_parser(filepath)
+            if parser:
+                language = parser.language_name
+        
         prepared_test = {
             'test_id': test['test_id'],
-            'file_path': test['file_path'],
+            'file_path': file_path,
             'class_name': test.get('class_name'),
             'method_name': test['method_name'],
             'test_type': test.get('test_type'),
-            'line_number': test.get('line_number')
+            'line_number': test.get('line_number'),
+            'language': test.get('language', language),  # Use stored language or detected
+            'repository_path': test.get('repository_path')  # Optional
         }
         prepared_tests.append(prepared_test)
     
@@ -182,7 +196,7 @@ def main():
     print_item("Tests prepared:", len(tests))
     print()
     
-    # Step 4: Load into database
+    # Step 5: Load into database
     try:
         with get_connection() as conn:
             # Check current count

@@ -25,7 +25,7 @@ import json
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils.ast_parser import parse_file, extract_imports, extract_string_references
+from utils.language_parser import parse_file, extract_imports, extract_string_references
 from utils.output_formatter import (
     print_header, print_section, print_item, print_list,
     save_json, print_progress, print_summary
@@ -40,7 +40,10 @@ OUTPUT_FILE = OUTPUT_DIR / "04_static_dependencies.json"
 TEST_FRAMEWORK_IMPORTS = {
     'pytest', 'unittest', 'mock', 'unittest.mock',
     'pytest_mock', 'pytest_asyncio', 'pytest_cov',
-    'test', 'tests', 'testing'
+    'test', 'tests', 'testing',
+    # JavaScript/Node.js test frameworks
+    'jest', 'mocha', 'chai', 'sinon', 'supertest', 'express',
+    'ava', 'tape', 'jasmine', 'vitest'
 }
 
 
@@ -93,11 +96,11 @@ def extract_dependencies_from_file(filepath: Path) -> dict:
             "from_imports": []
         }
     
-    # Extract all imports
-    imports_data = extract_imports(tree)
+    # Extract all imports (language-agnostic)
+    imports_data = extract_imports(tree, filepath)
     
-    # Extract string-based references (patch() calls, etc.)
-    string_refs = extract_string_references(tree)
+    # Extract string-based references (patch() calls, etc.) (language-agnostic)
+    string_refs = extract_string_references(tree, filepath)
     
     # Filter for production code imports
     all_imports = imports_data['all_imports']

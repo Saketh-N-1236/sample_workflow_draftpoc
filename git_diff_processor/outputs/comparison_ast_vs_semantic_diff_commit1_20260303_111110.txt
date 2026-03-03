@@ -1,0 +1,88 @@
+================================================================================
+AST vs SEMANTIC SEARCH COMPARISON REPORT
+================================================================================
+Generated: 2026-03-03 11:11:10
+Diff File: C:\Users\SakethN.IDEYALABS\OneDrive - IdeyaLabs\Documents\Planon\sample_workflow\git_diff_processor\sample_diffs\diff_commit1.txt
+
+--------------------------------------------------------------------------------
+SUMMARY STATISTICS
+--------------------------------------------------------------------------------
+
+AST-based matching found:     48 tests
+Semantic search found:        14 tests
+Found by both methods:        0 tests
+Found only by AST:            48 tests
+Found only by Semantic:       14 tests
+Overlap percentage:           0.0%
+
+--------------------------------------------------------------------------------
+TESTS FOUND ONLY BY AST (48 tests)
+--------------------------------------------------------------------------------
+
+  [ 50] test_0140: TestNormalizeMessageContent.test_list_content_blocks
+  [ 50] test_0040: TestChatEndpoint.test_chat_endpoint_missing_message
+  [ 50] test_0041: TestChatEndpoint.test_chat_endpoint_empty_message
+  [ 50] test_0141: TestNormalizeMessageContent.test_list_content_simple
+  [ 50] test_0154: TestConvertLangGraphStateToAgent.test_tool_results_extraction
+  [ 50] test_0137: TestSettings.test_settings_from_env
+  [ 50] test_0153: TestConvertLangGraphStateToAgent.test_tool_calls_extraction
+  [ 50] test_0026: TestCalculateAgentIterations.test_with_tool_calls
+  [ 50] test_0133: TestSettings.test_anthropic_configuration
+  [ 50] test_0135: TestSettings.test_mcp_port_configuration
+  [ 50] test_0129: TestSettings.test_llm_provider_validation
+  [ 50] test_0033: TestValidateCollectionName.test_starts_with_number
+  [ 50] test_0037: TestFormatToolName.test_simple_tool_name
+  [ 50] test_0029: TestValidateCollectionName.test_valid_name
+  [ 50] test_0131: TestSettings.test_gemini_configuration
+  [ 50] test_0028: TestCalculateAgentIterations.test_empty_state
+  [ 50] test_0130: TestSettings.test_embedding_provider_validation
+  [ 50] test_0035: TestFormatToolName.test_sql_tool
+  [ 50] test_0138: TestNormalizeMessageContent.test_string_content
+  [ 50] test_0136: TestSettings.test_get_settings_singleton
+  [ 50] test_0144: TestConvertToLangChainMessages.test_convert_user_message
+  [ 50] test_0143: TestNormalizeMessageContent.test_other_type_content
+  [ 50] test_0128: TestSettings.test_default_settings
+  [ 50] test_0139: TestNormalizeMessageContent.test_none_content
+  [ 50] test_0134: TestSettings.test_ollama_configuration
+  [ 50] test_0032: TestValidateCollectionName.test_invalid_characters
+  [ 50] test_0132: TestSettings.test_openai_configuration
+  [ 50] test_0031: TestValidateCollectionName.test_long_name
+  [ 50] test_0150: TestConvertToLangChainMessages.test_convert_unknown_role
+  [ 50] test_0044: TestHealthEndpoint.test_health_check
+  [ 50] test_0149: TestConvertToLangChainMessages.test_convert_empty_list
+  [ 50] test_0152: TestConvertLangGraphStateToAgent.test_message_conversion
+  [ 50] test_0030: TestValidateCollectionName.test_short_name
+  [ 50] test_0036: TestFormatToolName.test_vector_tool
+  [ 50] test_0042: TestChatEndpoint.test_chat_endpoint_long_message
+  [ 50] test_0146: TestConvertToLangChainMessages.test_convert_system_message
+  [ 50] test_0155: TestConvertLangGraphStateToAgent.test_empty_state
+  [ 50] test_0038: TestFormatToolName.test_empty_tool_name
+  [ 50] test_0147: TestConvertToLangChainMessages.test_convert_tool_message
+  [ 50] test_0145: TestConvertToLangChainMessages.test_convert_assistant_message
+  [ 50] test_0148: TestConvertToLangChainMessages.test_convert_multiple_messages
+  [ 50] test_0039: TestFormatToolName.test_none_tool_name
+  [ 50] test_0034: TestFormatToolName.test_catalog_tool
+  [ 50] test_0025: TestCalculateAgentIterations.test_no_tool_calls
+  [ 50] test_0027: TestCalculateAgentIterations.test_multiple_steps
+  [ 50] test_0043: TestToolsEndpoint.test_tools_endpoint_structure
+  [ 50] test_0151: TestConvertLangGraphStateToAgent.test_basic_conversion
+  [ 50] test_0142: TestNormalizeMessageContent.test_dict_content
+
+--------------------------------------------------------------------------------
+TESTS FOUND ONLY BY SEMANTIC SEARCH (14 tests)
+--------------------------------------------------------------------------------
+
+  [ 32%] test_0097: TestShouldContinue.test_should_continue_empty_messages
+  [ 30%] test_0091: TestCallModel.test_call_model_with_tool_results
+  [ 30%] test_0008: TestAgentInitializationFlow.test_full_initialization
+  [ 30%] test_0099: TestGetLangChainLLM.test_get_langchain_llm_creates_instance
+  [ 35%] test_0098: TestShouldContinue.test_should_continue_tool_calls_and_content
+  [ 32%] test_0095: TestShouldContinue.test_should_continue_without_tool_calls
+  [ 30%] test_0090: TestCallModel.test_call_model_with_tool_calls
+  [ 35%] test_0012: TestStateManagementFlow.test_conversation_history_flow
+  [ 33%] test_0096: TestShouldContinue.test_should_continue_with_content
+  [ 33%] test_0094: TestShouldContinue.test_should_continue_with_tool_calls
+  [ 32%] test_0092: TestCallModel.test_call_model_adds_instruction_after_tools
+  [ 31%] test_0100: TestGetLangChainLLM.test_get_langchain_llm_reuses_instance
+  [ 33%] test_0009: TestAgentInitializationFlow.test_agent_invoke_flow
+  [ 30%] test_0010: TestToolExecutionFlow.test_tool_discovery_to_execution

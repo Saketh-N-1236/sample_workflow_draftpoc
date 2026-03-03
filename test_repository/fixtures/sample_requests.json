@@ -1,0 +1,128 @@
+{
+  "chat_requests": {
+    "simple_query": {
+      "message": "Hello, how are you?",
+      "session_id": "session-simple-001"
+    },
+    "table_list_query": {
+      "message": "What tables are available in the database?",
+      "session_id": "session-table-001"
+    },
+    "sql_query": {
+      "message": "Show me all users",
+      "session_id": "session-sql-001"
+    },
+    "vector_search_query": {
+      "message": "Search for products related to electronics",
+      "session_id": "session-vector-001"
+    },
+    "multi_tool_query": {
+      "message": "List tables and search for user documents",
+      "session_id": "session-multi-001"
+    },
+    "empty_message": {
+      "message": "",
+      "session_id": "session-empty-001"
+    },
+    "very_long_message": {
+      "message": "This is a very long message. ",
+      "session_id": "session-long-001"
+    },
+    "special_characters": {
+      "message": "Test with special chars: !@#$%^&*()_+-=[]{}|;':\",./<>?",
+      "session_id": "session-special-001"
+    },
+    "unicode_message": {
+      "message": "测试消息 with émojis 🚀 and unicode",
+      "session_id": "session-unicode-001"
+    },
+    "sql_injection_attempt": {
+      "message": "'; DROP TABLE users; --",
+      "session_id": "session-injection-001"
+    }
+  },
+  "chat_responses": {
+    "simple_response": {
+      "response": "Hello! I'm doing well, thank you for asking. How can I help you today?",
+      "request_id": "req-simple-001",
+      "session_id": "session-simple-001",
+      "tool_calls": [],
+      "tool_results": [],
+      "iterations": 1
+    },
+    "table_list_response": {
+      "response": "The available tables in the database are: users, products, orders, and categories.",
+      "request_id": "req-table-001",
+      "session_id": "session-table-001",
+      "tool_calls": [
+        {
+          "name": "catalog_list_tables",
+          "arguments": {},
+          "step": 1
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_name": "catalog_list_tables",
+          "result": {
+            "tables": ["users", "products", "orders", "categories"],
+            "count": 4
+          },
+          "step": 1
+        }
+      ],
+      "iterations": 2
+    },
+    "sql_query_response": {
+      "response": "Here are the users in the database:\n1. John Doe (john@example.com)\n2. Jane Smith (jane@example.com)",
+      "request_id": "req-sql-001",
+      "session_id": "session-sql-001",
+      "tool_calls": [
+        {
+          "name": "sql_query_execute_query",
+          "arguments": {
+            "query": "SELECT * FROM users"
+          },
+          "step": 1
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_name": "sql_query_execute_query",
+          "result": {
+            "rows": [
+              {"id": 1, "name": "John Doe", "email": "john@example.com"},
+              {"id": 2, "name": "Jane Smith", "email": "jane@example.com"}
+            ],
+            "row_count": 2
+          },
+          "step": 1
+        }
+      ],
+      "iterations": 2
+    },
+    "error_response": {
+      "response": "I encountered an error while processing your request: Connection failed. Please try again later.",
+      "request_id": "req-error-001",
+      "session_id": "session-error-001",
+      "tool_calls": [
+        {
+          "name": "catalog_list_tables",
+          "arguments": {},
+          "step": 1
+        }
+      ],
+      "tool_results": [
+        {
+          "tool_name": "catalog_list_tables",
+          "result": {
+            "isError": true,
+            "error": "Connection failed"
+          },
+          "step": 1
+        }
+      ],
+      "iterations": 2
+    }
+  }
+}

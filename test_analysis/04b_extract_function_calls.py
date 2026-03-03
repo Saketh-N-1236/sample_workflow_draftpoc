@@ -25,7 +25,7 @@ from typing import Optional
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils.ast_parser import parse_file, extract_function_calls, extract_string_references
+from utils.language_parser import parse_file, extract_function_calls, extract_string_references
 from utils.output_formatter import (
     print_header, print_section, print_item, print_list,
     save_json, print_progress, print_summary
@@ -157,14 +157,14 @@ def extract_function_mappings_from_file(filepath: Path, test_methods: list, impo
     
     mappings = []
     
-    # Extract function calls from test methods
-    function_calls = extract_function_calls(tree)
+    # Extract function calls from test methods (language-agnostic)
+    function_calls = extract_function_calls(tree, filepath)
     
     # Create a map of test_method -> calls
     calls_by_method = {fc['test_method']: fc['calls'] for fc in function_calls}
     
-    # Extract string references (patch() calls)
-    string_refs = extract_string_references(tree)
+    # Extract string references (patch() calls) (language-agnostic)
+    string_refs = extract_string_references(tree, filepath)
     
     # Process each test method
     for test_method in test_methods:

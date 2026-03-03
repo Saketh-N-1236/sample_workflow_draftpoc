@@ -163,36 +163,72 @@ def parse_git_diff(diff_content: str) -> Dict[str, Any]:
     }
 
 
-def is_production_python_file(file_path: str) -> bool:
+def is_production_file(
+    file_path: str,
+    parser_registry=None,
+    config: Dict = None
+) -> bool:
     """
-    Check if a file is a Python production code file.
+    Check if a file is a production code file (language-agnostic).
     
     Filters out:
-    - Non-Python files (.css, .tsx, .txt, .db, .bin, .json, etc.)
-    - Test files
+    - Files without a parser (unsupported languages)
+    - Test files (using language-specific patterns)
     - Artifact/data files
-    - Frontend files (TypeScript/React)
     - Configuration files
     
     Args:
         file_path: File path to check
+        parser_registry: Optional parser registry instance
+        config: Optional language configuration dictionary
     
     Returns:
-        True if it's a Python production file, False otherwise
+        True if it's a production file, False otherwise
     """
     if not file_path or file_path == '/dev/null':
         return False
     
-    # Must be a Python file
-    if not file_path.endswith('.py'):
-        return False
+    filepath = Path(file_path)
     
-    # Skip test files
+    # If parser registry provided, use it to detect language
+    if parser_registry:
+        parser = parser_registry.get_parser(filepath)
+        if not parser:
+            return False  # No parser available for this file type
+        
+        # Check if it's a test file using language config
+        if config:
+            try:
+                from config.config_loader import get_test_patterns, get_language_config
+                language = parser.language_name
+                lang_config = get_language_config(config, language)
+                if lang_config:
+                    test_patterns = get_test_patterns(config, language)
+                    filename = filepath.name
+                    import fnmatch
+                    for pattern in test_patterns:
+                        if fnmatch.fnmatch(filename, pattern):
+                            return False  # It's a test file
+            except Exception:
+                pass
+    else:
+        # Fallback: check for Python files (backward compatibility)
+        if not file_path.endswith('.py'):
+            return False
+    
+    # Skip test files (generic check)
     file_lower = file_path.lower()
-    if 'test' in file_lower or file_path.endswith('_test.py'):
-        return False
+    if 'test' in file_lower:
+        # More specific check: only skip if it's clearly a test file
+        if file_lower.endswith('_test.py') or file_lower.endswith('test.py'):
+            return False
+        # Check for test directory patterns
+        if '/test/' in file_lower or '\\test\\' in file_lower:
+            if '/test/' in file_lower or '\\test\\' in file_lower:
+                # Could be a test file, but be lenient - let parser decide
+                pass
     
-    # Skip artifact/data directories
+    # Skip artifact/data directories (language-agnostic)
     skip_dirs = [
         'mlartifacts',
         'artifacts',
@@ -203,9 +239,13 @@ def is_production_python_file(file_path: str) -> bool:
         '.git',
         'venv',
         'env',
-        'frontend',  # Frontend code (TypeScript/React)
         'static',
-        'templates'
+        'templates',
+        'build',
+        'dist',
+        'target',
+        'bin',
+        'obj'
     ]
     
     for skip_dir in skip_dirs:
@@ -215,125 +255,200 @@ def is_production_python_file(file_path: str) -> bool:
     return True
 
 
-def extract_production_classes_from_file(file_path: str) -> List[str]:
+def is_production_python_file(file_path: str) -> bool:
     """
-    Extract production class/module names from a file path.
+    Legacy function for backward compatibility.
+    
+    Deprecated: Use is_production_file() instead.
+    """
+    return is_production_file(file_path, parser_registry=None, config=None)
+
+
+def extract_production_modules_from_file(
+    file_path: str,
+    parser_registry=None,
+    project_root: Path = None,
+    config: Dict = None
+) -> List[str]:
+    """
+    Extract production module/package names from a file path (language-agnostic).
     
     This converts file paths to import-style module names that match
-    what's stored in the database.
-    
-    Only processes Python production files (filters out test files,
-    artifacts, data files, frontend files, etc.)
+    what's stored in the database. Uses parser's resolve_module_name() method.
     
     Args:
         file_path: File path from git diff (e.g., "agent/agent_pool.py")
+        parser_registry: Optional parser registry instance
+        project_root: Optional project root directory for module resolution
+        config: Optional language configuration dictionary
     
     Returns:
-        List of possible production class/module names to search
+        List of possible production module/package names to search
     
     Example:
-        >>> extract_production_classes_from_file("agent/agent_pool.py")
+        >>> extract_production_modules_from_file("agent/agent_pool.py", parser_registry, project_root)
         ['agent.agent_pool', 'agent']
-        >>> extract_production_classes_from_file("frontend/src/ChatPage.tsx")
-        []
     """
     if not file_path or file_path == '/dev/null':
         return []
     
-    # Only process Python production files
-    if not is_production_python_file(file_path):
+    filepath = Path(file_path)
+    
+    # Check if it's a production file
+    if not is_production_file(file_path, parser_registry, config):
         return []
     
-    # Remove .py extension
-    file_path = file_path[:-3]
+    # If parser registry provided, use parser's resolve_module_name
+    if parser_registry and project_root:
+        parser = parser_registry.get_parser(filepath)
+        if parser:
+            try:
+                module_name = parser.resolve_module_name(filepath, project_root)
+                
+                # Generate search candidates
+                candidates = [module_name]
+                
+                # Add parent module/package
+                parts = module_name.split('.')
+                if len(parts) > 1:
+                    candidates.append(parts[0])
+                
+                return list(set(candidates))
+            except Exception:
+                pass
     
-    # Convert path to module name
-    module_name = file_path.replace('/', '.').replace('\\', '.')
+    # Fallback: Language-agnostic logic for common file types
+    # Handle Python, JavaScript, Java, TypeScript files
+    supported_extensions = ['.py', '.js', '.jsx', '.java', '.ts', '.tsx']
+    file_ext = filepath.suffix.lower()
     
-    # Database stores module paths WITHOUT "backend." prefix
+    if file_ext not in supported_extensions:
+        return []
+    
+    # Remove extension
+    file_path_no_ext = str(filepath.with_suffix(''))
+    
+    # Convert path to module name (replace path separators with dots)
+    module_name = file_path_no_ext.replace('/', '.').replace('\\', '.')
+    
+    # Apply language-specific prefix removal rules from config
+    if config:
+        lang_config = None
+        for lang_name, lang_cfg in config.get('languages', {}).items():
+            if file_ext in lang_cfg.get('extensions', []):
+                lang_config = lang_cfg
+                break
+        
+        if lang_config:
+            module_resolution = lang_config.get('module_resolution', {})
+            remove_prefixes = module_resolution.get('remove_prefixes', [])
+            for prefix in remove_prefixes:
+                if module_name.startswith(prefix):
+                    module_name = module_name[len(prefix):].lstrip('.')
+                    break
+    
+    # Database stores module paths WITHOUT "backend." prefix (Python-specific)
     # So "backend/agent/agent_pool.py" becomes "agent.agent_pool"
     if module_name.startswith('backend.'):
         module_name = module_name[8:]  # Remove "backend." prefix
     
+    # Also remove common frontend prefixes
+    if module_name.startswith('client.'):
+        module_name = module_name[7:]  # Remove "client." prefix
+    if module_name.startswith('src.'):
+        module_name = module_name[4:]  # Remove "src." prefix
+    
     # Generate search candidates
-    candidates = []
+    candidates = [module_name]
     
-    # Add full module path (e.g., "agent.agent_pool")
-    candidates.append(module_name)
-    
-    # Add parent module (e.g., "agent" from "agent.agent_pool")
+    # Add parent module
     parts = module_name.split('.')
     if len(parts) > 1:
-        parent_module = parts[0]
-        candidates.append(parent_module)
+        candidates.append(parts[0])
+        # Also add component name (last part) for JavaScript components
+        if file_ext in ['.js', '.jsx', '.ts', '.tsx']:
+            candidates.append(parts[-1])  # e.g., "ChatPage" from "components.ChatPage"
     
-    return list(set(candidates))  # Remove duplicates
+    return list(set(candidates))
 
 
-def extract_test_file_candidates(file_path: str) -> List[str]:
+def extract_production_classes_from_file(file_path: str) -> List[str]:
     """
-    Extract potential test file names from a production file path.
+    Legacy function for backward compatibility.
+    
+    Deprecated: Use extract_production_modules_from_file() instead.
+    """
+    return extract_production_modules_from_file(file_path, parser_registry=None, project_root=None, config=None)
+
+
+def extract_test_file_candidates(
+    file_path: str,
+    parser_registry=None,
+    config: Dict = None
+) -> List[str]:
+    """
+    Extract potential test file names from a production file path (language-agnostic).
     
     Enhanced with multiple strategies to find test files in any repository structure.
+    Uses language-specific test patterns from config.
     
     Args:
         file_path: Production file path (e.g., "backend/agent/agent_pool.py")
+        parser_registry: Optional parser registry instance
+        config: Optional language configuration dictionary
     
     Returns:
         List of potential test file names to search for
     
     Example:
-        >>> extract_test_file_candidates("backend/agent/agent_pool.py")
-        ['test_agent_pool.py', 'test_agent_agent_pool.py', 'test_agent_pool_*.py']
-        >>> extract_test_file_candidates("backend/api/routes.py")
-        ['test_routes.py', 'test_api_routes.py', 'test_routes_*.py']
+        >>> extract_test_file_candidates("backend/agent/agent_pool.py", parser_registry, config)
+        ['test_agent_pool.py', 'test_agent_agent_pool.py']
     """
     if not file_path or file_path == '/dev/null':
         return []
     
-    # Only for Python files
-    if not file_path.endswith('.py'):
-        return []
-    
-    path_obj = Path(file_path)
+    filepath = Path(file_path)
     candidates = set()
     
+    # Get language-specific test patterns if available
+    test_patterns = None
+    extension = filepath.suffix
+    
+    if parser_registry and config:
+        parser = parser_registry.get_parser(filepath)
+        if parser:
+            try:
+                from config.config_loader import get_test_patterns, get_language_config
+                language = parser.language_name
+                lang_config = get_language_config(config, language)
+                if lang_config:
+                    test_patterns = get_test_patterns(config, language)
+            except Exception:
+                pass
+    
+    # Fallback to Python patterns if not found
+    if not test_patterns:
+        if not file_path.endswith('.py'):
+            return []
+        test_patterns = ['test_*.py', '*_test.py']
+    
     # Get file name without extension
-    file_stem = path_obj.stem  # e.g., 'agent_pool'
+    file_stem = filepath.stem  # e.g., 'agent_pool'
     
-    # Strategy 1: Direct test file name: test_<filename>.py
-    candidates.add(f"test_{file_stem}.py")
+    # Generate candidates based on language-specific test patterns
+    import fnmatch
+    for pattern in test_patterns:
+        # Replace * with file_stem to generate candidate
+        candidate = pattern.replace('*', file_stem)
+        candidates.add(candidate)
     
-    # Strategy 2: If file is in a subdirectory, check parent module pattern
-    # e.g., backend/agent/agent_pool.py -> test_agent_agent_pool.py
-    if len(path_obj.parts) > 1:
-        parent_dir = path_obj.parts[-2]  # e.g., 'agent'
-        candidates.add(f"test_{parent_dir}_{file_stem}.py")
-    
-    # Strategy 3: Check for test_<parent>_<file>.py pattern
-    # e.g., backend/api/routes.py -> test_api_routes.py
-    if len(path_obj.parts) >= 2:
-        parent = path_obj.parts[-2]
-        candidates.add(f"test_{parent}_{file_stem}.py")
-    
-    # Strategy 4: For nested modules, try full module path
-    # e.g., backend/agent/agent_pool.py -> test_agent_agent_pool.py (already covered)
-    # But also try: test_agent_pool_*.py for parameterized tests
-    candidates.add(f"test_{file_stem}_*.py")
-    
-    # Strategy 5: Try without underscores (for camelCase files)
-    if '_' in file_stem:
-        camel_case = file_stem.replace('_', '')
-        candidates.add(f"test_{camel_case}.py")
-    
-    # Strategy 6: Try with module prefix if in subdirectory
-    if len(path_obj.parts) >= 2:
-        # Build module path: agent.agent_pool
-        module_parts = path_obj.parts[-2:]  # ['agent', 'agent_pool.py']
-        module_name = '.'.join([p.replace('.py', '') for p in module_parts])
-        # Convert to test pattern: test_agent_agent_pool.py
-        test_module_name = module_name.replace('.', '_')
-        candidates.add(f"test_{test_module_name}.py")
+    # Also add common patterns based on file structure
+    if len(filepath.parts) > 1:
+        parent_dir = filepath.parts[-2]  # e.g., 'agent'
+        # Try parent_dir_file_stem pattern
+        for pattern in test_patterns:
+            candidate = pattern.replace('*', f"{parent_dir}_{file_stem}")
+            candidates.add(candidate)
     
     return sorted(list(candidates))  # Return sorted list for consistency
 
@@ -378,25 +493,32 @@ def analyze_file_change_type(file_change: Dict) -> str:
     return 'code'
 
 
-def build_search_queries(file_changes: List[Dict]) -> Dict[str, List[str]]:
+def build_search_queries(
+    file_changes: List[Dict],
+    parser_registry=None,
+    project_root: Path = None,
+    config: Dict = None,
+    diff_content: str = None
+) -> Dict[str, List[str]]:
     """
-    Build database search queries from file changes.
+    Build database search queries from file changes (language-agnostic).
     
-    Only processes Python production files, filtering out:
-    - Non-Python files (CSS, TSX, TXT, DB, etc.)
-    - Test files
-    - Artifact/data files
-    - Frontend files
+    Processes production files from any language with a registered parser.
     
     Args:
         file_changes: List of file change dictionaries from parse_git_diff
+        parser_registry: Optional parser registry instance
+        project_root: Optional project root directory for module resolution
+        config: Optional language configuration dictionary
+        diff_content: Optional full diff content for parsing new files
     
     Returns:
         Dictionary with search strategies:
-        - exact_matches: Exact production class names
+        - exact_matches: Exact production class/module names
         - module_matches: Module-level patterns (agent.*)
         - file_patterns: File name patterns
         - test_file_candidates: Direct test file names to search
+        - changed_functions: Function-level changes
     """
     exact_matches = []
     module_matches = []
@@ -411,56 +533,63 @@ def build_search_queries(file_changes: List[Dict]) -> Dict[str, List[str]]:
         if change_type == 'import_only':
             continue  # Don't match tests for import-only changes
         
-        # Extract production classes (this function already filters)
-        classes = extract_production_classes_from_file(file_path)
+        # Extract production modules (language-agnostic, already filters)
+        modules = extract_production_modules_from_file(file_path, parser_registry, project_root, config)
         
-        # If no classes extracted, skip this file (not a production Python file)
-        if not classes:
+        # If no modules extracted, skip this file (not a production file)
+        if not modules:
             continue
         
-        for class_name in classes:
+        for module_name in modules:
             # Exact match
-            exact_matches.append(class_name)
+            exact_matches.append(module_name)
             
             # Module-level match (if has dots)
-            if '.' in class_name:
-                module_part = class_name.split('.')[0]
+            if '.' in module_name:
+                module_part = module_name.split('.')[0]
                 module_pattern = f"{module_part}.*"
                 if module_pattern not in module_matches:
                     module_matches.append(module_pattern)
         
-        # File pattern (for fallback searches) - only for Python files
-        if file_path.endswith('.py'):
-            file_name = Path(file_path).stem
-            if file_name:
-                file_patterns.append(file_name)
+        # File pattern (for fallback searches) - language-agnostic
+        filepath = Path(file_path)
+        if filepath.stem:
+            file_patterns.append(filepath.stem)
         
-        # Extract direct test file candidates
-        test_candidates = extract_test_file_candidates(file_path)
+        # Extract direct test file candidates (language-agnostic)
+        test_candidates = extract_test_file_candidates(file_path, parser_registry, config)
         test_file_candidates.extend(test_candidates)
     
     # Extract changed functions with modules (for function-level matching)
-    changed_functions = extract_changed_functions_with_modules(file_changes)
+    changed_functions = extract_changed_functions_with_modules(
+        file_changes, diff_content, parser_registry, project_root, config
+    )
     
     return {
         'exact_matches': list(set(exact_matches)),
         'module_matches': list(set(module_matches)),
         'file_patterns': list(set(file_patterns)),
         'test_file_candidates': list(set(test_file_candidates)),
-        'changed_functions': changed_functions  # NEW: Function-level changes
+        'changed_functions': changed_functions  # Function-level changes
     }
 
 
-def extract_definitions_from_diff(diff_content: str, file_path: str) -> Dict[str, List[str]]:
+def extract_definitions_from_diff(
+    diff_content: str,
+    file_path: str,
+    parser_registry=None,
+    config: Dict = None
+) -> Dict[str, List[str]]:
     """
-    Extract class and function definitions from diff content for new files.
+    Extract class and function definitions from diff content for new files (language-agnostic).
     
-    Parses +class and +def lines from git diff to build function mappings
-    for files that don't exist in the database yet.
+    Parses class and function definitions from git diff using language-specific patterns.
     
     Args:
         diff_content: Full git diff content as string
         file_path: Path of the file being analyzed
+        parser_registry: Optional parser registry instance
+        config: Optional language configuration dictionary
     
     Returns:
         Dictionary with:
@@ -469,6 +598,33 @@ def extract_definitions_from_diff(diff_content: str, file_path: str) -> Dict[str
     """
     classes = []
     functions = []
+    
+    filepath = Path(file_path)
+    language = None
+    syntax_patterns = None
+    
+    # Get language-specific patterns if parser registry and config available
+    if parser_registry and config:
+        parser = parser_registry.get_parser(filepath)
+        if parser:
+            language = parser.language_name
+            try:
+                from config.config_loader import get_language_config
+                lang_config = get_language_config(config, language)
+                if lang_config:
+                    syntax_patterns = lang_config.get('syntax_patterns', {})
+            except Exception:
+                pass
+    
+    # Default to Python patterns if not found
+    if not syntax_patterns:
+        syntax_patterns = {
+            'class': r'^\+.*class\s+(\w+)',
+            'function': r'^\+.*def\s+(\w+)'
+        }
+    
+    class_pattern = syntax_patterns.get('class', r'^\+.*class\s+(\w+)')
+    func_pattern = syntax_patterns.get('function', r'^\+.*def\s+(\w+)')
     
     # Find the section for this file in the diff
     file_section = False
@@ -487,13 +643,13 @@ def extract_definitions_from_diff(diff_content: str, file_path: str) -> Dict[str
         elif file_section and in_hunk:
             # Look for added lines with class or function definitions
             if line.startswith('+') and not line.startswith('+++'):
-                # Extract class definition: +class ClassName
-                class_match = re.search(r'^\+.*class\s+(\w+)', line)
+                # Extract class definition using language-specific pattern
+                class_match = re.search(class_pattern, line)
                 if class_match:
                     classes.append(class_match.group(1))
                 
-                # Extract function definition: +def function_name
-                func_match = re.search(r'^\+.*def\s+(\w+)', line)
+                # Extract function definition using language-specific pattern
+                func_match = re.search(func_pattern, line)
                 if func_match:
                     functions.append(func_match.group(1))
     
@@ -503,9 +659,15 @@ def extract_definitions_from_diff(diff_content: str, file_path: str) -> Dict[str
     }
 
 
-def extract_changed_functions_with_modules(file_changes: List[Dict], diff_content: str = None) -> List[Dict[str, str]]:
+def extract_changed_functions_with_modules(
+    file_changes: List[Dict],
+    diff_content: str = None,
+    parser_registry=None,
+    project_root: Path = None,
+    config: Dict = None
+) -> List[Dict[str, str]]:
     """
-    Extract changed functions with their module names from file changes.
+    Extract changed functions with their module names from file changes (language-agnostic).
     
     Converts file paths and changed methods to module.function format
     that can be used to query the test_function_mapping table.
@@ -515,23 +677,14 @@ def extract_changed_functions_with_modules(file_changes: List[Dict], diff_conten
     Args:
         file_changes: List of file change dictionaries from parse_git_diff
         diff_content: Optional full diff content for parsing new files
+        parser_registry: Optional parser registry instance
+        project_root: Optional project root directory for module resolution
+        config: Optional language configuration dictionary
     
     Returns:
         List of dictionaries with:
         - module: Module name (e.g., 'agent.langgraph_agent')
         - function: Function name (e.g., 'initialize')
-    
-    Example:
-        >>> file_changes = [{
-        ...     'file': 'agent/langgraph_agent.py',
-        ...     'changed_methods': ['initialize', 'invoke'],
-        ...     'status': 'added'
-        ... }]
-        >>> extract_changed_functions_with_modules(file_changes, diff_content)
-        [
-        ...     {'module': 'agent.langgraph_agent', 'function': 'initialize'},
-        ...     {'module': 'agent.langgraph_agent', 'function': 'invoke'}
-        ... ]
     """
     changed_functions = []
     
@@ -539,23 +692,19 @@ def extract_changed_functions_with_modules(file_changes: List[Dict], diff_conten
         file_path = file_change['file']
         status = file_change.get('status', 'modified')
         
-        # Skip non-Python files
-        if not file_path.endswith('.py'):
-            continue
-        
         # Skip import-only changes (unless it's a new file)
         if status != 'added':
             change_type = analyze_file_change_type(file_change)
             if change_type == 'import_only':
                 continue
         
-        # Only process production Python files
-        if not is_production_python_file(file_path):
+        # Only process production files (language-agnostic)
+        if not is_production_file(file_path, parser_registry, config):
             continue
         
         # For new files, extract definitions from diff
         if status == 'added' and diff_content:
-            definitions = extract_definitions_from_diff(diff_content, file_path)
+            definitions = extract_definitions_from_diff(diff_content, file_path, parser_registry, config)
             # Use extracted functions if available, otherwise use changed_methods
             functions_to_process = definitions.get('functions', [])
             if not functions_to_process:
@@ -567,14 +716,14 @@ def extract_changed_functions_with_modules(file_changes: List[Dict], diff_conten
         if not functions_to_process:
             continue
         
-        # Convert file path to module name
+        # Convert file path to module name (language-agnostic)
         # e.g., 'agent/langgraph_agent.py' -> 'agent.langgraph_agent'
-        module_name = extract_production_classes_from_file(file_path)
-        if not module_name:
+        module_names = extract_production_modules_from_file(file_path, parser_registry, project_root, config)
+        if not module_names:
             continue
         
         # Use the first (most specific) module name
-        primary_module = module_name[0] if isinstance(module_name, list) else module_name
+        primary_module = module_names[0]
         
         # Create module.function entries for each function
         for method_name in functions_to_process:

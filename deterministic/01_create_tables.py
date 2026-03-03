@@ -85,6 +85,8 @@ def create_test_registry_table(conn):
                 method_name VARCHAR(255) NOT NULL,
                 test_type VARCHAR(50),
                 line_number INTEGER,
+                language VARCHAR(20) DEFAULT 'python',
+                repository_path TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
@@ -105,10 +107,16 @@ def create_test_registry_table(conn):
             ON {SCHEMA}.test_registry(test_type)
         """)
         
+        cursor.execute(f"""
+            CREATE INDEX idx_test_registry_language 
+            ON {SCHEMA}.test_registry(language)
+        """)
+        
         conn.commit()
         print(f"[OK] Created table: {SCHEMA}.test_registry")
         print(f"  - Primary key: test_id")
-        print(f"  - Indexes: file_path, class_name, test_type")
+        print(f"  - Indexes: file_path, class_name, test_type, language")
+        print(f"  - Columns: language (default: python), repository_path")
 
 
 def create_test_dependencies_table(conn):
@@ -356,7 +364,8 @@ def create_test_function_mapping_table(conn):
         conn.commit()
         print(f"[OK] Created table: {SCHEMA}.test_function_mapping")
         print(f"  - Foreign key: test_id -> test_registry")
-        print(f"  - Indexes: (module_name, function_name), test_id, function_name")
+        print(f"  - Indexes: (module_name, function_name), test_id, function_name, language")
+        print(f"  - Columns: language (default: python)")
 
 
 def enable_pgvector_and_embedding_column(conn):
@@ -368,28 +377,39 @@ def enable_pgvector_and_embedding_column(conn):
     Does NOT drop or recreate test_metadata — only adds a column.
     """
     with conn.cursor() as cursor:
-        # Enable pgvector (once per DB, safe to repeat)
-        cursor.execute("CREATE EXTENSION IF NOT EXISTS vector")
+        try:
+            # Enable pgvector (once per DB, safe to repeat)
+            cursor.execute("CREATE EXTENSION IF NOT EXISTS vector")
+            conn.commit()
+        except Exception as e:
+            # If extension creation fails, rollback and re-raise
+            conn.rollback()
+            raise e
+        
+        try:
+            # Add 768-dim embedding column to existing test_metadata
+            cursor.execute(f"""
+                ALTER TABLE {SCHEMA}.test_metadata
+                ADD COLUMN IF NOT EXISTS embedding vector(768)
+            """)
 
-        # Add 768-dim embedding column to existing test_metadata
-        cursor.execute(f"""
-            ALTER TABLE {SCHEMA}.test_metadata
-            ADD COLUMN IF NOT EXISTS embedding vector(768)
-        """)
+            # ivfflat index — right for datasets under 1 million rows
+            # lists=10 is appropriate for ~100-500 tests
+            cursor.execute(f"""
+                CREATE INDEX IF NOT EXISTS idx_metadata_embedding
+                ON {SCHEMA}.test_metadata
+                USING ivfflat (embedding vector_cosine_ops)
+                WITH (lists = 10)
+            """)
 
-        # ivfflat index — right for datasets under 1 million rows
-        # lists=10 is appropriate for ~100-500 tests
-        cursor.execute(f"""
-            CREATE INDEX IF NOT EXISTS idx_metadata_embedding
-            ON {SCHEMA}.test_metadata
-            USING ivfflat (embedding vector_cosine_ops)
-            WITH (lists = 10)
-        """)
-
-        conn.commit()
-        print(f"[OK] pgvector extension enabled")
-        print(f"[OK] embedding column (vector(768)) added to {SCHEMA}.test_metadata")
-        print(f"[OK] ivfflat cosine index created on test_metadata.embedding")
+            conn.commit()
+            print(f"[OK] pgvector extension enabled")
+            print(f"[OK] embedding column (vector(768)) added to {SCHEMA}.test_metadata")
+            print(f"[OK] ivfflat cosine index created on test_metadata.embedding")
+        except Exception as e:
+            # If column/index creation fails, rollback and re-raise
+            conn.rollback()
+            raise e
 
 
 def verify_tables_created(conn):
@@ -496,6 +516,10 @@ def main():
             except Exception as e:
                 print(f"[WARN] pgvector setup skipped: {e}")
                 print("  Note: You can use ChromaDB backend instead (set VECTOR_BACKEND=chromadb)")
+                # Rollback the failed transaction to allow verification to proceed
+                conn.rollback()
+                # Commit after rollback to clear the transaction state
+                conn.commit()
             print()
             
             # Step 3: Verify tables

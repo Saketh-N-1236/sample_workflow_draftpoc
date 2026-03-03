@@ -191,13 +191,56 @@ def initialize_registry(config_path: Path = None):
 
 
 def _register_default_parsers():
-    """Register default parsers (Python)."""
+    """Register default parsers (Python, JavaScript, Java, and Tree-sitter if available)."""
+    # Try Tree-sitter parsers first (more accurate)
+    try:
+        from parsers.tree_sitter_factory import get_tree_sitter_parser
+        
+        # Register Tree-sitter parsers for supported languages
+        languages = [
+            ('python', ['.py']),
+            ('javascript', ['.js', '.jsx']),
+            ('java', ['.java']),
+            ('typescript', ['.ts', '.tsx'])
+        ]
+        
+        for lang_name, extensions in languages:
+            try:
+                parser = get_tree_sitter_parser(lang_name, extensions)
+                if parser:
+                    _registry.register(parser)
+                    print(f"Registered Tree-sitter parser for {lang_name}")
+            except Exception as e:
+                # Tree-sitter not available for this language, continue
+                pass
+    except Exception as e:
+        # Tree-sitter not available at all
+        pass
+    
+    # Fallback to non-Tree-sitter parsers if Tree-sitter not available
     try:
         from parsers.python_parser import PythonParser
-        _registry.register(PythonParser())
-        print("Registered default Python parser")
-    except ImportError:
-        print("Warning: Could not import PythonParser")
+        if 'python' not in _registry._parsers:
+            _registry.register(PythonParser())
+            print("Registered default Python parser")
+    except Exception:
+        pass
+    
+    try:
+        from parsers.javascript_parser import JavaScriptParser
+        if 'javascript' not in _registry._parsers:
+            _registry.register(JavaScriptParser())
+            print("Registered default JavaScript parser")
+    except Exception:
+        pass
+    
+    try:
+        from parsers.java_parser import JavaParser
+        if 'java' not in _registry._parsers:
+            _registry.register(JavaParser())
+            print("Registered default Java parser")
+    except Exception:
+        pass
 
 
 def get_registry() -> ParserRegistry:

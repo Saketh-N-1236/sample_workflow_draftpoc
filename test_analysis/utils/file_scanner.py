@@ -119,15 +119,17 @@ def is_test_file(filepath: Path, config_path: Path = None) -> bool:
     return False
 
 
-def scan_directory(root_dir: Path, exclude_dirs: Optional[List[str]] = None) -> List[Path]:
+def scan_directory(root_dir: Path, exclude_dirs: Optional[List[str]] = None, config_path: Path = None) -> List[Path]:
     """
-    Recursively scan a directory for test files.
+    Recursively scan a directory for test files (language-agnostic).
     
     Enhanced version that finds ALL test files using multiple strategies.
+    Uses parser registry to support multiple languages.
     
     Args:
         root_dir: Root directory to scan
         exclude_dirs: List of directory names to exclude (e.g., ['__pycache__', '.git'])
+        config_path: Optional path to language config YAML file
     
     Returns:
         List of Path objects for all test files found
@@ -140,25 +142,76 @@ def scan_directory(root_dir: Path, exclude_dirs: Optional[List[str]] = None) -> 
     if exclude_dirs is None:
         exclude_dirs = ['__pycache__', '.git', '.pytest_cache', 'node_modules', '.venv', 'venv', 'env', '.env']
     
+    # Get extensions from language configs (even if parsers aren't fully implemented)
+    extensions_to_scan = set()
+    
+    if CONFIG_AVAILABLE:
+        try:
+            from config.config_loader import load_language_configs
+            
+            # Load language configs to get extensions and patterns
+            if config_path and config_path.exists():
+                config = load_language_configs(config_path)
+            else:
+                # Try to find config in default location
+                project_root = Path(__file__).parent.parent.parent
+                default_config = project_root / "config" / "language_configs.yaml"
+                if default_config.exists():
+                    config = load_language_configs(default_config)
+                else:
+                    config = {}
+            
+            # Extract extensions from all language configs
+            languages_config = config.get('languages', {})
+            for lang_name, lang_config in languages_config.items():
+                lang_extensions = lang_config.get('extensions', [])
+                for ext in lang_extensions:
+                    if not ext.startswith('.'):
+                        ext = '.' + ext
+                    extensions_to_scan.add(ext)
+            
+            # Also try to get extensions from registered parsers (if any)
+            try:
+                from parsers.registry import initialize_registry, get_registry
+                if config_path:
+                    initialize_registry(config_path)
+                else:
+                    initialize_registry()
+                
+                parser_registry = get_registry()
+                if parser_registry and parser_registry._parsers:
+                    for parser in parser_registry._parsers.values():
+                        extensions_to_scan.update(parser.file_extensions)
+            except Exception:
+                pass  # Parsers not available, but we have config
+        except Exception as e:
+            # If config loading fails, fall back to default
+            pass
+    
+    # If no extensions found, default to common test file extensions
+    if not extensions_to_scan:
+        extensions_to_scan = {'.py', '.js', '.jsx', '.ts', '.tsx', '.java'}
+    
     test_files = []
     seen_files = set()  # Track files to avoid duplicates
     
-    # Strategy 1: Standard test file patterns (test_*.py, *_test.py)
-    for item in root_dir.rglob('*.py'):
-        # Skip excluded directories
-        if any(excluded in item.parts for excluded in exclude_dirs):
-            continue
-        
-        # Skip .pyc files
-        if item.suffix == '.pyc':
-            continue
-        
-        # Check if it's a test file (using language-aware detection)
-        if is_test_file(item, config_path):
-            file_str = str(item.resolve())
-            if file_str not in seen_files:
-                seen_files.add(file_str)
-                test_files.append(item)
+    # Strategy 1: Scan all supported extensions
+    for ext in extensions_to_scan:
+        for item in root_dir.rglob(f'*{ext}'):
+            # Skip excluded directories
+            if any(excluded in item.parts for excluded in exclude_dirs):
+                continue
+            
+            # Skip compiled files (e.g., .pyc, .class)
+            if item.suffix in ['.pyc', '.class']:
+                continue
+            
+            # Check if it's a test file (using language-aware detection)
+            if is_test_file(item, config_path):
+                file_str = str(item.resolve())
+                if file_str not in seen_files:
+                    seen_files.add(file_str)
+                    test_files.append(item)
     
     # Strategy 2: Check common test directories explicitly (even if not matching patterns)
     common_test_dirs = ['unit', 'integration', 'e2e', 'tests', 'test', 'end_to_end', 'endtoend']
@@ -171,8 +224,8 @@ def scan_directory(root_dir: Path, exclude_dirs: Optional[List[str]] = None) -> 
                     if any(excluded in item.parts for excluded in exclude_dirs):
                         continue
                     
-                    # Skip .pyc files
-                    if item.suffix == '.pyc':
+                    # Skip compiled files
+                    if item.suffix in ['.pyc', '.class']:
                         continue
                     
                     # Check if it's a test file (using language-aware detection)
@@ -189,7 +242,7 @@ def scan_directory(root_dir: Path, exclude_dirs: Optional[List[str]] = None) -> 
             if any(excluded in item.parts for excluded in exclude_dirs):
                 continue
             
-            if item.suffix == '.pyc':
+            if item.suffix in ['.pyc', '.class']:
                 continue
             
             # If file is in a test directory, include it even if name doesn't match pattern
@@ -314,8 +367,10 @@ def _categorize_directory(filepath: Path) -> str:
         elif parent_dir == 'unit':
             return 'unit'
     
-    # Default to unit if in test_repository or tests directory
-    if 'test_repository' in path_str or 'tests' in path_str:
+    # Default to unit if in test directories (generic, not hardcoded)
+    # Support common test directory patterns
+    test_dir_patterns = ['/test/', '/tests/', '\\test\\', '\\tests\\', 'test/', 'tests/']
+    if any(pattern in path_str for pattern in test_dir_patterns):
         return 'unit'  # Default fallback
     
     return 'other'
