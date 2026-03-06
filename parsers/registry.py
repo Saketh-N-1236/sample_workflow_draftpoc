@@ -88,7 +88,7 @@ class ParserRegistry:
     
     def load_from_config(self, config: Dict):
         """
-        Load parsers from language configuration dictionary.
+        Load Tree-sitter parsers from language configuration dictionary.
         
         Args:
             config: Dictionary with 'languages' key containing language configs
@@ -100,33 +100,36 @@ class ParserRegistry:
             if lang_name in self._parsers:
                 continue
             
+            # Use Tree-sitter factory instead of manual parser classes
             try:
-                module_name = lang_config.get('parser_module')
-                class_name = lang_config.get('parser_class')
+                from parsers.tree_sitter_factory import get_tree_sitter_parser
                 
-                if not module_name or not class_name:
-                    print(f"Warning: Incomplete config for {lang_name}, skipping")
+                # Get file extensions from config
+                extensions = lang_config.get('extensions', [])
+                if not extensions:
+                    print(f"Warning: No extensions specified for {lang_name}, skipping")
                     continue
                 
-                # Dynamically import and instantiate parser
-                module = importlib.import_module(module_name)
-                parser_class = getattr(module, class_name)
-                parser = parser_class()
-                
-                # Verify it's a LanguageParser
-                if not isinstance(parser, LanguageParser):
-                    print(f"Warning: {class_name} is not a LanguageParser, skipping")
-                    continue
-                
-                self.register(parser)
-                print(f"Registered parser for {lang_name}")
+                # Create Tree-sitter parser
+                parser = get_tree_sitter_parser(lang_name, extensions)
+                if parser:
+                    self.register(parser)
+                    print(f"Registered Tree-sitter parser for {lang_name}")
+                else:
+                    # Only warn for typescript once (it's optional)
+                    if lang_name == 'typescript':
+                        if not hasattr(self, '_typescript_warned'):
+                            print(f"Warning: Tree-sitter parser for {lang_name} is not available. "
+                                  f"Install tree-sitter-{lang_name} package.")
+                            self._typescript_warned = True
+                    else:
+                        print(f"Warning: Tree-sitter parser for {lang_name} is not available. "
+                              f"Install tree-sitter-{lang_name} package.")
                 
             except ImportError as e:
-                print(f"Warning: Could not import parser module for {lang_name}: {e}")
-            except AttributeError as e:
-                print(f"Warning: Could not find parser class for {lang_name}: {e}")
+                print(f"Warning: Could not import Tree-sitter factory for {lang_name}: {e}")
             except Exception as e:
-                print(f"Warning: Error loading parser for {lang_name}: {e}")
+                print(f"Warning: Error loading Tree-sitter parser for {lang_name}: {e}")
 
 
 # Global registry instance
@@ -191,8 +194,7 @@ def initialize_registry(config_path: Path = None):
 
 
 def _register_default_parsers():
-    """Register default parsers (Python, JavaScript, Java, and Tree-sitter if available)."""
-    # Try Tree-sitter parsers first (more accurate)
+    """Register Tree-sitter parsers for all supported languages (Tree-sitter only)."""
     try:
         from parsers.tree_sitter_factory import get_tree_sitter_parser
         
@@ -210,37 +212,15 @@ def _register_default_parsers():
                 if parser:
                     _registry.register(parser)
                     print(f"Registered Tree-sitter parser for {lang_name}")
+                else:
+                    print(f"Warning: Tree-sitter parser for {lang_name} is not available. "
+                          f"Install tree-sitter-{lang_name} package.")
             except Exception as e:
-                # Tree-sitter not available for this language, continue
-                pass
-    except Exception as e:
-        # Tree-sitter not available at all
-        pass
-    
-    # Fallback to non-Tree-sitter parsers if Tree-sitter not available
-    try:
-        from parsers.python_parser import PythonParser
-        if 'python' not in _registry._parsers:
-            _registry.register(PythonParser())
-            print("Registered default Python parser")
-    except Exception:
-        pass
-    
-    try:
-        from parsers.javascript_parser import JavaScriptParser
-        if 'javascript' not in _registry._parsers:
-            _registry.register(JavaScriptParser())
-            print("Registered default JavaScript parser")
-    except Exception:
-        pass
-    
-    try:
-        from parsers.java_parser import JavaParser
-        if 'java' not in _registry._parsers:
-            _registry.register(JavaParser())
-            print("Registered default Java parser")
-    except Exception:
-        pass
+                print(f"Warning: Could not register Tree-sitter parser for {lang_name}: {e}")
+    except ImportError as e:
+        print(f"Warning: Tree-sitter not available: {e}")
+        print("Please install tree-sitter and language-specific packages:")
+        print("  pip install tree-sitter tree-sitter-python tree-sitter-javascript tree-sitter-java tree-sitter-typescript")
 
 
 def get_registry() -> ParserRegistry:

@@ -215,6 +215,66 @@ tree-sitter-*/
 *.dylib
 *.dll
 
-# Generated output files (optional - uncomment to ignore)
-# git_diff_processor/outputs/*.txt
-# test_analysis/outputs/*.json
+# Generated output files (keep directory structure with .gitkeep)
+git_diff_processor/outputs/*.txt
+test_analysis/outputs/*.json
+!git_diff_processor/outputs/.gitkeep
+!test_analysis/outputs/.gitkeep
+
+# Cloned repositories (temporary - no longer used but keep structure)
+web_platform/repos/*
+!web_platform/repos/.gitkeep
+
+# Environment files (keep .env.example)
+.env.local
+.env.*.local
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Production files
+*.pem
+*.key
+*.crt
+secrets/
+.env.production
+.env.local
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+
+# OS-specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini

@@ -1,0 +1,598 @@
+"""
+Programmatic interface for processing git diff and selecting tests.
+
+This module provides functions that can be called from other services
+without printing to console.
+"""
+
+import sys
+from pathlib import Path
+from typing import Dict, List, Any, Optional
+
+# Add parent directory to path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from deterministic.db_connection import get_connection, DB_SCHEMA
+
+# Import from utils (relative to this file)
+sys.path.insert(0, str(Path(__file__).parent))
+from utils.diff_parser import (
+    parse_git_diff,
+    build_search_queries,
+)
+
+# Import from main processor module (same directory)
+# We need to import the functions directly
+import importlib.util
+processor_path = Path(__file__).parent / "git_diff_processor.py"
+spec = importlib.util.spec_from_file_location("git_diff_processor_module", processor_path)
+processor_module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(processor_module)
+
+find_affected_tests = processor_module.find_affected_tests
+find_tests_ast_only = processor_module.find_tests_ast_only
+find_tests_semantic_only = processor_module.find_tests_semantic_only
+
+
+async def process_diff_and_select_tests(
+    diff_content: str,
+    project_root: Optional[Path] = None,
+    use_semantic: bool = True,
+    test_repo_path: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Process git diff content and return selected tests.
+    
+    This function works dynamically with any test repository by querying
+    the database directly. The test repository path is optional and only
+    used for module resolution if needed.
+    
+    Args:
+        diff_content: Git diff content as string
+        project_root: Optional project root path (for parsing, defaults to parent)
+        use_semantic: Whether to use semantic search (default: True)
+        test_repo_path: Optional test repository path (for module resolution)
+    
+    Returns:
+        Dictionary with test selection results:
+        {
+            'total_tests': int,
+            'ast_matches': int,
+            'semantic_matches': int,
+            'tests': List[Dict],
+            'parsed_diff': Dict,
+            'search_queries': Dict
+        }
+    """
+    if project_root is None:
+        project_root = Path(__file__).parent.parent
+    
+    # Initialize parser registry for multi-language support (dynamic)
+    parser_registry = None
+    config = {}
+    try:
+        from parsers.registry import initialize_registry, get_registry
+        from config.config_loader import load_language_configs
+        
+        config_path = project_root / "config" / "language_configs.yaml"
+        if config_path.exists():
+            initialize_registry(config_path)
+            config = load_language_configs(config_path)
+        else:
+            initialize_registry()
+            config = {}
+        
+        parser_registry = get_registry()
+    except Exception as e:
+        # Fallback if parser registry not available - still works for basic parsing
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.debug(f"Parser registry not available: {e}, using basic parsing")
+        parser_registry = None  # Explicitly set to None if initialization fails
+    
+    # Step 1: Parse git diff (works with any diff content)
+    # Note: parse_git_diff doesn't need parser_registry - it's used in build_search_queries
+    parsed_diff = parse_git_diff(diff_content)
+    
+    # Step 2: Build search queries (dynamic - works with any file changes)
+    # Use test_repo_path if provided, otherwise use project_root
+    search_root = Path(test_repo_path) if test_repo_path else project_root
+    
+    search_queries = build_search_queries(
+        parsed_diff['file_changes'],
+        parser_registry=parser_registry,
+        project_root=search_root,
+        config=config,
+        diff_content=diff_content
+    )
+    
+    # Step 3: Query database for affected tests
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Log what we're searching for (for debugging)
+    logger.info(f"Processing diff with {len(parsed_diff.get('changed_files', []))} changed files")
+    logger.info(f"Search queries - Exact matches: {len(search_queries.get('exact_matches', []))}")
+    logger.info(f"Search queries - Module matches: {len(search_queries.get('module_matches', []))}")
+    logger.info(f"Search queries - Function changes: {len(search_queries.get('changed_functions', []))}")
+    logger.info(f"Search queries - Test file candidates: {len(search_queries.get('test_file_candidates', []))}")
+    
+    with get_connection() as conn:
+        # Get AST-based results (this uses all strategies: function-level, direct files, exact, module patterns)
+        logger.info("Running AST-based test selection...")
+        ast_results = find_tests_ast_only(conn, search_queries, parsed_diff.get('file_changes', []))
+        logger.info(f"AST-based matching found {ast_results.get('total_tests', 0)} tests")
+        
+        # Get semantic results if enabled
+        semantic_results = {'total_tests': 0, 'tests': []}
+        if use_semantic:
+            try:
+                logger.info("Running semantic search...")
+                # Use async version since we're in an async context
+                from git_diff_processor.git_diff_processor import find_tests_semantic_only_async
+                semantic_results = await find_tests_semantic_only_async(conn, search_queries, parsed_diff.get('file_changes', []))
+                logger.info(f"Semantic search found {semantic_results.get('total_tests', 0)} tests")
+            except Exception as e:
+                logger.warning(f"Semantic search failed: {e}")
+                semantic_results = {'total_tests': 0, 'tests': [], 'error': str(e)}
+        
+        # Combine results (use find_affected_tests which combines both AST and semantic)
+        # This is the main function that uses all strategies
+        logger.info("Combining AST and semantic results...")
+        combined_results = find_affected_tests(
+            conn, 
+            search_queries, 
+            parsed_diff.get('file_changes', []),
+            prefer_function_level=True
+        )
+        logger.info(f"Combined results: {combined_results.get('total_tests', 0)} tests")
+        
+        # IMPORTANT: Preserve AST match information from match_details BEFORE any filtering
+        # Store which tests came from AST (from match_details) so we can mark them correctly later
+        ast_test_ids_from_match_details = set()
+        combined_match_details = combined_results.get('match_details', {})
+        for test_id, matches in combined_match_details.items():
+            # Check if this test has any AST match types (not semantic)
+            has_ast_match = any(
+                m.get('type') in ['exact', 'module', 'function_level', 'direct_file', 'direct_file_match', 'direct_test_file', 'module_pattern', 'integration']
+                for m in matches
+            )
+            if has_ast_match:
+                ast_test_ids_from_match_details.add(test_id)
+        
+        # Also preserve original AST test IDs from combined_results before filtering
+        # These are tests that were found by AST BEFORE semantic merging
+        original_ast_test_ids = {t.get('test_id') for t in combined_results.get('tests', [])}
+        
+        # Merge semantic results into combined results BEFORE applying threshold
+        # This ensures we preserve AST information when merging
+        semantic_tests_dict = {}
+        # Track which tests were ORIGINALLY found by semantic search (before merging)
+        original_semantic_test_ids = set()
+        
+        if semantic_results.get('tests'):
+            logger.info(f"Merging {len(semantic_results.get('tests', []))} semantic results into combined results...")
+            semantic_tests_dict = {t.get('test_id'): t for t in semantic_results.get('tests', [])}
+            # Track original semantic test IDs (these are tests found by semantic search)
+            original_semantic_test_ids = set(semantic_tests_dict.keys())
+            combined_tests_dict = {t.get('test_id'): t for t in combined_results.get('tests', [])}
+            
+            # Add semantic tests that aren't already in combined results
+            for test_id, sem_test in semantic_tests_dict.items():
+                if test_id not in combined_tests_dict:
+                    # New test from semantic only
+                    # But check if it had AST matches in match_details (might have been filtered out)
+                    has_ast_in_match_details = test_id in ast_test_ids_from_match_details
+                    
+                    combined_tests_dict[test_id] = sem_test
+                    if test_id not in combined_match_details:
+                        combined_match_details[test_id] = []
+                    # Add semantic match
+                    combined_match_details[test_id].append({
+                        'type': 'semantic',
+                        'similarity': sem_test.get('similarity', 0),
+                        'confidence': 'medium'
+                    })
+                else:
+                    # Test found by both - add semantic match detail AND update test object
+                    existing_test = combined_tests_dict[test_id]
+                    
+                    # Update similarity on test object if not already set or if semantic has higher similarity
+                    sem_similarity = sem_test.get('similarity', 0)
+                    if sem_similarity > 0:
+                        existing_similarity = existing_test.get('similarity', 0)
+                        if sem_similarity > existing_similarity:
+                            existing_test['similarity'] = sem_similarity
+                    
+                    # Add semantic match detail to match_details
+                    if test_id not in combined_match_details:
+                        combined_match_details[test_id] = []
+                    # Check if semantic already in match_details
+                    has_semantic = any(m.get('type') == 'semantic' for m in combined_match_details[test_id])
+                    if not has_semantic:
+                        combined_match_details[test_id].append({
+                            'type': 'semantic',
+                            'similarity': sem_similarity,
+                            'confidence': 'medium'
+                        })
+                    else:
+                        # Update similarity in existing semantic match if higher
+                        for m in combined_match_details[test_id]:
+                            if m.get('type') == 'semantic':
+                                m['similarity'] = max(m.get('similarity', 0), sem_similarity)
+                                break
+            
+            # Update combined_results with merged data
+            combined_results['tests'] = list(combined_tests_dict.values())
+            combined_results['match_details'] = combined_match_details
+            combined_results['total_tests'] = len(combined_tests_dict)
+        
+        # LLM Reasoning Step (optional) - AFTER merging semantic results
+        # This ensures LLM can assess all candidates (AST + semantic)
+        llm_scores_map = {}
+        try:
+            # Check if LLM reasoning is enabled (can be configured via environment or parameter)
+            import os
+            use_llm_reasoning = os.getenv('USE_LLM_REASONING', 'true').lower() == 'true'
+            
+            if use_llm_reasoning:
+                logger.info("Running LLM reasoning for top candidates...")
+                # Import LLM reasoning service
+                # Ensure project root is in path for web_platform imports
+                project_root_path = Path(__file__).parent.parent
+                if str(project_root_path) not in sys.path:
+                    sys.path.insert(0, str(project_root_path))
+                
+                try:
+                    from web_platform.services.llm_reasoning_service import LLMReasoningService
+                    llm_service = LLMReasoningService()
+                except ImportError as e:
+                    logger.warning(f"Failed to import LLM reasoning service: {e}. LLM reasoning will be skipped.")
+                    llm_service = None
+                
+                if llm_service:
+                    # Get top 20 candidates by current confidence score (from merged results)
+                    top_candidates = sorted(
+                        combined_results.get('tests', []),
+                        key=lambda t: t.get('confidence_score', 0),
+                        reverse=True
+                    )[:20]
+                    
+                    if top_candidates:
+                        # Prepare test candidates with match reasons
+                        test_candidates = []
+                        match_details_dict = combined_results.get('match_details', {})
+                        for test in top_candidates:
+                            test_id = test.get('test_id')
+                            match_reasons = []
+                            if test_id in match_details_dict:
+                                for match in match_details_dict[test_id]:
+                                    match_type = match.get('type', '')
+                                    if match_type:
+                                        match_reasons.append(match_type)
+                            
+                            test_candidates.append({
+                                'test_id': test_id,
+                                'class_name': test.get('class_name'),
+                                'method_name': test.get('method_name'),
+                                'test_file_path': test.get('test_file_path') or test.get('file_path', ''),
+                                'match_reasons': match_reasons
+                            })
+                        
+                        # Build LLM prompt (input) for storage
+                        llm_input_prompt = llm_service._build_relevance_prompt(diff_content, test_candidates)
+                        
+                        # Assess relevance with LLM
+                        llm_results = await llm_service.assess_test_relevance(
+                            diff_content=diff_content,
+                            test_candidates=test_candidates,
+                            top_n=20
+                        )
+                        
+                        # Store LLM input and output
+                        llm_raw_response = None
+                        if llm_results and len(llm_results) > 0:
+                            # Get raw response from first result (all have same raw_response)
+                            llm_raw_response = llm_results[0].get('raw_response', '')
+                        
+                        llm_input_output = {
+                            'input': llm_input_prompt,
+                            'output': llm_raw_response or 'No response available',
+                            'assessed_tests_count': len(llm_results)
+                        }
+                        
+                        # Create map of test_id -> llm_score
+                        for result in llm_results:
+                            test_id = result.get('test_id')
+                            if test_id:
+                                llm_scores_map[test_id] = {
+                                    'llm_score': result.get('llm_score', 0.0),
+                                    'llm_explanation': result.get('llm_explanation', '')
+                                }
+                        
+                        logger.info(f"LLM reasoning completed: assessed {len(llm_scores_map)} tests")
+                    else:
+                        logger.info("No test candidates for LLM reasoning")
+                else:
+                    logger.info("LLM service not available, skipping LLM reasoning")
+            else:
+                logger.info("LLM reasoning disabled (USE_LLM_REASONING=false)")
+        except Exception as e:
+            logger.warning(f"LLM reasoning failed: {e}. Continuing without LLM scores.", exc_info=True)
+            llm_scores_map = {}
+        
+        # Recalculate confidence scores with LLM component and get breakdown
+        if llm_scores_map:
+            logger.info("Recalculating confidence scores with LLM component...")
+            for test in combined_results.get('tests', []):
+                test_id = test.get('test_id')
+                matches = combined_results.get('match_details', {}).get(test_id, [])
+                test_type = test.get('test_type')
+                
+                if test_id in llm_scores_map:
+                    llm_data = llm_scores_map[test_id]
+                    # Recalculate with LLM score and get breakdown
+                    from git_diff_processor.git_diff_processor import calculate_confidence_score_with_breakdown
+                    new_score, breakdown = calculate_confidence_score_with_breakdown(
+                        matches,
+                        test_type,
+                        llm_score=llm_data['llm_score']
+                    )
+                    test['confidence_score'] = new_score
+                    test['llm_score'] = llm_data['llm_score']
+                    test['llm_explanation'] = llm_data['llm_explanation']
+                    # Add breakdown to test
+                    test['confidence_breakdown'] = breakdown
+                else:
+                    # No LLM score, but still calculate breakdown
+                    from git_diff_processor.git_diff_processor import calculate_confidence_score_with_breakdown
+                    new_score, breakdown = calculate_confidence_score_with_breakdown(
+                        matches,
+                        test_type,
+                        llm_score=None
+                    )
+                    test['confidence_score'] = new_score
+                    test['confidence_breakdown'] = breakdown
+            
+            # Re-sort by new confidence scores
+            combined_results['tests'] = sorted(
+                combined_results.get('tests', []),
+                key=lambda t: t.get('confidence_score', 0),
+                reverse=True
+            )
+        else:
+            # No LLM scores, but still add breakdown for all tests
+            from git_diff_processor.git_diff_processor import calculate_confidence_score_with_breakdown
+            for test in combined_results.get('tests', []):
+                test_id = test.get('test_id')
+                matches = combined_results.get('match_details', {}).get(test_id, [])
+                test_type = test.get('test_type')
+                _, breakdown = calculate_confidence_score_with_breakdown(
+                    matches,
+                    test_type,
+                    llm_score=None
+                )
+                test['confidence_breakdown'] = breakdown
+        
+        # Store LLM input/output in results if available
+        try:
+            if 'llm_input_output' in locals():
+                combined_results['llm_input_output'] = llm_input_output
+        except:
+            pass
+        
+        # Apply minimum confidence threshold (0.40 = 40%) AFTER merging and LLM reasoning
+        # This ensures we don't lose AST information when filtering
+        MIN_CONFIDENCE_THRESHOLD = 0.40
+        filtered_tests = []
+        for test in combined_results.get('tests', []):
+            test_id = test.get('test_id')
+            confidence_score = test.get('confidence_score', 0)
+            
+            # Check if test has semantic match
+            # IMPORTANT: Only mark as semantic if it was ORIGINALLY found by semantic search
+            # Don't rely on similarity value alone, as it might have been added during merging
+            has_semantic = (
+                test_id in original_semantic_test_ids or
+                any(m.get('type') == 'semantic' for m in combined_match_details.get(test_id, []))
+            )
+            
+            # Check if test has AST match (from match_details or was in original AST results)
+            has_ast = (
+                test_id in ast_test_ids_from_match_details or
+                test_id in original_ast_test_ids or
+                any(m.get('type') in ['exact', 'module', 'function_level', 'direct_file', 'direct_file_match', 'direct_test_file', 'module_pattern', 'integration'] 
+                    for m in combined_match_details.get(test_id, []))
+            )
+            
+            # Include test if:
+            # 1. Passes threshold, OR
+            # 2. Has semantic match (semantic matches are included regardless of AST score), OR
+            # 3. Has AST match ONLY (AST-only tests should be included because they're direct matches with high confidence)
+            passes_threshold = (confidence_score / 100.0) >= MIN_CONFIDENCE_THRESHOLD
+            
+            # AST-only tests should be included because they're direct matches (high confidence)
+            # Even if weighted score is low due to no semantic component
+            is_ast_only = has_ast and not has_semantic
+            
+            if passes_threshold or has_semantic or is_ast_only:
+                # Set explicit flags based on match_details and original sources
+                test['is_ast_match'] = has_ast
+                test['is_semantic_match'] = has_semantic
+                filtered_tests.append(test)
+        
+        logger.info(f"Applied minimum threshold filter: {len(combined_results.get('tests', []))} -> {len(filtered_tests)} tests")
+        combined_results['tests'] = filtered_tests
+        combined_results['total_tests'] = len(filtered_tests)
+        
+        # Format results for API response
+        all_tests = []
+        seen_test_ids = set()
+        
+        # Add tests from combined results (already sorted by confidence score)
+        for test in combined_results.get('tests', []):
+            test_id = test.get('test_id')
+            if test_id and test_id not in seen_test_ids:
+                seen_test_ids.add(test_id)
+                
+                # Extract matched classes from match_details
+                match_details = combined_results.get('match_details', {})
+                test_matches = match_details.get(test_id, [])
+                matched_classes = []
+                similarity = None
+                for match in test_matches:
+                    if match.get('type') == 'exact':
+                        matched_classes.append(match.get('class', ''))
+                    elif match.get('type') == 'function_level':
+                        matched_classes.append(f"{match.get('module', '')}.{match.get('function', '')}")
+                    elif match.get('type') == 'semantic':
+                        # Extract similarity for semantic matches
+                        similarity = match.get('similarity', test.get('similarity'))
+                
+                # Determine match_type from flags and match_details
+                is_ast = test.get('is_ast_match', False)
+                is_semantic = test.get('is_semantic_match', False)
+                
+                # Determine match_type based on flags
+                if is_ast and is_semantic:
+                    match_type = 'Both'
+                elif is_ast:
+                    match_type = 'AST'
+                elif is_semantic:
+                    match_type = 'Semantic'
+                else:
+                    # Fallback: try to determine from match_details
+                    has_ast_in_details = any(m.get('type') in ['exact', 'module', 'function_level', 'direct_file', 'direct_file_match', 'direct_test_file', 'module_pattern', 'integration'] 
+                                           for m in test_matches)
+                    has_semantic_in_details = any(m.get('type') == 'semantic' for m in test_matches)
+                    if has_ast_in_details and has_semantic_in_details:
+                        match_type = 'Both'
+                    elif has_ast_in_details:
+                        match_type = 'AST'
+                    elif has_semantic_in_details:
+                        match_type = 'Semantic'
+                    else:
+                        match_type = test.get('match_type', 'unknown')
+                
+                test_dict = {
+                    'test_id': test_id,
+                    'class_name': test.get('class_name'),
+                    'method_name': test.get('method_name'),
+                    'test_file_path': test.get('test_file_path') or test.get('file_path', ''),
+                    'test_type': test.get('test_type'),
+                    'confidence': 'high' if test.get('confidence_score', 0) >= 70 else 'medium' if test.get('confidence_score', 0) >= 50 else 'low',
+                    'confidence_score': test.get('confidence_score', 0),
+                    'match_type': match_type,  # Use determined match_type
+                    'matched_classes': matched_classes,
+                    'similarity': similarity,  # Add similarity for semantic matches
+                    'is_ast_match': is_ast,  # Preserve AST flag
+                    'is_semantic_match': is_semantic,  # Preserve semantic flag
+                }
+                
+                # Add confidence breakdown if available
+                if test.get('confidence_breakdown'):
+                    test_dict['confidence_breakdown'] = test.get('confidence_breakdown')
+                
+                # Add LLM scores if available
+                if test.get('llm_score') is not None:
+                    test_dict['llm_score'] = test.get('llm_score')
+                    test_dict['llm_explanation'] = test.get('llm_explanation', '')
+                
+                all_tests.append(test_dict)
+        
+        # Build diagnostic information
+        diagnostics = {
+            'parsed_files': len(parsed_diff.get('changed_files', [])),
+            'parsed_classes': len(parsed_diff.get('changed_classes', [])),
+            'parsed_methods': len(parsed_diff.get('changed_methods', [])),
+            'search_exact_matches': len(search_queries.get('exact_matches', [])),
+            'search_module_matches': len(search_queries.get('module_matches', [])),
+            'search_function_changes': len(search_queries.get('changed_functions', [])),
+            'search_test_candidates': len(search_queries.get('test_file_candidates', [])),
+        }
+        
+        # Check database status
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(f"SELECT COUNT(*) FROM {DB_SCHEMA}.reverse_index")
+                diagnostics['db_reverse_index_count'] = cursor.fetchone()[0]
+                cursor.execute(f"SELECT COUNT(*) FROM {DB_SCHEMA}.test_registry")
+                diagnostics['db_test_registry_count'] = cursor.fetchone()[0]
+                cursor.execute(f"SELECT COUNT(*) FROM {DB_SCHEMA}.test_function_mapping")
+                diagnostics['db_function_mapping_count'] = cursor.fetchone()[0]
+        except Exception as e:
+            logger.warning(f"Could not get database diagnostics: {e}")
+        
+        # Group tests by test suite (optional, for UI organization)
+        def group_by_test_suite(tests: List[Dict]) -> Dict[str, List[Dict]]:
+            """Group tests by test suite based on file path directory structure."""
+            grouped = {}
+            for test in tests:
+                file_path = test.get('test_file_path', '')
+                if file_path:
+                    # Extract suite from directory path (e.g., "tests/unit" -> "unit")
+                    parts = file_path.replace('\\', '/').split('/')
+                    # Find common test directory patterns
+                    suite_name = 'other'
+                    for i, part in enumerate(parts):
+                        if part in ['test', 'tests'] and i + 1 < len(parts):
+                            suite_name = parts[i + 1] if parts[i + 1] else 'root'
+                            break
+                        elif part in ['unit', 'integration', 'e2e', 'functional']:
+                            suite_name = part
+                            break
+                    if suite_name not in grouped:
+                        grouped[suite_name] = []
+                    grouped[suite_name].append(test)
+                else:
+                    if 'other' not in grouped:
+                        grouped['other'] = []
+                    grouped['other'].append(test)
+            return grouped
+        
+        test_suites = group_by_test_suite(all_tests)
+        
+        # Calculate confidence distribution
+        confidence_distribution = {'high': 0, 'medium': 0, 'low': 0}
+        for test in all_tests:
+            score = test.get('confidence_score', 0)
+            if score >= 70:
+                confidence_distribution['high'] += 1
+            elif score >= 50:
+                confidence_distribution['medium'] += 1
+            else:
+                confidence_distribution['low'] += 1
+        
+        # Extract LLM scores for response
+        llm_scores_list = []
+        for test in all_tests:
+            if test.get('llm_score') is not None:
+                llm_scores_list.append({
+                    'test_id': test.get('test_id'),
+                    'llm_score': test.get('llm_score'),
+                    'llm_explanation': test.get('llm_explanation', '')
+                })
+        
+        return {
+            'total_tests': len(all_tests),
+            'ast_matches': ast_results.get('total_tests', 0),
+            'semantic_matches': semantic_results.get('total_tests', 0),
+            'tests': all_tests,
+            'semantic_results': semantic_results,  # Include semantic results for enhancement
+            'match_details': combined_results.get('match_details', {}),  # Include match_details for better match type detection
+            'llm_scores': llm_scores_list if llm_scores_list else None,  # LLM scores if available
+            'llm_input_output': combined_results.get('llm_input_output'),  # LLM input prompt and output
+            'confidence_distribution': confidence_distribution,  # Confidence score distribution
+            'test_suites': test_suites,  # Tests grouped by suite (optional, for UI organization)
+            'parsed_diff': {
+                'changed_files': parsed_diff.get('changed_files', []),
+                'changed_classes': parsed_diff.get('changed_classes', []),
+                'changed_methods': parsed_diff.get('changed_methods', [])[:20],  # Limit for response
+            },
+            'search_queries': {
+                'exact_matches': search_queries.get('exact_matches', [])[:10],  # Limit for response
+                'module_matches': search_queries.get('module_matches', [])[:10],
+                'changed_functions': [f"{f.get('module', '')}.{f.get('function', '')}" for f in search_queries.get('changed_functions', [])[:10]],
+            },
+            'diagnostics': diagnostics
+        }

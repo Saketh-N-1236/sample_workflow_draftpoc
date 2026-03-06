@@ -24,8 +24,11 @@ python-dotenv>=1.0.0
 # - contextlib (Context managers)
 # - sys, os (System operations)
 
-# Vector database for semantic search (ChromaDB backend)
-chromadb>=0.4.0
+# Vector database for semantic search
+# Pinecone is the default and recommended backend
+pinecone>=3.0.0
+# ChromaDB is deprecated but kept for backward compatibility
+# chromadb>=0.4.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
 httpx>=0.24.0

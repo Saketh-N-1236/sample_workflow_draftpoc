@@ -1,0 +1,41 @@
+{
+  "generated_at": "2026-02-25T10:37:29.218995",
+  "data": {
+    "primary_framework": "pytest",
+    "confidence": "high",
+    "pytest_score": 31,
+    "unittest_score": 14,
+    "config_files": {
+      "pytest_ini": "C:\\Users\\SakethN\\Downloads\\training_tasks\\Planon\\sample_workflow\\test_repository\\pytest.ini",
+      "setup_cfg": null,
+      "pyproject_toml": null,
+      "tox_ini": null,
+      "config_found": true,
+      "pytest_ini_content": "[pytest]\n# Pytest configuration for test repository\n\n# Test discovery patterns\npython_files = test_*.py\npython_classes = Test*\npython_functions = test_*\n\n# Test paths\ntestpaths = test_repository\n\n# Output options\naddopts = \n    -v\n    --strict-markers\n    --tb=short\n    --disable-warnings\n    --color=yes\n\n# Markers\nmarkers =\n    unit: Unit tests\n    integration: Integration tests\n    e2e: End-to-end tests\n    slow: Slow running tests\n    asyncio: Async tests (automatically applied to async test "
+    },
+    "conftest": {
+      "conftest_found": true,
+      "conftest_path": "C:\\Users\\SakethN\\Downloads\\training_tasks\\Planon\\sample_workflow\\test_repository\\conftest.py",
+      "has_fixtures": true,
+      "has_pytest_imports": true
+    },
+    "file_indicators": {
+      "pytest": {
+        "files_with_import": 15,
+        "files_with_markers": 9,
+        "files_with_fixtures": 1,
+        "total_indicators": 25
+      },
+      "unittest": {
+        "files_with_import": 14,
+        "files_with_testcase": 0,
+        "total_indicators": 14
+      }
+    },
+    "indicators": [
+      "pytest.ini found",
+      "conftest.py found",
+      "conftest.py uses pytest"
+    ]
+  }
+}

@@ -144,6 +144,8 @@ def load_test_data() -> list:
             'markers':     markers,
             'is_async':    meta.get('is_async', False),
             'functions_tested': function_map.get(test_id, []),  # NEW: Function mappings
+            'line_number': test.get('line_number'),  # Include line number from registry
+            'language':    test.get('language', 'python'),  # Include language from registry
         })
 
     return merged

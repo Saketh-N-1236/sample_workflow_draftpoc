@@ -15,6 +15,8 @@ try:
     TREE_SITTER_AVAILABLE = True
 except ImportError:
     TREE_SITTER_AVAILABLE = False
+    Language = None
+    Parser = None
 
 from parsers.base import LanguageParser
 
@@ -51,17 +53,24 @@ class TreeSitterParser(LanguageParser):
             return
         
         try:
-            # Try to load language grammar
-            if self._grammar_path and Path(self._grammar_path).exists():
-                self._language = Language(self._grammar_path, self._language_name)
-            else:
-                # Try to load from common locations or use tree-sitter-language packages
-                self._language = self._load_language_grammar()
+            # Try to load language grammar from installed packages
+            # tree-sitter-language packages return a PyCapsule that needs to be wrapped in Language()
+            lang_capsule = self._load_language_grammar()
             
-            if self._language:
-                self._parser = Parser(self._language)
+            if lang_capsule:
+                # Wrap the PyCapsule in a Language object, then create Parser
+                # The correct API: Language(capsule) -> Language object -> Parser(language)
+                try:
+                    self._language = Language(lang_capsule)
+                    self._parser = Parser(self._language)
+                except Exception as e:
+                    print(f"Warning: Could not initialize Tree-sitter parser for {self._language_name}: {e}")
+                    import traceback
+                    print(f"  Error details: {traceback.format_exc()}")
         except Exception as e:
             print(f"Warning: Could not initialize Tree-sitter parser for {self._language_name}: {e}")
+            import traceback
+            print(f"  Error details: {traceback.format_exc()}")
     
     def _load_language_grammar(self):
         """Try to load language grammar from installed packages."""
@@ -70,6 +79,7 @@ class TreeSitterParser(LanguageParser):
         
         try:
             # Try tree-sitter-language packages
+            # These packages expose a language() function that returns a language object
             language_map = {
                 'python': ('tree_sitter_python', 'language'),
                 'javascript': ('tree_sitter_javascript', 'language'),
@@ -80,11 +90,17 @@ class TreeSitterParser(LanguageParser):
             package_info = language_map.get(self._language_name)
             if package_info:
                 package_name, attr_name = package_info
-                # Try to import and get language
+                # Try to import and get language function
                 module = __import__(package_name, fromlist=[attr_name])
                 if hasattr(module, attr_name):
                     language_func = getattr(module, attr_name)
-                    return language_func()
+                    # Call the function to get the language PyCapsule
+                    # This PyCapsule needs to be wrapped in Language() before passing to Parser()
+                    language_capsule = language_func()
+                    return language_capsule
+        except ImportError as e:
+            print(f"Warning: Could not import {package_name} for {self._language_name}: {e}")
+            print(f"  Install with: pip install {package_name}")
         except Exception as e:
             print(f"Warning: Could not load Tree-sitter grammar for {self._language_name}: {e}")
         
@@ -287,10 +303,10 @@ class TreeSitterParser(LanguageParser):
         }
     
     def _extract_python_classes(self, tree) -> List[Dict[str, Any]]:
-        """Extract Python classes from Tree-sitter AST."""
+        """Extract Python classes from Tree-sitter AST, including their methods."""
         classes = []
         
-        def traverse(node, line_offset=0):
+        def traverse(node, current_class=None):
             if node.type == 'class_definition':
                 name_node = None
                 for child in node.children:
@@ -299,14 +315,47 @@ class TreeSitterParser(LanguageParser):
                         break
                 
                 if name_node:
-                    classes.append({
-                        'name': self._get_node_text(name_node),
+                    class_name = self._get_node_text(name_node)
+                    class_info = {
+                        'name': class_name,
                         'line_number': node.start_point[0] + 1,
                         'methods': []
-                    })
-            
-            for child in node.children:
-                traverse(child, line_offset)
+                    }
+                    classes.append(class_info)
+                    
+                    # Traverse children to find methods within this class
+                    for child in node.children:
+                        if child.type == 'block':  # Class body
+                            for block_child in child.children:
+                                if block_child.type == 'function_definition':
+                                    method_name_node = None
+                                    for method_child in block_child.children:
+                                        if method_child.type == 'identifier':
+                                            method_name_node = method_child
+                                            break
+                                    
+                                    if method_name_node:
+                                        method_name = self._get_node_text(method_name_node)
+                                        class_info['methods'].append(method_name)
+                        elif child.type == 'function_definition':
+                            # Direct function definition in class (less common)
+                            method_name_node = None
+                            for method_child in child.children:
+                                if method_child.type == 'identifier':
+                                    method_name_node = method_child
+                                    break
+                            
+                            if method_name_node:
+                                method_name = self._get_node_text(method_name_node)
+                                class_info['methods'].append(method_name)
+                else:
+                    # Continue traversing children
+                    for child in node.children:
+                        traverse(child, current_class)
+            else:
+                # Continue traversing children
+                for child in node.children:
+                    traverse(child, current_class)
         
         traverse(tree.root_node)
         return classes

@@ -148,7 +148,7 @@ class ChromaDBBackend(VectorBackend):
         
         results = self.collection.query(
             query_embeddings=[query_embedding],
-            n_results=max_results * 2,  # Get more to filter by threshold
+            n_results=min(max(max_results * 2, 50), 10000) if max_results > 0 else 10000,  # Get more to filter by threshold, but cap at 10k
             include=['metadatas', 'distances']
         )
         
@@ -187,8 +187,8 @@ class ChromaDBBackend(VectorBackend):
                         'confidence_score': int(similarity * SEMANTIC_SCORE_CAP)
                     })
                     
-                    # Stop if we have enough results
-                    if len(output) >= max_results:
+                    # Stop if we have enough results (only if max_results is reasonable)
+                    if max_results > 0 and max_results < 10000 and len(output) >= max_results:
                         break
         
         return output

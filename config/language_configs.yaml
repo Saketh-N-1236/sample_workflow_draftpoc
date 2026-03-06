@@ -13,8 +13,8 @@ languages:
       - nose
     test_method_prefix: "test_"
     test_class_prefix: "Test"
-    parser_module: "parsers.python_parser"
-    parser_class: "PythonParser"
+    # Using Tree-sitter parser (no manual parser needed)
+    parser_type: "tree_sitter"
     syntax_patterns:
       class: "^\\+.*class\\s+(\\w+)"
       function: "^\\+.*def\\s+(\\w+)"
@@ -28,7 +28,7 @@ languages:
       - "integration"
       - "e2e"
     
-  # Java configuration (for future implementation)
+  # Java configuration
   java:
     extensions: [.java]
     test_patterns:
@@ -41,8 +41,8 @@ languages:
       - spock
     test_method_prefix: "test"
     test_class_suffix: "Test"
-    parser_module: "parsers.java_parser"
-    parser_class: "JavaParser"
+    # Using Tree-sitter parser (no manual parser needed)
+    parser_type: "tree_sitter"
     syntax_patterns:
       class: "^\\+.*class\\s+(\\w+)"
       function: "^\\+.*(?:public|private|protected)?\\s*\\w*\\s*(\\w+)\\s*\\("
@@ -53,7 +53,7 @@ languages:
       - "src/test/java"
       - "test"
     
-  # TypeScript configuration (for future implementation)
+  # TypeScript configuration
   typescript:
     extensions: [.ts, .tsx]
     test_patterns:
@@ -66,8 +66,8 @@ languages:
       - mocha
       - vitest
     test_method_prefix: "test"
-    parser_module: "parsers.typescript_parser"
-    parser_class: "TypeScriptParser"
+    # Using Tree-sitter parser (no manual parser needed)
+    parser_type: "tree_sitter"
     syntax_patterns:
       class: "^\\+.*class\\s+(\\w+)"
       function: "^\\+.*(?:export\\s+)?(?:async\\s+)?function\\s+(\\w+)"
@@ -79,7 +79,7 @@ languages:
       - "test"
       - "tests"
     
-  # JavaScript configuration (for future implementation)
+  # JavaScript configuration
   javascript:
     extensions: [.js, .jsx]
     test_patterns:
@@ -90,5 +90,5 @@ languages:
     test_frameworks:
       - jest
       - mocha
-    parser_module: "parsers.javascript_parser"
-    parser_class: "JavaScriptParser"
+    # Using Tree-sitter parser (no manual parser needed)
+    parser_type: "tree_sitter"

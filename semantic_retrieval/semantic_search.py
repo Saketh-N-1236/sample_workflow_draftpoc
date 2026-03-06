@@ -145,12 +145,15 @@ async def find_tests_semantic(
     backend = get_backend(conn)
     
     # Use adaptive thresholds if enabled
+    # Remove limit by using a very high max_results value
+    effective_max_results = max(max_results, 10000) if max_results > 0 else 10000
+    
     if use_adaptive_thresholds and similarity_threshold is None:
         # Try strict threshold first
         results = await backend.search_similar(
             query_embedding,
             SEMANTIC_THRESHOLD_STRICT,
-            max_results
+            effective_max_results
         )
         
         # If not enough results, try moderate
@@ -158,7 +161,7 @@ async def find_tests_semantic(
             moderate_results = await backend.search_similar(
                 query_embedding,
                 SEMANTIC_THRESHOLD_MODERATE,
-                max_results
+                effective_max_results
             )
             # Combine and deduplicate (prefer higher similarity)
             seen_ids = {r.get('test_id') for r in results}
@@ -171,7 +174,7 @@ async def find_tests_semantic(
             lenient_results = await backend.search_similar(
                 query_embedding,
                 SEMANTIC_THRESHOLD_LENIENT,
-                max_results
+                effective_max_results
             )
             # Combine and deduplicate
             seen_ids = {r.get('test_id') for r in results}
@@ -184,7 +187,7 @@ async def find_tests_semantic(
         results = await backend.search_similar(
             query_embedding,
             threshold,
-            max_results
+            effective_max_results
         )
 
     return results

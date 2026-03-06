@@ -412,6 +412,56 @@ def enable_pgvector_and_embedding_column(conn):
             raise e
 
 
+def create_selection_audit_log_table(conn):
+    """
+    Create the selection_audit_log table for tracking test selection runs.
+    
+    This table stores audit information about each test selection execution:
+    - Repository ID
+    - Timestamp
+    - Changed files count
+    - Selected tests count
+    - Confidence score distribution
+    - LLM usage flag
+    - Execution time
+    - Threshold exceeded flag
+    """
+    with conn.cursor() as cursor:
+        # Drop table if exists (for re-running)
+        cursor.execute(f"DROP TABLE IF EXISTS {SCHEMA}.selection_audit_log CASCADE")
+        
+        # Create table
+        cursor.execute(f"""
+            CREATE TABLE {SCHEMA}.selection_audit_log (
+                id SERIAL PRIMARY KEY,
+                repository_id VARCHAR(255),
+                timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                changed_files_count INTEGER,
+                selected_tests_count INTEGER,
+                confidence_scores JSONB,
+                llm_used BOOLEAN DEFAULT FALSE,
+                execution_time_ms INTEGER,
+                threshold_exceeded BOOLEAN DEFAULT FALSE
+            )
+        """)
+        
+        # Create indexes for fast lookups
+        cursor.execute(f"""
+            CREATE INDEX idx_audit_log_repository 
+            ON {SCHEMA}.selection_audit_log(repository_id)
+        """)
+        
+        cursor.execute(f"""
+            CREATE INDEX idx_audit_log_timestamp 
+            ON {SCHEMA}.selection_audit_log(timestamp)
+        """)
+        
+        conn.commit()
+        print(f"[OK] Created table: {SCHEMA}.selection_audit_log")
+        print(f"  - Primary key: id")
+        print(f"  - Indexes: repository_id, timestamp")
+
+
 def verify_tables_created(conn):
     """
     Verify all tables were created successfully.
@@ -439,7 +489,8 @@ def verify_tables_created(conn):
             'reverse_index',
             'test_metadata',
             'test_structure',
-            'test_function_mapping'
+            'test_function_mapping',
+            'selection_audit_log'
         ]
         
         result = {
@@ -520,6 +571,10 @@ def main():
                 conn.rollback()
                 # Commit after rollback to clear the transaction state
                 conn.commit()
+            print()
+            
+            # Create selection audit log table
+            create_selection_audit_log_table(conn)
             print()
             
             # Step 3: Verify tables

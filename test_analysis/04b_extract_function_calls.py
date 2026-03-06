@@ -253,8 +253,13 @@ def build_function_mapping() -> dict:
         tree = parse_file(filepath)
         imports_data = {}
         if tree:
-            from utils.ast_parser import extract_imports
-            imports_data = extract_imports(tree)
+            try:
+                from utils.ast_parser import extract_imports
+                imports_data = extract_imports(tree)
+            except (AttributeError, TypeError) as e:
+                # Parser not initialized or tree is invalid
+                print(f"Warning: Could not extract imports from {filepath.name}: {e}")
+                imports_data = {'imports': [], 'from_imports': [], 'all_imports': []}
         
         # Get test method names
         test_method_names = [t['method_name'] for t in file_tests]

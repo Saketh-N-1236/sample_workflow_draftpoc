@@ -40,6 +40,20 @@ def create_tree_sitter_parser(language_name: str, file_extensions: list) -> Opti
     return None
 
 
+def get_tree_sitter_parser(language_name: str, file_extensions: list) -> Optional[TreeSitterParser]:
+    """
+    Get a Tree-sitter parser for a specific language (convenience function for registry).
+    
+    Args:
+        language_name: Language name (e.g., 'python', 'javascript', 'java')
+        file_extensions: List of file extensions (e.g., ['.py'], ['.js', '.jsx'])
+    
+    Returns:
+        TreeSitterParser instance, or None if not available
+    """
+    return create_tree_sitter_parser(language_name, file_extensions)
+
+
 def get_tree_sitter_parsers() -> Dict[str, TreeSitterParser]:
     """
     Get Tree-sitter parsers for all supported languages.

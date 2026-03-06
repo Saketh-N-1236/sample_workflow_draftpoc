@@ -24,8 +24,8 @@ class Settings(BaseSettings):
     embedding_provider: str = "ollama"  # Options: gemini, ollama
     
     # Gemini Configuration
-    gemini_api_key: Optional[str] = None
-    gemini_model: str = "gemini-2.5-pro"
+    gemini_api_key: Optional[str] = None  # Loaded from GEMINI_API_KEY env var
+    gemini_model: str = "gemini-2.5-flash"
     
     # OpenAI Configuration
     openai_api_key: Optional[str] = None

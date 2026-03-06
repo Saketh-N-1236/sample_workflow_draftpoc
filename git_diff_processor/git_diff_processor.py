@@ -22,7 +22,7 @@ Usage:
 import sys
 import asyncio
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 # Add parent directory to path to import deterministic modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -854,9 +854,24 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
     if changed_functions_for_semantic:
         print_section("Querying database (Semantic search - meaning-based)...")
         try:
-            semantic_matches = asyncio.run(
-                find_tests_semantic(conn, changed_functions_for_semantic, file_changes)
-            )
+            # Check if we're in an async context - if so, skip semantic search here
+            # (it should be done separately in the async caller)
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # In async context - semantic search should be done separately
+                    print_item("  Semantic search skipped", "(handled separately in async context)")
+                    semantic_matches = []
+                else:
+                    # Loop exists but not running - safe to use asyncio.run()
+                    semantic_matches = asyncio.run(
+                        find_tests_semantic(conn, changed_functions_for_semantic, file_changes)
+                    )
+            except RuntimeError:
+                # No event loop - safe to create one
+                semantic_matches = asyncio.run(
+                    find_tests_semantic(conn, changed_functions_for_semantic, file_changes)
+                )
 
             # Combine AST and semantic results (not just add missing)
             for test in semantic_matches:
@@ -874,7 +889,16 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
                     }]
                     semantic_added += 1
                 else:
-                    # Test already found by AST - merge semantic match details
+                    # Test already found by AST - merge semantic match details AND update test object
+                    existing_test = all_tests[test_id]
+                    
+                    # Update similarity on test object if not already set or if semantic has higher similarity
+                    if similarity > 0:
+                        existing_similarity = existing_test.get('similarity', 0)
+                        if similarity > existing_similarity:
+                            existing_test['similarity'] = similarity
+                    
+                    # Add semantic match to match_details
                     if test_id not in match_details:
                         match_details[test_id] = []
                     
@@ -893,7 +917,11 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
                         for m in match_details[test_id]:
                             if m.get('type') == 'semantic':
                                 old_sim = m.get('similarity', 0)
-                                m['similarity'] = max(old_sim, similarity)
+                                new_sim = max(old_sim, similarity)
+                                m['similarity'] = new_sim
+                                # Also update test object similarity
+                                if new_sim > existing_test.get('similarity', 0):
+                                    existing_test['similarity'] = new_sim
                                 break
 
             if semantic_added > 0:
@@ -916,19 +944,13 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
     
     # Attach confidence score to every matched test
     # Use both AST and semantic match details for scoring
+    # Note: LLM scores will be added later in process_diff_and_select_tests if available
     for test_id, test in all_tests.items():
         matches   = match_details.get(test_id, [])
         test_type = test.get('test_type')
-        base_score = calculate_confidence_score(matches, test_type)
-        
-        # Hybrid scoring: boost tests found by both AST and semantic
-        # Check if this test has both AST and semantic matches
-        has_ast_match = any(m.get('type') != 'semantic' for m in matches)
-        has_semantic_match = any(m.get('type') == 'semantic' for m in matches)
-        
-        if has_ast_match and has_semantic_match:
-            # Test found by both methods - boost score
-            base_score += 5  # Bonus for being found by both methods
+        # Get LLM score if available (set by process_diff_and_select_tests)
+        llm_score = test.get('llm_score')
+        base_score = calculate_confidence_score(matches, test_type, llm_score=llm_score)
         
         test['confidence_score'] = min(100, base_score)
 
@@ -1049,7 +1071,9 @@ def find_tests_ast_only(conn, search_queries: Dict, file_changes: List[Dict] = N
     for test_id, test in all_tests.items():
         matches = match_details.get(test_id, [])
         test_type = test.get('test_type')
-        test['confidence_score'] = calculate_confidence_score(matches, test_type)
+        # Get LLM score if available
+        llm_score = test.get('llm_score')
+        test['confidence_score'] = calculate_confidence_score(matches, test_type, llm_score=llm_score)
     
     # Sort by score
     sorted_tests = sorted(
@@ -1066,9 +1090,9 @@ def find_tests_ast_only(conn, search_queries: Dict, file_changes: List[Dict] = N
     }
 
 
-def find_tests_semantic_only(conn, search_queries: Dict) -> Dict[str, Any]:
+async def find_tests_semantic_only_async(conn, search_queries: Dict, file_changes: List[Dict] = None) -> Dict[str, Any]:
     """
-    Find tests using only semantic search (vector embeddings).
+    Async version: Find tests using only semantic search (vector embeddings).
     
     Returns:
         Dictionary with test results from semantic search only
@@ -1086,6 +1110,74 @@ def find_tests_semantic_only(conn, search_queries: Dict) -> Dict[str, Any]:
         }
     
     try:
+        semantic_matches = await find_tests_semantic(conn, changed_functions, file_changes)
+        
+        for test in semantic_matches:
+            test_id = test['test_id']
+            all_tests[test_id] = test
+            match_details[test_id] = [{
+                'type': 'semantic',
+                'similarity': test.get('similarity', 0),
+                'confidence': 'medium'
+            }]
+        
+        # Sort by similarity (descending)
+        sorted_tests = sorted(
+            all_tests.values(),
+            key=lambda t: t.get('similarity', 0),
+            reverse=True
+        )
+        
+        return {
+            'tests': sorted_tests,
+            'match_details': match_details,
+            'total_tests': len(all_tests),
+            'method': 'Semantic'
+        }
+    except Exception as e:
+        return {
+            'tests': [],
+            'match_details': {},
+            'total_tests': 0,
+            'method': 'Semantic',
+            'error': str(e)
+        }
+
+
+def find_tests_semantic_only(conn, search_queries: Dict) -> Dict[str, Any]:
+    """
+    Synchronous wrapper: Find tests using only semantic search (vector embeddings).
+    
+    Returns:
+        Dictionary with test results from semantic search only
+    """
+    all_tests = {}
+    match_details = {}
+    
+    changed_functions = search_queries.get('changed_functions', [])
+    if not changed_functions:
+        return {
+            'tests': [],
+            'match_details': {},
+            'total_tests': 0,
+            'method': 'Semantic'
+        }
+    
+    try:
+        # Try to get existing event loop, if none exists create one
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # If loop is running, we can't use asyncio.run()
+                # This means we're in an async context - should use async version instead
+                raise RuntimeError(
+                    "Cannot use synchronous find_tests_semantic_only from async context. "
+                    "Use find_tests_semantic_only_async() instead."
+                )
+        except RuntimeError:
+            # No event loop exists, safe to create one
+            pass
+        
         semantic_matches = asyncio.run(
             find_tests_semantic(conn, changed_functions)
         )
@@ -1450,11 +1542,21 @@ def find_unused_tests(conn, affected_test_ids: set) -> List[Dict]:
 def calculate_confidence_score(
     match_details: list,
     test_type: str,
+    llm_score: Optional[float] = None,
+    speed_factor: float = 1.0  # Fixed 10% component
 ) -> int:
     """
-    Calculate 0-100 confidence score from match_details list with granular bands.
+    Calculate 0-100 confidence score using weighted components.
 
-    Scoring (7 distinct bands):
+    Weighted Scoring Formula:
+      - AST Component (40%): Based on match_details (existing logic)
+      - Vector Component (30%): Semantic similarity from match_details
+      - LLM Component (20%): LLM relevance score (0.0-1.0) if available
+      - Speed Component (10%): Fixed value (constant for all tests)
+
+    Formula: total_score = (ast * 0.40) + (vector * 0.30) + (llm * 0.20) + (speed * 0.10)
+
+    AST Component Calculation (0-100 scale):
       Base scores (before multipliers):
         function_level (exact)              → 95-100
         function_level (indirect)           → 85-94
@@ -1462,7 +1564,6 @@ def calculate_confidence_score(
         exact + string_ref (patch/Mock)     → 65-74
         module pattern + direct_import       → 55-64
         module pattern (indirect)            → 45-54
-        semantic matches                     → 35-60 (capped)
         direct_file                          → 50-60
         integration                          → 40-50
 
@@ -1485,7 +1586,16 @@ def calculate_confidence_score(
         integration: +3
         e2e / unknown / None: +0
 
-    Capped at 100.
+    Vector Component (0-100 scale):
+      Semantic similarity from match_details, capped at 60
+
+    LLM Component (0-100 scale):
+      llm_score * 100 if available, else 0
+
+    Speed Component (0-100 scale):
+      Fixed value: 10 (constant for all tests)
+
+    Final score capped at 100, floored at 0.
     """
     if not match_details:
         return 0
@@ -1544,10 +1654,10 @@ def calculate_confidence_score(
                 base_score = max(base_score, 45)
                 
         elif mtype == 'semantic':
-            # Semantic matches capped at 60
-            similarity = match.get('similarity', 0)
-            semantic_score = int(similarity * 100) if similarity else 35
-            base_score = max(base_score, min(semantic_score, 60))
+            # Semantic matches should NOT contribute to AST score
+            # They are handled separately in the Vector Component calculation
+            # Skip semantic matches when calculating AST base_score
+            pass
     
     # Apply multipliers based on reference quality
     multiplier = 1.0
@@ -1583,10 +1693,227 @@ def calculate_confidence_score(
     elif test_type_lower == 'integration':
         score += 3
     
-    # Ensure score is within valid range
-    score = max(0, min(100, score))
+    # Ensure AST score is within valid range
+    ast_score = max(0, min(100, score))
     
-    return score
+    # Calculate Vector Component (30%)
+    vector_score = 0
+    for match in match_details:
+        if match.get('type') == 'semantic':
+            similarity = match.get('similarity', 0)
+            if similarity:
+                vector_score = max(vector_score, min(int(similarity * 100), 60))  # Cap at 60
+    
+    # Calculate LLM Component (20%)
+    llm_component = 0
+    if llm_score is not None and llm_score > 0:
+        llm_component = int(llm_score * 100)  # Convert 0.0-1.0 to 0-100
+    
+    # Calculate Speed Component (10%) - Fixed value
+    speed_component = 10  # Fixed 10% contribution
+    
+    # Weighted combination: 40% AST + 30% Vector + 20% LLM + 10% Speed
+    total_score = (
+        (ast_score * 0.40) +
+        (vector_score * 0.30) +
+        (llm_component * 0.20) +
+        (speed_component * 0.10)
+    )
+    
+    # IMPORTANT: For AST-only tests (no semantic match), ensure minimum score
+    # AST matches are direct/string matches and should have high confidence
+    # If no semantic match exists, boost the score to reflect direct match confidence
+    has_semantic_match = vector_score > 0
+    if not has_semantic_match and ast_score > 0:
+        # For AST-only tests, ensure minimum score based on AST quality
+        # Direct matches should have at least 50% confidence
+        # This ensures AST-only tests pass the 40% threshold
+        if total_score < 50:
+            # Boost to minimum 50% for direct AST matches
+            # Formula: use AST score more heavily when it's the only signal
+            total_score = max(50, int(ast_score * 0.60 + speed_component * 0.10))
+    
+    # Ensure final score is within valid range
+    total_score = max(0, min(100, int(total_score)))
+    
+    return total_score
+
+
+def calculate_confidence_score_with_breakdown(
+    match_details: list,
+    test_type: str,
+    llm_score: Optional[float] = None,
+    speed_factor: float = 1.0  # Fixed 10% component
+) -> tuple[int, dict]:
+    """
+    Calculate confidence score with detailed breakdown of components.
+    
+    Returns:
+        tuple: (total_score, breakdown_dict)
+        breakdown_dict contains:
+            - ast_percentage: AST component percentage (0-100)
+            - semantic_percentage: Semantic component percentage (0-100)
+            - llm_percentage: LLM component percentage (0-100)
+            - speed_percentage: Speed component percentage (0-100)
+            - ast_score: Raw AST score (0-100)
+            - vector_score: Raw semantic score (0-100)
+            - llm_component: Raw LLM score (0-100)
+            - speed_component: Raw speed score (0-100)
+    """
+    if not match_details:
+        return 0, {
+            'ast_percentage': 0,
+            'semantic_percentage': 0,
+            'llm_percentage': 0,
+            'speed_percentage': 0,
+            'ast_score': 0,
+            'vector_score': 0,
+            'llm_component': 0,
+            'speed_component': 0
+        }
+    
+    # Reuse the existing calculation logic
+    base_score = 0
+    has_function_level = False
+    has_exact_match = False
+    has_direct_reference = False
+    has_module_pattern_only = False
+    match_types = set()
+    
+    # First pass: determine base score and match characteristics
+    for match in match_details:
+        mtype = match.get('type', '')
+        ref_type = match.get('reference_type', '')
+        match_types.add(mtype)
+        
+        # Determine base score based on match type
+        if mtype == 'function_level':
+            has_function_level = True
+            source = match.get('source', '')
+            if source == 'patch_ref':
+                base_score = max(base_score, 95)
+            else:
+                base_score = max(base_score, 85)
+            has_exact_match = True
+            if ref_type == 'direct_import' or source == 'patch_ref':
+                has_direct_reference = True
+                
+        elif mtype == 'exact':
+            has_exact_match = True
+            if ref_type == 'direct_import':
+                base_score = max(base_score, 75)
+                has_direct_reference = True
+            elif ref_type == 'string_ref':
+                base_score = max(base_score, 65)
+                has_direct_reference = True
+            else:
+                base_score = max(base_score, 60)
+                
+        elif mtype == 'direct_file':
+            base_score = max(base_score, 50)
+            has_direct_reference = True
+            
+        elif mtype == 'integration':
+            base_score = max(base_score, 40)
+            
+        elif mtype == 'module':
+            if base_score == 0:
+                has_module_pattern_only = True
+            if ref_type == 'direct_import':
+                base_score = max(base_score, 55)
+                has_direct_reference = True
+            else:
+                base_score = max(base_score, 45)
+                
+        elif mtype == 'semantic':
+            # Semantic matches should NOT contribute to AST score
+            # They are handled separately in the Vector Component calculation
+            # Skip semantic matches when calculating AST base_score
+            pass
+    
+    # Apply multipliers
+    multiplier = 1.0
+    for match in match_details:
+        ref_type = match.get('reference_type', '')
+        if ref_type == 'direct_import':
+            multiplier = max(multiplier, 1.0)
+        elif ref_type == 'string_ref':
+            multiplier = max(multiplier, 0.9)
+        elif ref_type == 'indirect_import':
+            multiplier = max(multiplier, 0.8)
+        elif match.get('type') == 'module' and not has_direct_reference:
+            multiplier = max(multiplier, 0.7)
+    
+    score = int(base_score * multiplier)
+    
+    # Apply bonuses
+    if has_function_level:
+        score += 10
+    if len(match_types) > 1:
+        score += 5
+    
+    # Apply penalties
+    if has_module_pattern_only:
+        score -= 10
+    if not has_function_level and not has_exact_match:
+        score -= 5
+    
+    # Test type bonus
+    test_type_lower = (test_type or '').lower()
+    if test_type_lower == 'unit':
+        score += 5
+    elif test_type_lower == 'integration':
+        score += 3
+    
+    # Ensure AST score is within valid range
+    ast_score = max(0, min(100, score))
+    
+    # Calculate Vector Component (30%)
+    vector_score = 0
+    for match in match_details:
+        if match.get('type') == 'semantic':
+            similarity = match.get('similarity', 0)
+            if similarity:
+                vector_score = max(vector_score, min(int(similarity * 100), 60))
+    
+    # Calculate LLM Component (20%)
+    llm_component = 0
+    if llm_score is not None and llm_score > 0:
+        llm_component = int(llm_score * 100)
+    
+    # Calculate Speed Component (10%) - Fixed value
+    speed_component = 10
+    
+    # Weighted combination: 40% AST + 30% Vector + 20% LLM + 10% Speed
+    total_score = (
+        (ast_score * 0.40) +
+        (vector_score * 0.30) +
+        (llm_component * 0.20) +
+        (speed_component * 0.10)
+    )
+    
+    # For AST-only tests, ensure minimum score
+    has_semantic_match = vector_score > 0
+    if not has_semantic_match and ast_score > 0:
+        if total_score < 50:
+            total_score = max(50, int(ast_score * 0.60 + speed_component * 0.10))
+    
+    # Ensure final score is within valid range
+    total_score = max(0, min(100, int(total_score)))
+    
+    # Calculate percentage contributions (what percentage each component contributes to final score)
+    breakdown = {
+        'ast_score': ast_score,
+        'vector_score': vector_score,
+        'llm_component': llm_component,
+        'speed_component': speed_component,
+        'ast_percentage': round((ast_score * 0.40), 1),
+        'semantic_percentage': round((vector_score * 0.30), 1),
+        'llm_percentage': round((llm_component * 0.20), 1),
+        'speed_percentage': round((speed_component * 0.10), 1)
+    }
+    
+    return total_score, breakdown
 
 
 def get_total_test_count(conn) -> int:
@@ -1917,7 +2244,7 @@ def save_results_to_file(results: Dict, conn=None, diff_file_path: str = None, o
         lines.append(f"RANKED TEST LIST (sorted by confidence score 0-100)")
         lines.append("-" * 80)
         lines.append("")
-        
+            
         for test in results['tests']:
             test_id   = test['test_id']
             score     = test.get('confidence_score', 0)
@@ -1932,7 +2259,7 @@ def save_results_to_file(results: Dict, conn=None, diff_file_path: str = None, o
 
             lines.append(f"  [{score:3d}] {test_id}: {test_name} ({test_type})")
             lines.append(f"         File: {test_file}")
-                
+            
             for m in matches:
                 mtype    = m.get('type', '')
                 ref_type = m.get('reference_type', '')
@@ -1958,7 +2285,7 @@ def save_results_to_file(results: Dict, conn=None, diff_file_path: str = None, o
                 
                 lines.append("")
         
-            lines.append("-" * 80)
+        lines.append("-" * 80)
         lines.append("SUMMARY")
         lines.append("-" * 80)
         lines.append(f"Total tests to run: {results['total_tests']}")

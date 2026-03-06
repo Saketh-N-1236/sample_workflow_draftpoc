@@ -111,13 +111,17 @@ def extract_tests_from_file(filepath: Path, test_id_counter: int) -> tuple:
     # Extract standalone test methods (language-agnostic)
     all_test_methods = extract_test_methods(tree, filepath)
     
+    # Track which standalone methods we've already added (to avoid duplicates)
+    added_standalone_methods = set()
+    
     # If there are test classes, extract methods from classes
     if test_classes:
         for test_class in test_classes:
             class_name = test_class['name']
             
             # Get methods for this class
-            for method_name in test_class['methods']:
+            class_methods = test_class.get('methods', [])
+            for method_name in class_methods:
                 if method_name.startswith('test_'):
                     test_id = f"test_{test_id_counter:04d}"
                     test_id_counter += 1
@@ -130,9 +134,13 @@ def extract_tests_from_file(filepath: Path, test_id_counter: int) -> tuple:
                         "test_type": test_type,
                         "line_number": None  # Could be extracted if needed
                     })
-    else:
-        # No test classes, these are standalone test functions
-        for test_method in all_test_methods:
+                    added_standalone_methods.add(method_name)
+    
+    # Add standalone test functions (not in classes)
+    for test_method in all_test_methods:
+        method_name = test_method.get('name', '')
+        # Only add if not already added from a class
+        if method_name and method_name not in added_standalone_methods:
             test_id = f"test_{test_id_counter:04d}"
             test_id_counter += 1
             
@@ -140,7 +148,7 @@ def extract_tests_from_file(filepath: Path, test_id_counter: int) -> tuple:
                 "test_id": test_id,
                 "file_path": str(filepath),
                 "class_name": None,  # Standalone function
-                "method_name": test_method['name'],
+                "method_name": method_name,
                 "test_type": test_type,
                 "line_number": test_method.get('line_number')
             })

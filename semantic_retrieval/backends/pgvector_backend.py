@@ -134,7 +134,7 @@ class PgVectorBackend(VectorBackend):
                 query_embedding_str,
                 query_embedding_str,
                 similarity_threshold,
-                max_results
+                min(max_results, 10000) if max_results > 0 else 10000
             ))
             rows = cursor.fetchall()
         

@@ -1,23 +1,79 @@
 {
-  "generated_at": "2026-03-03T11:06:53.050771",
+  "generated_at": "2026-03-06T15:00:41.977449",
   "data": {
     "scan_directory": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository",
-    "total_files": 14,
-    "total_lines": 2431,
-    "total_size_bytes": 95161,
+    "total_files": 26,
+    "total_lines": 3908,
+    "total_size_bytes": 155122,
     "categories": {
       "unit": 11,
-      "integration": 2,
+      "integration": 3,
       "e2e": 1,
-      "other": 0
+      "other": 11
     },
     "files": [
+      {
+        "path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_agent.py",
+        "absolute_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_agent.py",
+        "size_bytes": 12971,
+        "line_count": 280,
+        "directory": "other"
+      },
+      {
+        "path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_builder.py",
+        "absolute_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_langgraph_builder.py",
+        "size_bytes": 4595,
+        "line_count": 98,
+        "directory": "other"
+      },
+      {
+        "path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_state_converter.py",
+        "absolute_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_state_converter.py",
+        "size_bytes": 6420,
+        "line_count": 167,
+        "directory": "other"
+      },
+      {
+        "path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_tool_converter.py",
+        "absolute_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\agent\\test_tool_converter.py",
+        "size_bytes": 7294,
+        "line_count": 218,
+        "directory": "other"
+      },
+      {
+        "path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\analytics\\test_aggregator.py",
+        "absolute_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\analytics\\test_aggregator.py",
+        "size_bytes": 2190,
+        "line_count": 59,
+        "directory": "other"
+      },
+      {
+        "path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\api\\test_routes.py",
+        "absolute_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\api\\test_routes.py",
+        "size_bytes": 6477,
+        "line_count": 180,
+        "directory": "other"
+      },
+      {
+        "path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\config\\test_settings.py",
+        "absolute_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\config\\test_settings.py",
+        "size_bytes": 3265,
+        "line_count": 86,
+        "directory": "other"
+      },
       {
         "path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\e2e\\test_complete_chat_flow.py",
         "absolute_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\e2e\\test_complete_chat_flow.py",
         "size_bytes": 5968,
         "line_count": 145,
         "directory": "e2e"
+      },
+      {
+        "path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\inference_logging\\test_logger.py",
+        "absolute_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\inference_logging\\test_logger.py",
+        "size_bytes": 1911,
+        "line_count": 60,
+        "directory": "other"
       },
       {
         "path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\integration\\test_agent_flow.py",
@@ -27,11 +83,39 @@
         "directory": "integration"
       },
       {
+        "path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\integration\\test_agent_workflow.py",
+        "absolute_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\integration\\test_agent_workflow.py",
+        "size_bytes": 6267,
+        "line_count": 111,
+        "directory": "integration"
+      },
+      {
         "path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\integration\\test_api_integration.py",
         "absolute_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\integration\\test_api_integration.py",
         "size_bytes": 3337,
         "line_count": 86,
         "directory": "integration"
+      },
+      {
+        "path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\llm\\test_factory.py",
+        "absolute_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\llm\\test_factory.py",
+        "size_bytes": 4692,
+        "line_count": 120,
+        "directory": "other"
+      },
+      {
+        "path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\mcp_servers\\test_catalog_server.py",
+        "absolute_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\mcp_servers\\test_catalog_server.py",
+        "size_bytes": 2419,
+        "line_count": 57,
+        "directory": "other"
+      },
+      {
+        "path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\mlflow\\test_tracking.py",
+        "absolute_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\mlflow\\test_tracking.py",
+        "size_bytes": 1460,
+        "line_count": 41,
+        "directory": "other"
       },
       {
         "path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\unit\\test_agent_pool.py",

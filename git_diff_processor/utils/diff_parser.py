@@ -95,14 +95,33 @@ def parse_git_diff(diff_content: str) -> Dict[str, Any]:
             i += 1
             continue
         
-        # Match hunk header: "@@ -start,count +start,count @@"
-        hunk_match = re.match(r'@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@', line)
+        # Match hunk header: "@@ -start,count +start,count @@ optional_context"
+        hunk_match = re.match(r'@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)', line)
         if hunk_match and current_file_info:
             in_hunk = True
             old_start = int(hunk_match.group(1))
             old_count = int(hunk_match.group(2)) if hunk_match.group(2) else 1
             new_start = int(hunk_match.group(3))
             new_count = int(hunk_match.group(4)) if hunk_match.group(4) else 1
+            
+            # Extract class/method from hunk header context (the part after @@)
+            hunk_context = hunk_match.group(5).strip() if hunk_match.group(5) else ""
+            if hunk_context:
+                # Check for class definition in context
+                class_match = re.search(r'class\s+(\w+)', hunk_context)
+                if class_match:
+                    class_name = class_match.group(1)
+                    changed_classes.add(class_name)
+                    if class_name not in current_file_info['changed_classes']:
+                        current_file_info['changed_classes'].append(class_name)
+                
+                # Check for method/function definition in context
+                method_match = re.search(r'def\s+(\w+)', hunk_context)
+                if method_match:
+                    method_name = method_match.group(1)
+                    changed_methods.add(method_name)
+                    if method_name not in current_file_info['changed_methods']:
+                        current_file_info['changed_methods'].append(method_name)
             
             # Track line numbers in this hunk
             old_line = old_start
@@ -112,37 +131,48 @@ def parse_git_diff(diff_content: str) -> Dict[str, Any]:
         
         # Process hunk content
         if in_hunk and current_file_info:
-            if line.startswith('+') and not line.startswith('+++'):
-                # Added line
-                current_file_info['additions'] += 1
-                new_line += 1
+            # Helper function to extract class/method from any line
+            def extract_definitions(line_content: str):
+                """Extract class and method definitions from a line."""
+                # Remove diff prefix if present
+                clean_line = line_content.lstrip('+- ')
                 
-                # Check for class definition
-                class_match = re.search(r'class\s+(\w+)', line)
+                # Check for class definition (Python: class X, Java: class X, etc.)
+                class_match = re.search(r'class\s+(\w+)', clean_line)
                 if class_match:
                     class_name = class_match.group(1)
                     changed_classes.add(class_name)
                     if class_name not in current_file_info['changed_classes']:
                         current_file_info['changed_classes'].append(class_name)
                 
-                # Check for method/function definition
-                method_match = re.search(r'def\s+(\w+)', line)
+                # Check for method/function definition (Python: def X, Java: X(, etc.)
+                method_match = re.search(r'def\s+(\w+)', clean_line)
                 if method_match:
                     method_name = method_match.group(1)
                     changed_methods.add(method_name)
                     if method_name not in current_file_info['changed_methods']:
                         current_file_info['changed_methods'].append(method_name)
-                
+            
+            if line.startswith('+') and not line.startswith('+++'):
+                # Added line
+                current_file_info['additions'] += 1
+                new_line += 1
+                extract_definitions(line)
                 current_file_info['changed_lines'].append(new_line)
             
             elif line.startswith('-') and not line.startswith('---'):
                 # Deleted line
                 current_file_info['deletions'] += 1
                 old_line += 1
+                extract_definitions(line)  # Also check deleted lines for context
                 current_file_info['changed_lines'].append(old_line)
             
             elif line.startswith(' '):
-                # Context line (unchanged)
+                # Context line (unchanged) - but may contain class/method definitions
+                # that are relevant to the changes nearby
+                # Only extract if we're in a hunk with actual changes (additions/deletions)
+                if current_file_info.get('additions', 0) > 0 or current_file_info.get('deletions', 0) > 0:
+                    extract_definitions(line)
                 old_line += 1
                 new_line += 1
             

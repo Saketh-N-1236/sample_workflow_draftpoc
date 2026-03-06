@@ -1,0 +1,1 @@
+"""Inference logging module tests."""

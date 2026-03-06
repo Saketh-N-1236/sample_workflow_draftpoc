@@ -1,0 +1,67 @@
+{
+  "generated_at": "2026-02-25T10:47:22.419407",
+  "data": {
+    "generated_at": "2026-02-25T10:47:22.405455",
+    "test_repository_overview": {
+      "total_test_files": 15,
+      "total_lines_of_code": 2809,
+      "test_framework": "pytest",
+      "framework_confidence": "high"
+    },
+    "test_inventory": {
+      "total_tests": 95,
+      "total_test_classes": 18,
+      "tests_by_type": {
+        "unit": 95
+      }
+    },
+    "dependencies": {
+      "total_production_classes_referenced": 49,
+      "total_dependency_mappings": 617,
+      "average_tests_per_class": 12.59,
+      "tests_with_dependencies": 86
+    },
+    "metadata": {
+      "tests_with_descriptions": 95,
+      "tests_with_markers": 0,
+      "async_tests": 0,
+      "parameterized_tests": 21
+    },
+    "structure": {
+      "test_categories": [
+        "other",
+        "e2e",
+        "integration",
+        "unit"
+      ],
+      "package_count": 3
+    },
+    "key_insights": [
+      {
+        "type": "coverage",
+        "message": "Average of 1.9 tests per production class",
+        "value": 1.9387755102040816
+      },
+      {
+        "type": "framework",
+        "message": "Using pytest framework",
+        "confidence": "high"
+      },
+      {
+        "type": "organization",
+        "message": "Tests organized into 4 categories",
+        "categories": [
+          "other",
+          "e2e",
+          "integration",
+          "unit"
+        ]
+      },
+      {
+        "type": "documentation",
+        "message": "100.0% of tests have descriptions",
+        "value": 100.0
+      }
+    ]
+  }
+}

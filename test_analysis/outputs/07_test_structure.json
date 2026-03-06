@@ -1,20 +1,20 @@
 {
-  "generated_at": "2026-03-03T11:07:01.811721",
+  "generated_at": "2026-03-06T15:00:55.152485",
   "data": {
     "directory_structure": {
       "root_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository",
       "directories": {
         "other": {
-          "file_count": 1,
-          "total_lines": 378
+          "file_count": 12,
+          "total_lines": 1744
         },
         "e2e": {
           "file_count": 1,
           "total_lines": 145
         },
         "integration": {
-          "file_count": 2,
-          "total_lines": 250
+          "file_count": 3,
+          "total_lines": 361
         },
         "unit": {
           "file_count": 11,
@@ -24,9 +24,64 @@
       "files_by_directory": {
         "other": [
           {
+            "path": "agent\\test_langgraph_agent.py",
+            "name": "test_langgraph_agent.py",
+            "line_count": 280
+          },
+          {
+            "path": "agent\\test_langgraph_builder.py",
+            "name": "test_langgraph_builder.py",
+            "line_count": 98
+          },
+          {
+            "path": "agent\\test_state_converter.py",
+            "name": "test_state_converter.py",
+            "line_count": 167
+          },
+          {
+            "path": "agent\\test_tool_converter.py",
+            "name": "test_tool_converter.py",
+            "line_count": 218
+          },
+          {
+            "path": "analytics\\test_aggregator.py",
+            "name": "test_aggregator.py",
+            "line_count": 59
+          },
+          {
+            "path": "api\\test_routes.py",
+            "name": "test_routes.py",
+            "line_count": 180
+          },
+          {
+            "path": "config\\test_settings.py",
+            "name": "test_settings.py",
+            "line_count": 86
+          },
+          {
             "path": "conftest.py",
             "name": "conftest.py",
             "line_count": 378
+          },
+          {
+            "path": "inference_logging\\test_logger.py",
+            "name": "test_logger.py",
+            "line_count": 60
+          },
+          {
+            "path": "llm\\test_factory.py",
+            "name": "test_factory.py",
+            "line_count": 120
+          },
+          {
+            "path": "mcp_servers\\test_catalog_server.py",
+            "name": "test_catalog_server.py",
+            "line_count": 57
+          },
+          {
+            "path": "mlflow\\test_tracking.py",
+            "name": "test_tracking.py",
+            "line_count": 41
           }
         ],
         "e2e": [
@@ -41,6 +96,11 @@
             "path": "integration\\test_agent_flow.py",
             "name": "test_agent_flow.py",
             "line_count": 164
+          },
+          {
+            "path": "integration\\test_agent_workflow.py",
+            "name": "test_agent_workflow.py",
+            "line_count": 111
           },
           {
             "path": "integration\\test_api_integration.py",
@@ -107,12 +167,77 @@
         ]
       },
       "package_structure": {
+        "agent": {
+          "files": [
+            {
+              "name": "test_langgraph_agent.py",
+              "path": "agent\\test_langgraph_agent.py",
+              "category": "other"
+            },
+            {
+              "name": "test_langgraph_builder.py",
+              "path": "agent\\test_langgraph_builder.py",
+              "category": "other"
+            },
+            {
+              "name": "test_state_converter.py",
+              "path": "agent\\test_state_converter.py",
+              "category": "other"
+            },
+            {
+              "name": "test_tool_converter.py",
+              "path": "agent\\test_tool_converter.py",
+              "category": "other"
+            }
+          ],
+          "subdirectories": []
+        },
+        "analytics": {
+          "files": [
+            {
+              "name": "test_aggregator.py",
+              "path": "analytics\\test_aggregator.py",
+              "category": "other"
+            }
+          ],
+          "subdirectories": []
+        },
+        "api": {
+          "files": [
+            {
+              "name": "test_routes.py",
+              "path": "api\\test_routes.py",
+              "category": "other"
+            }
+          ],
+          "subdirectories": []
+        },
+        "config": {
+          "files": [
+            {
+              "name": "test_settings.py",
+              "path": "config\\test_settings.py",
+              "category": "other"
+            }
+          ],
+          "subdirectories": []
+        },
         "e2e": {
           "files": [
             {
               "name": "test_complete_chat_flow.py",
               "path": "e2e\\test_complete_chat_flow.py",
               "category": "e2e"
+            }
+          ],
+          "subdirectories": []
+        },
+        "inference_logging": {
+          "files": [
+            {
+              "name": "test_logger.py",
+              "path": "inference_logging\\test_logger.py",
+              "category": "other"
             }
           ],
           "subdirectories": []
@@ -125,9 +250,44 @@
               "category": "integration"
             },
             {
+              "name": "test_agent_workflow.py",
+              "path": "integration\\test_agent_workflow.py",
+              "category": "integration"
+            },
+            {
               "name": "test_api_integration.py",
               "path": "integration\\test_api_integration.py",
               "category": "integration"
+            }
+          ],
+          "subdirectories": []
+        },
+        "llm": {
+          "files": [
+            {
+              "name": "test_factory.py",
+              "path": "llm\\test_factory.py",
+              "category": "other"
+            }
+          ],
+          "subdirectories": []
+        },
+        "mcp_servers": {
+          "files": [
+            {
+              "name": "test_catalog_server.py",
+              "path": "mcp_servers\\test_catalog_server.py",
+              "category": "other"
+            }
+          ],
+          "subdirectories": []
+        },
+        "mlflow": {
+          "files": [
+            {
+              "name": "test_tracking.py",
+              "path": "mlflow\\test_tracking.py",
+              "category": "other"
             }
           ],
           "subdirectories": []
@@ -218,8 +378,8 @@
       "shared_modules": []
     },
     "summary": {
-      "total_directories": 3,
-      "total_files": 15,
+      "total_directories": 11,
+      "total_files": 27,
       "categories": [
         "other",
         "e2e",

@@ -5,10 +5,16 @@ Configuration constants for semantic search.
 import os
 from pathlib import Path
 
-# Vector backend selection ('chromadb' or 'pgvector')
-VECTOR_BACKEND = os.getenv('VECTOR_BACKEND', 'chromadb').lower()
+# Vector backend selection ('pinecone', 'chromadb', or 'pgvector')
+VECTOR_BACKEND = os.getenv('VECTOR_BACKEND', 'pinecone').lower()
+
+# Pinecone configuration
+PINECONE_API_KEY = os.getenv('PINECONE_API_KEY', '')
+PINECONE_INDEX_NAME = os.getenv('PINECONE_INDEX_NAME', 'test-embeddings')
+PINECONE_ENVIRONMENT = os.getenv('PINECONE_ENVIRONMENT', 'us-east-1')
 
 # ChromaDB data path (default: semantic_retrieval/chromadb_data)
+# Deprecated: Use Pinecone instead
 _default_chromadb_path = Path(__file__).parent / "chromadb_data"
 CHROMADB_DATA_PATH = os.getenv('CHROMADB_DATA_PATH', str(_default_chromadb_path))
 
@@ -18,7 +24,8 @@ CHROMADB_DATA_PATH = os.getenv('CHROMADB_DATA_PATH', str(_default_chromadb_path)
 DEFAULT_SIMILARITY_THRESHOLD = 0.3
 
 # Maximum number of results to return from semantic search
-DEFAULT_MAX_RESULTS = 20
+# Set to a very high number to effectively remove limit (10,000 should be more than enough)
+DEFAULT_MAX_RESULTS = 10000
 
 # Embedding dimensions (nomic-embed-text produces 768-dimensional vectors)
 EMBEDDING_DIMENSIONS = 768

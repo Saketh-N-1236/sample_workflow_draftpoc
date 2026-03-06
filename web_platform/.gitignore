@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+repos/
+node_modules/
+dist/
+.env
+.venv/
+venv/

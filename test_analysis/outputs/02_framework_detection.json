@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-03-03T11:06:54.361745",
+  "generated_at": "2026-03-06T15:00:44.012221",
   "data": {
     "primary_framework": "pytest",
     "confidence": "high",
-    "pytest_score": 31,
-    "unittest_score": 14,
+    "pytest_score": 59,
+    "unittest_score": 0,
     "config_files": {
       "pytest_ini": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\test_repository\\pytest.ini",
       "setup_cfg": null,
@@ -21,15 +21,15 @@
     },
     "file_indicators": {
       "pytest": {
-        "files_with_import": 15,
-        "files_with_markers": 9,
-        "files_with_fixtures": 1,
-        "total_indicators": 25
+        "files_with_import": 27,
+        "files_with_markers": 16,
+        "files_with_fixtures": 10,
+        "total_indicators": 53
       },
       "unittest": {
-        "files_with_import": 14,
+        "files_with_import": 0,
         "files_with_testcase": 0,
-        "total_indicators": 14
+        "total_indicators": 0
       }
     },
     "indicators": [
