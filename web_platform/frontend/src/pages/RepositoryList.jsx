@@ -43,7 +43,7 @@ const RepositoryList = () => {
     if (!window.confirm('Are you sure you want to delete this repository?')) {
       return;
     }
-    // TODO: Add delete API endpoint
+    // Delete functionality can be added when API endpoint is available
     alert('Delete functionality coming soon');
   };
 
@@ -63,7 +63,7 @@ const RepositoryList = () => {
           className="button button-primary"
           onClick={() => navigate('/')}
         >
-          ➕ Add Repository
+          Add Repository
         </button>
       </div>
 
@@ -103,7 +103,6 @@ const RepositoryList = () => {
             >
               <div className="repository-card-header">
                 <div className="repository-card-title">
-                  <span className="repository-icon">📁</span>
                   <span className="repository-name">{repo.url.split('/').pop()}</span>
                 </div>
                 <div className="repository-card-actions">

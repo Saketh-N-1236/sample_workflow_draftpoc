@@ -17,12 +17,13 @@ from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 
 
-def parse_git_diff(diff_content: str) -> Dict[str, Any]:
+def parse_git_diff(diff_content: str, file_list: Optional[List[str]] = None) -> Dict[str, Any]:
     """
     Parse git diff content to extract changed information.
     
     Args:
         diff_content: Raw git diff output as string
+        file_list: Optional list of file paths (for GitLab API diffs that don't include headers)
     
     Returns:
         Dictionary with parsed diff information:
@@ -37,13 +38,164 @@ def parse_git_diff(diff_content: str) -> Dict[str, Any]:
         >>> result['changed_files']
         ['file.py']
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     if not diff_content.strip():
+        logger.debug("Empty diff content provided")
         return {
             'changed_files': [],
             'changed_classes': [],
             'changed_methods': [],
             'file_changes': []
         }
+    
+    # If file_list is provided and diff doesn't have headers, use file_list
+    # This handles GitLab API diffs that only contain hunk content
+    has_headers = diff_content.strip().startswith(('diff --git', '--- '))
+    starts_with_hunk = '@@' in diff_content[:100]  # Check first 100 chars for hunk marker
+    
+    # Filter out empty strings from file_list before checking
+    filtered_file_list = None
+    if file_list:
+        filtered_file_list = [f for f in file_list if f and f.strip()]
+        if not filtered_file_list:
+            filtered_file_list = None
+    
+    if filtered_file_list and not has_headers and starts_with_hunk:
+        logger.info(f"Using provided file_list ({len(filtered_file_list)} files) for headerless diff. Files: {filtered_file_list[:3]}")
+        # GitLab returns one diff per file, concatenated with newlines
+        # Split by detecting file boundaries: look for sequences of @@ that might indicate new files
+        # Better approach: split diff into chunks and assign to files
+        lines = diff_content.split('\n')
+        file_changes = []
+        changed_files = list(filtered_file_list)
+        changed_classes = set()
+        changed_methods = set()
+        
+        # Split diff into file chunks
+        # GitLab returns one diff per file, concatenated with newlines
+        # Strategy: If single file, use entire diff. If multiple files, split by detecting boundaries
+        # Simple approach: split evenly by hunk count, or process all for single file
+        if len(filtered_file_list) == 1:
+            # Single file - use entire diff
+            file_boundaries = [0, len(lines)]
+        else:
+            # Multiple files - try to detect boundaries
+            # Find all hunk starts
+            hunk_starts = []
+            for i, line in enumerate(lines):
+                if re.match(r'@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@', line):
+                    hunk_starts.append(i)
+            
+            # If we have hunks, try to split evenly
+            if hunk_starts and len(hunk_starts) >= len(filtered_file_list):
+                chunks_per_file = len(hunk_starts) // len(filtered_file_list)
+                file_boundaries = [0]
+                for i in range(1, len(filtered_file_list)):
+                    if i * chunks_per_file < len(hunk_starts):
+                        file_boundaries.append(hunk_starts[i * chunks_per_file])
+                file_boundaries.append(len(lines))
+            else:
+                # Fallback: assign entire diff to first file, empty for others
+                # This handles edge cases where splitting is unclear
+                file_boundaries = [0, len(lines)] + [len(lines)] * (len(filtered_file_list) - 1)
+        
+        # Process each file's diff chunk
+        for file_idx, file_path in enumerate(filtered_file_list):
+            start_idx = file_boundaries[file_idx] if file_idx < len(file_boundaries) else 0
+            end_idx = file_boundaries[file_idx + 1] if file_idx + 1 < len(file_boundaries) else len(lines)
+            
+            file_info = {
+                'file': file_path,
+                'status': 'modified',
+                'additions': 0,
+                'deletions': 0,
+                'changed_lines': [],
+                'changed_classes': [],
+                'changed_methods': []
+            }
+            
+            # Process this file's chunk
+            in_hunk = False
+            for i in range(start_idx, end_idx):
+                line = lines[i]
+                
+                # Match hunk header
+                hunk_match = re.match(r'@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@(.*)', line)
+                if hunk_match:
+                    in_hunk = True
+                    hunk_context = hunk_match.group(5).strip() if hunk_match.group(5) else ""
+                    if hunk_context:
+                        # Extract class
+                        class_match = re.search(r'class\s+(\w+)', hunk_context)
+                        if class_match:
+                            class_name = class_match.group(1)
+                            changed_classes.add(class_name)
+                            if class_name not in file_info['changed_classes']:
+                                file_info['changed_classes'].append(class_name)
+                        
+                        # Extract method
+                        method_match = re.search(r'(?:def|function|public|private|protected)\s+(\w+)\s*\(', hunk_context)
+                        if method_match:
+                            method_name = method_match.group(1)
+                            changed_methods.add(method_name)
+                            if method_name not in file_info['changed_methods']:
+                                file_info['changed_methods'].append(method_name)
+                    continue
+                
+                # Process hunk content
+                if in_hunk:
+                    if line.startswith('+') and not line.startswith('+++'):
+                        file_info['additions'] += 1
+                        clean_line = line.lstrip('+- ')
+                        # Extract class
+                        class_match = re.search(r'class\s+(\w+)', clean_line)
+                        if class_match:
+                            class_name = class_match.group(1)
+                            changed_classes.add(class_name)
+                            if class_name not in file_info['changed_classes']:
+                                file_info['changed_classes'].append(class_name)
+                        # Extract method
+                        method_match = None
+                        if re.search(r'\bdef\s+(\w+)', clean_line):
+                            method_match = re.search(r'\bdef\s+(\w+)', clean_line)
+                        elif re.search(r'\b(public|private|protected|static)\s+.*?\s+(\w+)\s*\(', clean_line):
+                            method_match = re.search(r'\b(public|private|protected|static)\s+.*?\s+(\w+)\s*\(', clean_line)
+                            if method_match:
+                                method_name = method_match.group(2)
+                            else:
+                                method_match = re.search(r'\b(\w+)\s*\([^)]*\)\s*\{', clean_line)
+                        elif re.search(r'\bfunction\s+(\w+)', clean_line):
+                            method_match = re.search(r'\bfunction\s+(\w+)', clean_line)
+                        elif re.search(r'\b(\w+)\s*\([^)]*\)\s*\{', clean_line):
+                            method_match = re.search(r'\b(\w+)\s*\([^)]*\)\s*\{', clean_line)
+                        
+                        if method_match:
+                            method_name = method_match.group(1) if len(method_match.groups()) == 1 else method_match.group(2)
+                            if method_name not in ['if', 'for', 'while', 'switch', 'catch', 'try', 'else']:
+                                changed_methods.add(method_name)
+                                if method_name not in file_info['changed_methods']:
+                                    file_info['changed_methods'].append(method_name)
+                    elif line.startswith('-') and not line.startswith('---'):
+                        file_info['deletions'] += 1
+            
+            file_changes.append(file_info)
+        
+        logger.info(f"Parsed headerless diff: {len(changed_files)} files, {len(changed_classes)} classes, {len(changed_methods)} methods")
+        if changed_files:
+            logger.info(f"Detected files: {changed_files[:5]}")
+        return {
+            'changed_files': list(set(changed_files)),
+            'changed_classes': sorted(list(changed_classes)),
+            'changed_methods': sorted(list(changed_methods)),
+            'file_changes': file_changes
+        }
+    
+    # Debug: Log diff format
+    logger.debug(f"Diff content length: {len(diff_content)} chars")
+    first_500 = diff_content[:500].replace('\n', '\\n')
+    logger.debug(f"Diff preview (first 500 chars): {first_500}")
     
     lines = diff_content.split('\n')
     file_changes = []
@@ -55,12 +207,54 @@ def parse_git_diff(diff_content: str) -> Dict[str, Any]:
     current_file_info = None
     in_hunk = False
     
+    # Track different diff formats we encounter
+    diff_format_patterns = {
+        'git': r'diff --git a/(.+?) b/(.+?)$',
+        'index': r'index [a-f0-9]+\.\.[a-f0-9]+',
+        'new_file': r'new file mode',
+        'deleted_file': r'deleted file mode',
+        '---': r'^--- (.+)$',
+        '+++': r'^\+\+\+ (.+)$'
+    }
+    
     i = 0
     while i < len(lines):
         line = lines[i]
         
-        # Match file header: "diff --git a/path b/path"
+        # Match file header: "diff --git a/path b/path" (standard git format)
         file_match = re.match(r'diff --git a/(.+?) b/(.+?)$', line)
+        
+        # Also try alternative formats (GitLab might use different format)
+        if not file_match:
+            # Try "--- a/path" and "+++ b/path" format (unified diff)
+            if line.startswith('--- '):
+                old_path = line[4:].strip()
+                # Look for corresponding +++ line
+                if i + 1 < len(lines) and lines[i + 1].startswith('+++ '):
+                    new_path = lines[i + 1][4:].strip()
+                    # Remove a/ or b/ prefix if present
+                    old_path = old_path.lstrip('a/')
+                    new_path = new_path.lstrip('b/')
+                    current_file = new_path if new_path != '/dev/null' else old_path
+                    changed_files.append(current_file)
+                    
+                    # Save previous file if exists
+                    if current_file_info:
+                        file_changes.append(current_file_info)
+                    
+                    current_file_info = {
+                        'file': current_file,
+                        'status': 'modified',
+                        'additions': 0,
+                        'deletions': 0,
+                        'changed_lines': [],
+                        'changed_classes': [],
+                        'changed_methods': []
+                    }
+                    in_hunk = False
+                    i += 2  # Skip both --- and +++ lines
+                    continue
+        
         if file_match:
             # Save previous file if exists
             if current_file_info:
@@ -133,7 +327,7 @@ def parse_git_diff(diff_content: str) -> Dict[str, Any]:
         if in_hunk and current_file_info:
             # Helper function to extract class/method from any line
             def extract_definitions(line_content: str):
-                """Extract class and method definitions from a line."""
+                """Extract class and method definitions from a line (multi-language)."""
                 # Remove diff prefix if present
                 clean_line = line_content.lstrip('+- ')
                 
@@ -145,13 +339,37 @@ def parse_git_diff(diff_content: str) -> Dict[str, Any]:
                     if class_name not in current_file_info['changed_classes']:
                         current_file_info['changed_classes'].append(class_name)
                 
-                # Check for method/function definition (Python: def X, Java: X(, etc.)
-                method_match = re.search(r'def\s+(\w+)', clean_line)
+                # Check for method/function definition
+                # Python: def method_name(
+                # Java: public/private/protected [static] [return_type] method_name(
+                # JavaScript/TypeScript: method_name( or function method_name(
+                method_match = None
+                
+                # Python style: def method_name
+                if re.search(r'\bdef\s+(\w+)', clean_line):
+                    method_match = re.search(r'\bdef\s+(\w+)', clean_line)
+                # Java style: [modifiers] return_type method_name( or method_name(
+                elif re.search(r'\b(public|private|protected|static)\s+.*?\s+(\w+)\s*\(', clean_line):
+                    method_match = re.search(r'\b(public|private|protected|static)\s+.*?\s+(\w+)\s*\(', clean_line)
+                    if method_match:
+                        method_name = method_match.group(2)  # Get the method name (second group)
+                    else:
+                        # Try simpler: method_name( pattern
+                        method_match = re.search(r'\b(\w+)\s*\([^)]*\)\s*\{', clean_line)
+                # JavaScript/TypeScript: function method_name or method_name(
+                elif re.search(r'\bfunction\s+(\w+)', clean_line):
+                    method_match = re.search(r'\bfunction\s+(\w+)', clean_line)
+                # Generic: method_name( pattern (works for Java, JS, etc.)
+                elif re.search(r'\b(\w+)\s*\([^)]*\)\s*\{', clean_line):
+                    method_match = re.search(r'\b(\w+)\s*\([^)]*\)\s*\{', clean_line)
+                
                 if method_match:
-                    method_name = method_match.group(1)
-                    changed_methods.add(method_name)
-                    if method_name not in current_file_info['changed_methods']:
-                        current_file_info['changed_methods'].append(method_name)
+                    method_name = method_match.group(1) if len(method_match.groups()) == 1 else method_match.group(2)
+                    # Filter out common non-method patterns
+                    if method_name not in ['if', 'for', 'while', 'switch', 'catch', 'try', 'else']:
+                        changed_methods.add(method_name)
+                        if method_name not in current_file_info['changed_methods']:
+                            current_file_info['changed_methods'].append(method_name)
             
             if line.startswith('+') and not line.startswith('+++'):
                 # Added line
@@ -184,6 +402,17 @@ def parse_git_diff(diff_content: str) -> Dict[str, Any]:
     # Save last file
     if current_file_info:
         file_changes.append(current_file_info)
+    
+    # Debug logging
+    logger.info(f"Parsed diff: {len(changed_files)} files, {len(changed_classes)} classes, {len(changed_methods)} methods")
+    if changed_files:
+        logger.info(f"Changed files: {changed_files[:5]}")
+    else:
+        logger.warning("No files detected in diff! First 20 lines:")
+        logger.warning('\n'.join(lines[:20]))
+        if file_list:
+            logger.warning(f"file_list was provided but not used: {file_list[:3]}")
+            logger.warning(f"has_headers={has_headers}, starts_with_hunk={starts_with_hunk}")
     
     return {
         'changed_files': list(set(changed_files)),
@@ -242,8 +471,9 @@ def is_production_file(
             except Exception:
                 pass
     else:
-        # Fallback: check for Python files (backward compatibility)
-        if not file_path.endswith('.py'):
+        # Fallback: check for common production file extensions (language-agnostic)
+        production_extensions = ['.py', '.java', '.js', '.ts', '.jsx', '.tsx', '.kt', '.go', '.rb', '.cs']
+        if not any(file_path.endswith(ext) for ext in production_extensions):
             return False
     
     # Skip test files (generic check)

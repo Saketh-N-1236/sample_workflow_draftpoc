@@ -21,65 +21,102 @@ Run this script:
 from pathlib import Path
 import sys
 import json
+import logging
 
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent))
 
+logger = logging.getLogger(__name__)
+
 from utils.language_parser import parse_file, extract_imports, extract_string_references
+from utils.universal_parser import get_parser, detect_language
 from utils.output_formatter import (
     print_header, print_section, print_item, print_list,
     save_json, print_progress, print_summary
 )
+from utils.config import get_output_dir
+from utils.dependency_plugins import get_registry
 
 # Configuration
-OUTPUT_DIR = Path(__file__).parent / "outputs"
+OUTPUT_DIR = get_output_dir()
 STEP3_OUTPUT = OUTPUT_DIR / "03_test_registry.json"
 OUTPUT_FILE = OUTPUT_DIR / "04_static_dependencies.json"
 
-# Test framework imports to exclude (these are not production code)
+# Universal test framework imports to exclude (language-agnostic)
 TEST_FRAMEWORK_IMPORTS = {
     'pytest', 'unittest', 'mock', 'unittest.mock',
     'pytest_mock', 'pytest_asyncio', 'pytest_cov',
     'test', 'tests', 'testing',
     # JavaScript/Node.js test frameworks
     'jest', 'mocha', 'chai', 'sinon', 'supertest', 'express',
-    'ava', 'tape', 'jasmine', 'vitest'
+    'ava', 'tape', 'jasmine', 'vitest',
+    # Java test frameworks
+    'junit', 'testng', 'mockito', 'hamcrest', 'assertj',
+    'org.junit', 'org.testng', 'org.mockito',
+    # Other
+    'rspec', 'minitest', 'nunit', 'xunit', 'testing'
 }
 
 
-def is_production_import(import_name: str) -> bool:
+def is_production_import(import_name: str, language: str = 'python') -> bool:
     """
-    Check if an import is likely production code (not test framework).
+    Language-aware check if an import is likely production code (not test framework).
     
     Args:
         import_name: The import module name
+        language: Programming language (python, java, javascript, etc.)
     
     Returns:
         True if it's likely production code, False if it's test framework
     """
-    # Check if it starts with any test framework name
-    for test_framework in TEST_FRAMEWORK_IMPORTS:
-        if import_name.startswith(test_framework):
-            return False
+    import_lower = import_name.lower()
     
-    # Check if it's a standard library import (common ones)
-    stdlib_modules = {
-        'os', 'sys', 'pathlib', 'json', 'datetime', 'typing',
-        'collections', 'itertools', 'functools', 'asyncio',
-        'abc', 'dataclasses', 'enum', 'logging', 're'
+    # Universal test framework exclusions
+    TEST_KEYWORDS = {
+        'pytest', 'unittest', 'mock', 'junit', 'testng', 'mockito',
+        'hamcrest', 'assertj', 'jest', 'mocha', 'chai', 'sinon',
+        'jasmine', 'vitest', 'rspec', 'minitest', 'nunit', 'xunit',
+        'testing', 'test', 'spec'
     }
     
-    # Split by dot to check first part
-    first_part = import_name.split('.')[0]
-    if first_part in stdlib_modules:
-        return False  # Standard library, not production code
+    # Java-specific: exclude java.* and javax.* standard library
+    if language == 'java':
+        first_part = import_name.split('.')[0]
+        # Exclude standard library (java.*, javax.*, sun.*)
+        if first_part in ('java', 'javax', 'sun', 'com.sun'):
+            return False
+        # Exclude test framework packages (org.junit.*, org.testng.*, org.mockito.*, etc.)
+        if import_lower.startswith('org.junit') or import_lower.startswith('org.testng') or \
+           import_lower.startswith('org.mockito') or import_lower.startswith('org.hamcrest') or \
+           import_lower.startswith('org.assertj') or import_lower.startswith('junit') or \
+           'mockito' in import_lower or 'hamcrest' in import_lower or 'assertj' in import_lower:
+            return False
+        # For Java, if it's not standard library or test framework, it's likely production code
+        # Don't filter based on generic 'test' keyword - Java packages can have 'test' in them
+        return True
     
-    return True
+    # Python standard library check
+    if language == 'python':
+        stdlib = {'os', 'sys', 'pathlib', 'json', 'datetime', 'typing',
+                  'collections', 'itertools', 'functools', 'asyncio',
+                  'abc', 'dataclasses', 'enum', 'logging', 're', 'io',
+                  'time', 'copy', 'math', 'random', 'string', 'struct'}
+        first_part = import_name.split('.')[0]
+        if first_part in stdlib:
+            return False
+    
+    # Check against test keywords (but be lenient for Java - only check if it's clearly a test framework)
+    parts = import_name.lower().replace('/', '.').split('.')
+    # For Java, we already handled test frameworks above, so skip generic test keyword check
+    if language == 'java':
+        return True  # Already filtered test frameworks above
+    # For other languages, check for test keywords
+    return not any(kw in parts for kw in TEST_KEYWORDS)
 
 
 def extract_dependencies_from_file(filepath: Path) -> dict:
     """
-    Extract dependencies from a single test file.
+    Extract dependencies from a single test file using language-specific plugins.
     
     Args:
         filepath: Path to the test file
@@ -87,57 +124,96 @@ def extract_dependencies_from_file(filepath: Path) -> dict:
     Returns:
         Dictionary with dependency information
     """
-    tree = parse_file(filepath)
-    if not tree:
+    # Get language-specific plugin
+    try:
+        registry = get_registry()
+        plugin = registry.get_plugin_for_file(filepath)
+        
+        if plugin:
+            # Use plugin for language-specific extraction
+            result = plugin.extract_dependencies(filepath)
+            # Add backward compatibility fields
+            result['from_imports'] = []  # Not used for non-Python languages
+            logger.debug(f"Plugin {plugin.language} extracted {len(result.get('production_imports', []))} production imports from {filepath.name}")
+            return result
+    except Exception as e:
+        logger.warning(f"Plugin extraction failed for {filepath.name}: {e}, falling back to universal parser")
+    
+    # Fallback to universal parser if no plugin available or plugin failed
+    try:
+        language = detect_language(filepath)
+        parser = get_parser()
+        parsed = parser.parse_file(filepath)
+        
+        all_imports = parsed.get('imports', [])
+        
+        if parsed.get('error'):
+            return {
+                "file_path": str(filepath),
+                "language": language,
+                "imports": [],
+                "production_imports": [],
+                "production_classes": [],
+                "total_import_count": 0,
+                "production_import_count": 0,
+                "string_references": [],
+                "production_string_references": [],
+                "from_imports": [],
+                "all_production_references": []
+            }
+        
+        # Filter for production code (not test frameworks)
+        production_imports = [imp for imp in all_imports if is_production_import(imp, language)]
+        
+        # Extract string-based references (patch() calls, etc.) - try language parser as fallback
+        string_refs = []
+        try:
+            tree = parse_file(filepath)
+            if tree:
+                string_refs = extract_string_references(tree, filepath)
+        except Exception:
+            pass  # Not critical if this fails
+        
+        # Filter string references for production code
+        production_string_refs = [
+            ref for ref in string_refs
+            if is_production_import(ref, language)
+        ]
+        
+        # Combine all production references (imports + string refs)
+        all_production_refs = set(production_imports)
+        all_production_refs.update(production_string_refs)
+        
         return {
             "file_path": str(filepath),
+            "language": language,
+            "imports": all_imports,
+            "production_imports": production_imports,
+            "production_classes": [],
+            "string_references": string_refs,
+            "production_string_references": production_string_refs,
+            "from_imports": [],
+            "total_import_count": len(all_imports),
+            "production_import_count": len(production_imports),
+            "all_production_references": sorted(list(all_production_refs))
+        }
+    except Exception as e:
+        logger.error(f"Failed to extract dependencies from {filepath.name}: {e}")
+        # Return empty result on error
+        language = detect_language(filepath)
+        return {
+            "file_path": str(filepath),
+            "language": language,
             "imports": [],
             "production_imports": [],
-            "from_imports": []
+            "production_classes": [],
+            "total_import_count": 0,
+            "production_import_count": 0,
+            "string_references": [],
+            "production_string_references": [],
+            "from_imports": [],
+            "all_production_references": []
         }
-    
-    # Extract all imports (language-agnostic)
-    imports_data = extract_imports(tree, filepath)
-    
-    # Extract string-based references (patch() calls, etc.) (language-agnostic)
-    string_refs = extract_string_references(tree, filepath)
-    
-    # Filter for production code imports
-    all_imports = imports_data['all_imports']
-    production_imports = [
-        imp for imp in all_imports
-        if is_production_import(imp)
-    ]
-    
-    # Filter string references for production code
-    production_string_refs = [
-        ref for ref in string_refs
-        if is_production_import(ref)
-    ]
-    
-    # Filter from_imports for production code
-    production_from_imports = []
-    for module, names in imports_data['from_imports']:
-        if module and is_production_import(module):
-            production_from_imports.append((module, names))
-    
-    # Combine all production references (imports + string refs)
-    all_production_refs = set(production_imports)
-    all_production_refs.update(production_string_refs)
-    # Also add module names from from_imports
-    for module, _ in production_from_imports:
-        all_production_refs.add(module)
-    
-    return {
-        "file_path": str(filepath),
-        "imports": all_imports,
-        "production_imports": production_imports,
-        "string_references": string_refs,  # NEW: All string refs
-        "production_string_references": production_string_refs,  # NEW: Filtered string refs
-        "from_imports": imports_data['from_imports'],
-        "production_from_imports": production_from_imports,
-        "all_production_references": sorted(list(all_production_refs))  # NEW: Combined refs
-    }
 
 
 def build_dependency_mapping() -> dict:
@@ -177,12 +253,14 @@ def build_dependency_mapping() -> dict:
         
         # Get production imports for this test
         production_imports = file_deps.get('production_imports', [])
+        production_classes = file_deps.get('production_classes', [])  # Extracted class names from plugins
         production_from_imports = file_deps.get('production_from_imports', [])
         production_string_refs = file_deps.get('production_string_references', [])
         
-        # Extract all referenced classes/modules (imports + string refs)
-        referenced_classes = set(production_imports)
+        # Extract all referenced classes/modules (imports + string refs + extracted classes)
+        referenced_classes = set(production_imports)  # Full import paths
         referenced_classes.update(production_string_refs)  # Add string-based references
+        referenced_classes.update(production_classes)  # Add extracted class names (e.g., "LoginRequest")
         
         for module, names in production_from_imports:
             referenced_classes.add(module)
@@ -199,6 +277,9 @@ def build_dependency_mapping() -> dict:
             if module not in reference_types:
                 reference_types[module] = 'direct_import'
         
+        # Get total imports (including test framework) for debugging
+        all_imports = file_deps.get('imports', [])
+        
         test_dependencies.append({
             "test_id": test['test_id'],
             "file_path": file_path,
@@ -206,7 +287,8 @@ def build_dependency_mapping() -> dict:
             "method_name": test['method_name'],
             "referenced_classes": sorted(list(referenced_classes)),
             "reference_types": reference_types,  # NEW: Track how each class is referenced
-            "import_count": len(referenced_classes)
+            "import_count": len(all_imports),  # Total imports (including test framework)
+            "production_import_count": len(referenced_classes)  # Production imports only
         })
     
     # Statistics

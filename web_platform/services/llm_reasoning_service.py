@@ -94,7 +94,6 @@ class LLMReasoningService:
             response = await self.llm_provider.chat_completion(request)
             content = response.content
             
-            # Log the raw response for debugging (first 1000 chars)
             logger.debug(f"LLM raw response (first 1000 chars): {content[:1000]}")
             
             # Parse LLM response
@@ -283,7 +282,6 @@ CRITICAL: Do NOT return an empty assessments array {{"assessments": []}}. Even i
             json_str = re.sub(r'\s*```\s*$', '', json_str, flags=re.MULTILINE)
             json_str = json_str.strip()
             
-            # Log extraction details for debugging
             logger.debug(f"JSON extraction method: {extraction_method}")
             logger.debug(f"Extracted JSON length: {len(json_str)}")
             logger.debug(f"Extracted JSON (first 500 chars): {json_str[:500]}")

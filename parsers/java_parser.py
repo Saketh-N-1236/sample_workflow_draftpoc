@@ -79,10 +79,32 @@ class JavaParser(LanguageParser):
         matches = re.finditer(class_pattern, content)
         
         for match in matches:
+            class_name = match.group(1)
+            class_start = match.start()
+            line_number = content[:class_start].count('\n') + 1
+            
+            # Extract methods for this class (simplified - between class start and next class or end)
+            # Find the end of this class (next class or end of file)
+            class_end = len(content)
+            next_class_match = re.search(r"class\s+\w+", content[class_start + 1:])
+            if next_class_match:
+                class_end = class_start + 1 + next_class_match.start()
+            
+            class_content = content[class_start:class_end]
+            
+            # Extract method names from this class
+            methods = []
+            method_pattern = r"(?:public|private|protected)?\s+(?:static\s+)?(?:void\s+)?(\w+)\s*\("
+            for method_match in re.finditer(method_pattern, class_content):
+                method_name = method_match.group(1)
+                # Skip constructors (same name as class)
+                if method_name != class_name and method_name[0].islower():
+                    methods.append(method_name)
+            
             classes.append({
-                'name': match.group(1),
-                'line_number': content[:match.start()].count('\n') + 1,
-                'methods': []
+                'name': class_name,
+                'line_number': line_number,
+                'methods': methods
             })
         
         return classes
@@ -119,32 +141,66 @@ class JavaParser(LanguageParser):
         
         test_methods = []
         content = ast.get('content', '')
+        lines = content.split('\n')
         
-        # Simple regex for JUnit test methods (@Test annotation)
-        test_pattern = r"@Test\s+(?:public\s+)?(?:void\s+)?(\w+)\s*\("
-        matches = re.finditer(test_pattern, content)
+        # Track which methods we've already found to avoid duplicates
+        found_methods = set()
         
-        for match in matches:
-            test_methods.append({
-                'name': match.group(1),
-                'class_name': None,  # TODO: Extract from context
-                'line_number': content[:match.start()].count('\n') + 1,
-                'is_async': False
-            })
-        
-        # Also check for methods starting with "test"
-        test_name_pattern = r"(?:public\s+)?(?:void\s+)?(test\w+)\s*\("
-        matches = re.finditer(test_name_pattern, content, re.IGNORECASE)
-        
-        for match in matches:
+        # Find all @Test annotations (can be on separate lines from method)
+        # Pattern 1: @Test on same line as method
+        test_pattern_same_line = r"@Test\s+(?:.*?\s+)?(?:public\s+)?(?:void\s+)?(\w+)\s*\("
+        for match in re.finditer(test_pattern_same_line, content):
             method_name = match.group(1)
-            if method_name.lower().startswith('test'):
+            if method_name not in found_methods:
+                test_methods.append({
+                    'name': method_name,
+                    'class_name': None,  # Will be extracted from context
+                    'line_number': content[:match.start()].count('\n') + 1,
+                    'is_async': False
+                })
+                found_methods.add(method_name)
+        
+        # Pattern 2: @Test on previous line(s) - multiline annotation
+        # Find all @Test annotations
+        test_annotation_pattern = r"@Test(?:\s*\([^)]*\))?"
+        for i, line in enumerate(lines):
+            if re.search(test_annotation_pattern, line):
+                # Look ahead for method definition (within next 5 lines)
+                for j in range(i + 1, min(i + 6, len(lines))):
+                    method_match = re.search(r"(?:public|private|protected)?\s+(?:static\s+)?(?:void\s+)?(\w+)\s*\(", lines[j])
+                    if method_match:
+                        method_name = method_match.group(1)
+                        # Skip constructors and common non-test methods
+                        if method_name not in found_methods and method_name[0].islower():
+                            test_methods.append({
+                                'name': method_name,
+                                'class_name': None,
+                                'line_number': j + 1,
+                                'is_async': False
+                            })
+                            found_methods.add(method_name)
+                        break
+        
+        # Pattern 3: Methods starting with "test" (JUnit 3 style or naming convention)
+        test_name_pattern = r"(?:public|private|protected)?\s+(?:static\s+)?(?:void\s+)?(test\w+)\s*\("
+        for match in re.finditer(test_name_pattern, content, re.IGNORECASE):
+            method_name = match.group(1)
+            if method_name.lower().startswith('test') and method_name not in found_methods:
                 test_methods.append({
                     'name': method_name,
                     'class_name': None,
                     'line_number': content[:match.start()].count('\n') + 1,
                     'is_async': False
                 })
+                found_methods.add(method_name)
+        
+        # Extract class name from context for better tracking
+        class_match = re.search(r"class\s+(\w+)", content)
+        if class_match:
+            class_name = class_match.group(1)
+            for test_method in test_methods:
+                if test_method['class_name'] is None:
+                    test_method['class_name'] = class_name
         
         return test_methods
     

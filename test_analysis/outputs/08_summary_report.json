@@ -1,32 +1,28 @@
 {
-  "generated_at": "2026-03-06T15:00:55.788555",
+  "generated_at": "2026-03-09T11:05:08.669226",
   "data": {
-    "generated_at": "2026-03-06T15:00:55.788555",
+    "generated_at": "2026-03-09T11:05:08.667459",
     "test_repository_overview": {
-      "total_test_files": 26,
-      "total_lines_of_code": 3908,
+      "total_test_files": 100,
+      "total_lines_of_code": 3255,
       "test_framework": "pytest",
       "framework_confidence": "high"
     },
     "test_inventory": {
-      "total_tests": 245,
-      "total_test_classes": 23,
-      "tests_by_type": {
-        "unit": 226,
-        "e2e": 7,
-        "integration": 12
-      }
+      "total_tests": 0,
+      "total_test_classes": 0,
+      "tests_by_type": {}
     },
     "dependencies": {
-      "total_production_classes_referenced": 399,
-      "total_dependency_mappings": 5654,
-      "average_tests_per_class": 14.17,
-      "tests_with_dependencies": 245
+      "total_production_classes_referenced": 0,
+      "total_dependency_mappings": 0,
+      "average_tests_per_class": 0,
+      "tests_with_dependencies": 0
     },
     "metadata": {
       "tests_with_descriptions": 0,
       "tests_with_markers": 0,
-      "async_tests": 106,
+      "async_tests": 0,
       "parameterized_tests": 0
     },
     "structure": {
@@ -39,11 +35,6 @@
       "package_count": 11
     },
     "key_insights": [
-      {
-        "type": "coverage",
-        "message": "Average of 0.6 tests per production class",
-        "value": 0.6140350877192983
-      },
       {
         "type": "framework",
         "message": "Using pytest framework",

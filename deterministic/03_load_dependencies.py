@@ -17,17 +17,25 @@ Run this script:
 
 import sys
 import json
+import os
 from pathlib import Path
+from typing import Optional
 
 # Add current directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from db_connection import get_connection, test_connection
+from db_connection import get_connection, get_connection_with_schema, test_connection, DB_SCHEMA
+import os
 from utils.db_helpers import batch_insert_test_dependencies, count_table_records
 from utils.output_formatter import print_header, print_section, print_item
 
 # Path to dependencies JSON file
-TEST_ANALYSIS_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs"
+# Use schema-specific output directory if TEST_REPO_SCHEMA is set
+schema_name = os.getenv('TEST_REPO_SCHEMA')
+if schema_name:
+    TEST_ANALYSIS_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs" / schema_name
+else:
+    TEST_ANALYSIS_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs"
 DEPENDENCIES_FILE = TEST_ANALYSIS_DIR / "04_static_dependencies.json"
 
 
@@ -83,7 +91,7 @@ def prepare_dependency_data(dependencies_data: dict) -> list:
     return all_dependencies
 
 
-def load_dependencies_to_database(conn, dependencies: list, batch_size: int = 100) -> dict:
+def load_dependencies_to_database(conn, dependencies: list, schema: Optional[str] = None, batch_size: int = 100) -> dict:
     """
     Load dependencies into database in batches.
     
@@ -111,7 +119,7 @@ def load_dependencies_to_database(conn, dependencies: list, batch_size: int = 10
         print(f"Processing: {current}/{total_deps} dependencies ({percentage:.1f}%)", end='\r')
         
         # Insert batch
-        inserted = batch_insert_test_dependencies(conn, batch)
+        inserted = batch_insert_test_dependencies(conn, batch, schema=schema)
         
         if inserted == len(batch):
             loaded_count += inserted
@@ -128,33 +136,37 @@ def load_dependencies_to_database(conn, dependencies: list, batch_size: int = 10
     }
 
 
-def get_dependency_statistics(conn) -> dict:
+def get_dependency_statistics(conn, schema: Optional[str] = None) -> dict:
     """
     Get statistics about loaded dependencies.
     
     Args:
         conn: Database connection
+        schema: Optional schema name (defaults to DB_SCHEMA or search_path)
     
     Returns:
         Dictionary with statistics
     """
+    target_schema = schema or DB_SCHEMA
+    table_name = f"{target_schema}.test_dependencies" if schema else "test_dependencies"
+    
     with conn.cursor() as cursor:
         # Total dependencies
-        cursor.execute("SELECT COUNT(*) FROM test_dependencies")
+        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
         total_deps = cursor.fetchone()[0]
         
         # Unique production classes referenced
-        cursor.execute("SELECT COUNT(DISTINCT referenced_class) FROM test_dependencies")
+        cursor.execute(f"SELECT COUNT(DISTINCT referenced_class) FROM {table_name}")
         unique_classes = cursor.fetchone()[0]
         
         # Tests with dependencies
-        cursor.execute("SELECT COUNT(DISTINCT test_id) FROM test_dependencies")
+        cursor.execute(f"SELECT COUNT(DISTINCT test_id) FROM {table_name}")
         tests_with_deps = cursor.fetchone()[0]
         
         # Most referenced classes
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT referenced_class, COUNT(*) as count
-            FROM test_dependencies
+            FROM {table_name}
             GROUP BY referenced_class
             ORDER BY count DESC
             LIMIT 10
@@ -173,6 +185,13 @@ def main():
     """Main function to load test dependencies."""
     print_header("Step 3: Loading Test Dependencies")
     print()
+    
+    # Get schema from environment (for multi-repo support)
+    schema_name = os.getenv('TEST_REPO_SCHEMA', None)
+    target_schema = schema_name or DB_SCHEMA
+    if schema_name:
+        print_section(f"Using schema: {target_schema}")
+        print()
     
     # Step 1: Test database connection
     print_section("Testing database connection...")
@@ -206,21 +225,28 @@ def main():
     
     # Step 4: Load into database
     try:
-        with get_connection() as conn:
+        # Use schema-specific connection if schema_name is provided
+        schema_name = os.getenv('TEST_REPO_SCHEMA')
+        if schema_name:
+            conn_context = get_connection_with_schema(schema_name)
+        else:
+            conn_context = get_connection()
+        
+        with conn_context as conn:
             # Check current count
-            initial_count = count_table_records(conn, "test_dependencies")
+            initial_count = count_table_records(conn, "test_dependencies", schema=schema_name)
             print_item("Dependencies in database (before):", initial_count)
             print()
             
             # Load dependencies
-            stats = load_dependencies_to_database(conn, dependencies)
+            stats = load_dependencies_to_database(conn, dependencies, schema=schema_name)
             print()
             
             # Check final count
-            final_count = count_table_records(conn, "test_dependencies")
+            final_count = count_table_records(conn, "test_dependencies", schema=schema_name)
             
             # Step 5: Get statistics
-            dep_stats = get_dependency_statistics(conn)
+            dep_stats = get_dependency_statistics(conn, schema=schema_name)
             print()
             
             # Step 6: Display summary

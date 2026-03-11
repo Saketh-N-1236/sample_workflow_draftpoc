@@ -134,7 +134,8 @@ class PineconeBackend(VectorBackend):
                     'language': str(test.get('language', 'python')),
                     'is_async': 'true' if test.get('is_async', False) else 'false',
                     'markers': markers_str,
-                    'module': str(test.get('module', ''))
+                    'module': str(test.get('module', '')),
+                    'test_repo_id': str(test.get('test_repo_id', '')) if test.get('test_repo_id') else ''  # Store test_repo_id for filtering
                 }
                 
                 # Pinecone requires string IDs
@@ -170,7 +171,10 @@ class PineconeBackend(VectorBackend):
         self,
         query_embedding: List[float],
         similarity_threshold: float,
-        max_results: int
+        max_results: int,
+        top_k: Optional[int] = None,
+        top_p: Optional[float] = None,
+        test_repo_id: Optional[str] = None
     ) -> List[Dict]:
         """
         Search for similar tests using Pinecone cosine similarity.
@@ -179,6 +183,9 @@ class PineconeBackend(VectorBackend):
             query_embedding: Query embedding vector
             similarity_threshold: Minimum similarity (0.0 to 1.0)
             max_results: Maximum results to return
+            top_k: Optional top K parameter for vector search
+            top_p: Optional top P parameter for nucleus sampling
+            test_repo_id: Optional test repository ID to filter results
             
         Returns:
             List of test dictionaries with similarity scores
@@ -190,8 +197,9 @@ class PineconeBackend(VectorBackend):
         try:
             # Pinecone uses cosine similarity (0-1, where 1 is most similar)
             # Query with top_k (we'll filter by threshold after)
-            # Remove limit by using a very high value (Pinecone max is 10,000)
-            query_top_k = min(max(max_results * 2, 50), 10000) if max_results > 0 else 10000
+            # Use top_k from config if provided, otherwise use max_results
+            # Pinecone max is 10,000
+            query_top_k = top_k if top_k is not None and top_k > 0 else (min(max_results, 10000) if max_results > 0 else 10000)
             
             results = self.index.query(
                 vector=query_embedding,
@@ -201,12 +209,21 @@ class PineconeBackend(VectorBackend):
             
             # Filter by threshold and format results
             formatted_results = []
+            cumulative_prob = 0.0
+            
             for match in results.matches:
                 score = match.score  # Pinecone returns similarity (0-1)
                 
                 if score >= similarity_threshold:
                     metadata = match.metadata or {}
-                    formatted_results.append({
+                    
+                    # Filter by test_repo_id if provided
+                    if test_repo_id:
+                        metadata_repo_id = metadata.get('test_repo_id', '')
+                        if metadata_repo_id and metadata_repo_id != test_repo_id:
+                            continue  # Skip this result if test_repo_id doesn't match
+                    
+                    test_result = {
                         'test_id': match.id,
                         'method_name': metadata.get('method_name', ''),
                         'class_name': metadata.get('class_name', ''),
@@ -220,13 +237,21 @@ class PineconeBackend(VectorBackend):
                         'module': metadata.get('module', ''),
                         'similarity': float(score),
                         'confidence_score': min(int(score * 100), SEMANTIC_SCORE_CAP)
-                    })
+                    }
+                    
+                    # Apply top_p (nucleus sampling) if specified
+                    if top_p is not None and top_p > 0:
+                        # Convert similarity to probability-like score for top_p
+                        # Higher similarity = higher probability
+                        prob = score  # Use similarity as probability proxy
+                        cumulative_prob += prob
+                        if cumulative_prob > top_p:
+                            break  # Stop when cumulative probability exceeds top_p
+                    
+                    formatted_results.append(test_result)
             
-            # Sort by similarity (descending)
+            # Sort by similarity (descending) - caller will apply final limit
             formatted_results.sort(key=lambda x: x.get('similarity', 0), reverse=True)
-            # Only limit if max_results is specified and reasonable (< 10000)
-            if max_results > 0 and max_results < 10000:
-                return formatted_results[:max_results]
             return formatted_results
             
         except Exception as e:

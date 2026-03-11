@@ -28,9 +28,10 @@ from utils.output_formatter import (
     print_header, print_section, print_item, print_list,
     save_json, print_summary
 )
+from utils.config import get_output_dir
 
 # Configuration
-OUTPUT_DIR = Path(__file__).parent / "outputs"
+OUTPUT_DIR = get_output_dir()
 STEP4_OUTPUT = OUTPUT_DIR / "04_static_dependencies.json"
 OUTPUT_FILE = OUTPUT_DIR / "06_reverse_index.json"
 

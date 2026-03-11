@@ -7,9 +7,9 @@ const Sidebar = () => {
   const location = useLocation();
 
   const menuItems = [
-    { id: 'add', label: 'Add Repository', path: '/', icon: '➕' },
-    { id: 'list', label: 'View Repositories', path: '/repositories', icon: '📁' },
-    { id: 'analysis', label: 'Analysis Results', path: '/analysis-results', icon: '📊' },
+    { id: 'add', label: 'Add Repository', path: '/' },
+    { id: 'list', label: 'View Repositories', path: '/repositories' },
+    { id: 'test-repos', label: 'Manage Test Repositories', path: '/test-repositories' },
   ];
 
   const isActive = (path) => {
@@ -31,7 +31,6 @@ const Sidebar = () => {
             className={`sidebar-item ${isActive(item.path) ? 'active' : ''}`}
             onClick={() => navigate(item.path)}
           >
-            <span className="sidebar-icon">{item.icon}</span>
             <span className="sidebar-label">{item.label}</span>
           </button>
         ))}

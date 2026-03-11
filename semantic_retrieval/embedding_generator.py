@@ -6,9 +6,7 @@ Reads:
   - test_analysis/outputs/05_test_metadata.json
 
 For each test, builds a rich text description, generates a 768-dim
-embedding using Ollama nomic-embed-text, stores using configured backend:
-  - ChromaDB (default): Stores in semantic_retrieval/chromadb_data/
-  - pgvector: Stores in planon1.test_metadata.embedding (vector(768))
+embedding using Ollama nomic-embed-text, stores in Pinecone.
 
 Run ONCE after the full 8-step pipeline:
     python semantic_retrieval/embedding_generator.py
@@ -23,11 +21,14 @@ Pre-requisite:
     EMBEDDING_PROVIDER=ollama
     OLLAMA_BASE_URL=http://localhost:11434
     OLLAMA_EMBEDDING_MODEL=nomic-embed-text
-    VECTOR_BACKEND=chromadb  # or 'pgvector' if pgvector is installed
+    VECTOR_BACKEND=pinecone
+    PINECONE_API_KEY=your_api_key
+    PINECONE_INDEX_NAME=test-embeddings
 """
 
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -53,8 +54,14 @@ from deterministic.db_connection import get_connection
 from semantic_retrieval.backends import get_backend
 from semantic_retrieval.config import BATCH_SIZE, VECTOR_BACKEND
 from test_analysis.utils.output_formatter import print_header, print_section, print_item
+from test_analysis.utils.config import get_output_dir
 
-OUTPUT_DIR    = Path(__file__).parent.parent / "test_analysis" / "outputs"
+# Use schema-specific output directory if TEST_REPO_SCHEMA is set
+schema_name = os.getenv('TEST_REPO_SCHEMA')
+if schema_name:
+    OUTPUT_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs" / schema_name
+else:
+    OUTPUT_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs"
 REGISTRY_JSON = OUTPUT_DIR / "03_test_registry.json"
 METADATA_JSON = OUTPUT_DIR / "05_test_metadata.json"
 FUNCTION_MAPPINGS_JSON = OUTPUT_DIR / "04b_function_calls.json"
@@ -203,11 +210,18 @@ async def store_embeddings(tests: list, conn=None) -> tuple:
     """
     Generate and store embeddings for all tests in batches of 10.
     Uses LLMFactory.create_embedding_provider(settings) → OllamaClient.
-    Stores embeddings using the configured vector backend (ChromaDB or pgvector).
+    Stores embeddings in Pinecone.
     """
     settings = get_settings()
     llm      = LLMFactory.create_embedding_provider(settings)
     # llm is OllamaClient when EMBEDDING_PROVIDER=ollama
+
+    # Get test_repo_id from environment if available
+    test_repo_id = os.getenv('TEST_REPO_ID', None)
+    if test_repo_id:
+        # Add test_repo_id to all test objects for Pinecone metadata
+        for test in tests:
+            test['test_repo_id'] = test_repo_id
 
     # Get the appropriate backend
     backend = get_backend(conn)
@@ -239,6 +253,19 @@ async def store_embeddings(tests: list, conn=None) -> tuple:
                 # response.embeddings[0] is a Python list of 768 floats
                 embedding = response.embeddings[0]
                 embeddings_list.append(embedding)
+            except asyncio.CancelledError:
+                # Handle cancellation gracefully
+                print(f"\n  [WARN] Embedding generation cancelled for {test['test_id']}")
+                embeddings_list.append(None)
+                failed_generation += 1
+                # Re-raise to allow proper cleanup
+                raise
+            except KeyboardInterrupt:
+                # Handle keyboard interrupt gracefully
+                print(f"\n  [WARN] Embedding generation interrupted")
+                embeddings_list.append(None)
+                failed_generation += 1
+                raise
             except Exception as e:
                 print(f"\n  [WARN] Failed to generate embedding for {test['test_id']}: {e}")
                 embeddings_list.append(None)  # Placeholder for failed embedding
@@ -286,13 +313,8 @@ async def main():
     print_item("Tests loaded", len(tests))
     print()
 
-    # Get connection (needed for pgvector backend, optional for ChromaDB)
-    conn = get_connection() if VECTOR_BACKEND == 'pgvector' else None
-    try:
-        stored, failed = await store_embeddings(tests, conn)
-    finally:
-        if conn:
-            conn.close()
+    # Pinecone doesn't require a database connection
+    stored, failed = await store_embeddings(tests, conn=None)
 
     print()
     print_header("Step 9 Complete!")
@@ -301,4 +323,13 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\n  [INFO] Embedding generation interrupted by user")
+        sys.exit(130)  # Standard exit code for SIGINT
+    except Exception as e:
+        print(f"\n  [ERROR] Fatal error in embedding generation: {e}")
+        import traceback
+        traceback.print_exc()
+        sys.exit(1)

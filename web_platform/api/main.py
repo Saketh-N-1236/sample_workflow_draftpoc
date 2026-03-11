@@ -25,7 +25,6 @@ env_path = project_root / ".env"
 if not env_path.exists():
     env_path = web_platform_path / ".env"
 
-# Store env path for debug endpoint
 logger = logging.getLogger(__name__)
 _loaded_env_path = None
 if env_path.exists():
@@ -44,7 +43,7 @@ if str(project_root) not in sys.path:
 if str(web_platform_path) not in sys.path:
     sys.path.insert(0, str(web_platform_path))
 
-from api.routes import repositories, analysis, selection
+from api.routes import repositories, analysis, selection, test_repositories
 
 app = FastAPI(
     title="Test Impact Analysis API",
@@ -75,6 +74,16 @@ async def startup_event():
         logger.info("Repositories table verified/created successfully")
     except Exception as e:
         logger.warning(f"Could not verify repositories table on startup: {e}")
+    
+    # Ensure test repository tables exist
+    try:
+        from services.test_repo_service import create_test_repo_tables
+        if create_test_repo_tables():
+            logger.info("Test repository tables verified/created successfully")
+        else:
+            logger.warning("Failed to verify/create test repository tables")
+    except Exception as e:
+        logger.warning(f"Could not verify test repository tables on startup: {e}")
 
 # CORS middleware
 # In production, replace "*" with specific allowed origins
@@ -93,6 +102,7 @@ app.include_router(repositories.router, prefix="/api")
 app.include_router(analysis.repo_router, prefix="/api")
 app.include_router(analysis.analysis_router, prefix="/api")
 app.include_router(selection.router, prefix="/api")
+app.include_router(test_repositories.router)
 
 @app.get("/")
 async def root():
@@ -114,8 +124,17 @@ async def api_root():
 
 @app.get("/api/debug/env")
 async def debug_env():
-    """Debug endpoint to check environment variables (without exposing values)."""
+    """
+    Debug endpoint to check environment variables (without exposing values).
+    Only available in development mode (ENVIRONMENT=development).
+    """
     import os
+    environment = os.getenv('ENVIRONMENT', 'production').lower()
+    
+    if environment != 'development':
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Debug endpoint not available in production")
+    
     return {
         "GITHUB_API_TOKEN": "set" if os.getenv('GITHUB_API_TOKEN') else "NOT set",
         "GITHUB_API_URL": os.getenv('GITHUB_API_URL', 'not set'),
@@ -125,7 +144,7 @@ async def debug_env():
         "PINECONE_INDEX_NAME": os.getenv('PINECONE_INDEX_NAME', 'not set'),
         "PINECONE_ENVIRONMENT": os.getenv('PINECONE_ENVIRONMENT', 'not set'),
         "VECTOR_BACKEND": os.getenv('VECTOR_BACKEND', 'not set'),
-        "TEST_REPO_PATH": os.getenv('TEST_REPO_PATH', 'not set'),
+        "TEST_REPO_PATH": "set" if os.getenv('TEST_REPO_PATH') else "NOT set",
         "PROJECT_ROOT": str(project_root) if 'project_root' in globals() else "unknown",
         "WEB_PLATFORM_PATH": str(web_platform_path) if 'web_platform_path' in globals() else "unknown",
         "env_file_loaded_from": _loaded_env_path if '_loaded_env_path' in globals() else "unknown"

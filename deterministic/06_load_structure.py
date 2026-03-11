@@ -17,24 +17,34 @@ Run this script:
 
 import sys
 import json
+import os
 from pathlib import Path
+from typing import Optional
 
 # Add current directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from db_connection import get_connection, test_connection
+from db_connection import get_connection, get_connection_with_schema, test_connection, DB_SCHEMA
 from utils.db_helpers import count_table_records
 from utils.output_formatter import print_header, print_section, print_item
 from psycopg2.extras import execute_values
 
 # Path to structure JSON file
-TEST_ANALYSIS_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs"
-STRUCTURE_FILE = TEST_ANALYSIS_DIR / "07_test_structure.json"
+# Use schema-specific output directory if TEST_REPO_SCHEMA is set
+# Resolve path relative to this script's location, not current working directory
+_script_dir = Path(__file__).parent.resolve()
+schema_name = os.getenv('TEST_REPO_SCHEMA')
+if schema_name:
+    TEST_ANALYSIS_DIR = _script_dir.parent / "test_analysis" / "outputs" / schema_name
+else:
+    TEST_ANALYSIS_DIR = _script_dir.parent / "test_analysis" / "outputs"
 
 
 def load_structure_json() -> dict:
     """
     Load test structure data from JSON file.
+    
+    Checks both main directory and language-specific subdirectories.
     
     Returns:
         Dictionary with structure data
@@ -42,13 +52,27 @@ def load_structure_json() -> dict:
     Raises:
         FileNotFoundError: If JSON file doesn't exist
     """
-    if not STRUCTURE_FILE.exists():
+    # Try main directory first, then _java, _python, _javascript subdirectories
+    structure_file = TEST_ANALYSIS_DIR / "07_test_structure.json"
+    if not structure_file.exists():
+        # Try language-specific subdirectories
+        for lang_dir in ['_java', '_python', '_javascript', '_js']:
+            candidate = TEST_ANALYSIS_DIR / lang_dir / "07_test_structure.json"
+            if candidate.exists():
+                structure_file = candidate
+                break
+    
+    if not structure_file.exists():
         raise FileNotFoundError(
-            f"Structure file not found: {STRUCTURE_FILE}\n"
-            f"Please run test_analysis/07_map_test_structure.py first."
+            f"Structure file not found. Checked:\n"
+            f"  - {TEST_ANALYSIS_DIR / '07_test_structure.json'}\n"
+            f"  - {TEST_ANALYSIS_DIR / '_java' / '07_test_structure.json'}\n"
+            f"  - {TEST_ANALYSIS_DIR / '_python' / '07_test_structure.json'}\n"
+            f"  - {TEST_ANALYSIS_DIR / '_javascript' / '07_test_structure.json'}\n"
+            f"Please run test analysis first."
         )
     
-    with open(STRUCTURE_FILE, 'r', encoding='utf-8') as f:
+    with open(structure_file, 'r', encoding='utf-8') as f:
         data = json.load(f)
         return data.get('data', data)
 
@@ -63,6 +87,12 @@ def prepare_structure_data(structure_data: dict) -> list:
     Returns:
         List of structure dictionaries ready for database insertion
     """
+    # First, try to use structure_rows if available (new format with test_count)
+    structure_rows = structure_data.get('structure_rows', [])
+    if structure_rows:
+        return structure_rows
+    
+    # Fallback to old format
     directory_structure = structure_data.get('directory_structure', {})
     directories = directory_structure.get('directories', {})
     files_by_directory = directory_structure.get('files_by_directory', {})
@@ -79,6 +109,7 @@ def prepare_structure_data(structure_data: dict) -> list:
             'directory_path': category,  # Category name as directory path
             'category': category,
             'file_count': stats.get('file_count', len(files)),
+            'test_count': stats.get('test_count', 0),
             'total_lines': stats.get('total_lines', 0)
         }
         structure_list.append(structure_entry)
@@ -93,6 +124,7 @@ def prepare_structure_data(structure_data: dict) -> list:
                 'directory_path': package,
                 'category': None,  # Will be determined from files
                 'file_count': len(info.get('files', [])),
+                'test_count': 0,  # Could be calculated from test registry if needed
                 'total_lines': 0  # Could be calculated if needed
             }
             structure_list.append(structure_entry)
@@ -100,13 +132,14 @@ def prepare_structure_data(structure_data: dict) -> list:
     return structure_list
 
 
-def load_structure_to_database(conn, structure_list: list) -> dict:
+def load_structure_to_database(conn, structure_list: list, schema: Optional[str] = None) -> dict:
     """
     Load structure data into database.
     
     Args:
         conn: Database connection
         structure_list: List of structure dictionaries
+        schema: Optional schema name (defaults to DB_SCHEMA or search_path)
     
     Returns:
         Dictionary with loading statistics
@@ -115,32 +148,75 @@ def load_structure_to_database(conn, structure_list: list) -> dict:
     loaded_count = 0
     failed_count = 0
     
+    target_schema = schema or DB_SCHEMA
+    table_name = f"{target_schema}.test_structure" if schema else "test_structure"
+    
     print_section(f"Loading {total_records} structure records...")
     
     try:
         with conn.cursor() as cursor:
+            # Check if unique constraint exists on directory_path
+            cursor.execute(f"""
+                SELECT constraint_name 
+                FROM information_schema.table_constraints 
+                WHERE table_schema = %s 
+                AND table_name = 'test_structure' 
+                AND constraint_type = 'UNIQUE'
+                AND constraint_name IN (
+                    SELECT constraint_name 
+                    FROM information_schema.constraint_column_usage 
+                    WHERE table_schema = %s 
+                    AND table_name = 'test_structure' 
+                    AND column_name = 'directory_path'
+                )
+            """, (target_schema, target_schema))
+            has_unique = cursor.fetchone() is not None
+            
             # Prepare values for batch insert
             values = [
                 (
                     s['directory_path'],
                     s['category'],
                     s['file_count'],
+                    s.get('test_count', 0),
                     s['total_lines']
                 )
                 for s in structure_list
             ]
             
             # Use execute_values for efficient batch insert
-            execute_values(
-                cursor,
-                """
-                INSERT INTO test_structure 
-                (directory_path, category, file_count, total_lines)
-                VALUES %s
-                ON CONFLICT DO NOTHING
-                """,
-                values
-            )
+            if has_unique:
+                # Use ON CONFLICT if unique constraint exists
+                execute_values(
+                    cursor,
+                    f"""
+                    INSERT INTO {table_name} 
+                    (directory_path, category, file_count, test_count, total_lines)
+                    VALUES %s
+                    ON CONFLICT (directory_path) DO UPDATE SET
+                        category = EXCLUDED.category,
+                        file_count = EXCLUDED.file_count,
+                        test_count = EXCLUDED.test_count,
+                        total_lines = EXCLUDED.total_lines
+                    """,
+                    values
+                )
+            else:
+                # Delete existing records first, then insert
+                for value in values:
+                    cursor.execute(
+                        f"DELETE FROM {table_name} WHERE directory_path = %s",
+                        (value[0],)
+                    )
+                execute_values(
+                    cursor,
+                    f"""
+                    INSERT INTO {table_name} 
+                    (directory_path, category, file_count, test_count, total_lines)
+                    VALUES %s
+                    """,
+                    values
+                )
             conn.commit()
             loaded_count = total_records
             
@@ -156,35 +232,39 @@ def load_structure_to_database(conn, structure_list: list) -> dict:
     }
 
 
-def get_structure_statistics(conn) -> dict:
+def get_structure_statistics(conn, schema: Optional[str] = None) -> dict:
     """
     Get statistics about loaded structure data.
     
     Args:
         conn: Database connection
+        schema: Optional schema name (defaults to DB_SCHEMA or search_path)
     
     Returns:
         Dictionary with statistics
     """
+    target_schema = schema or DB_SCHEMA
+    table_name = f"{target_schema}.test_structure" if schema else "test_structure"
+    
     with conn.cursor() as cursor:
         # Total structure records
-        cursor.execute("SELECT COUNT(*) FROM test_structure")
+        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
         total_records = cursor.fetchone()[0]
         
         # Total files across all directories
-        cursor.execute("SELECT SUM(file_count) FROM test_structure")
+        cursor.execute(f"SELECT SUM(file_count) FROM {table_name}")
         total_files = cursor.fetchone()[0] or 0
         
         # Total lines across all directories
-        cursor.execute("SELECT SUM(total_lines) FROM test_structure")
+        cursor.execute(f"SELECT SUM(total_lines) FROM {table_name}")
         total_lines = cursor.fetchone()[0] or 0
         
         # Structure by category
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT category, COUNT(*) as dir_count, 
                    SUM(file_count) as total_files, 
                    SUM(total_lines) as total_lines
-            FROM test_structure
+            FROM {table_name}
             WHERE category IS NOT NULL
             GROUP BY category
             ORDER BY category
@@ -212,9 +292,16 @@ def main():
     print_header("Step 6: Loading Test Structure")
     print()
     
-    # Step 1: Test database connection
+    # Get schema from environment (for multi-repo support)
+    schema_name = os.getenv('TEST_REPO_SCHEMA', None)
+    target_schema = schema_name or DB_SCHEMA
+    if schema_name:
+        print_section(f"Using schema: {target_schema}")
+        print()
+    
+    # Step 1: Test database connection (pass schema to test)
     print_section("Testing database connection...")
-    if not test_connection():
+    if not test_connection(schema_to_test=target_schema):
         print()
         print("ERROR: Cannot connect to database!")
         return
@@ -224,7 +311,15 @@ def main():
     print_section("Loading structure data from JSON...")
     try:
         structure_data = load_structure_json()
-        print_item("JSON file loaded:", str(STRUCTURE_FILE))
+        # Get the actual file path that was found
+        structure_file = TEST_ANALYSIS_DIR / "07_test_structure.json"
+        if not structure_file.exists():
+            for lang_dir in ['_java', '_python', '_javascript', '_js']:
+                candidate = TEST_ANALYSIS_DIR / lang_dir / "07_test_structure.json"
+                if candidate.exists():
+                    structure_file = candidate
+                    break
+        print_item("JSON file loaded:", str(structure_file))
     except FileNotFoundError as e:
         print(f"ERROR: {e}")
         return
@@ -242,21 +337,27 @@ def main():
     
     # Step 4: Load into database
     try:
-        with get_connection() as conn:
+        # Use schema-specific connection if schema_name is provided
+        if schema_name:
+            conn_context = get_connection_with_schema(schema_name)
+        else:
+            conn_context = get_connection()
+        
+        with conn_context as conn:
             # Check current count
-            initial_count = count_table_records(conn, "test_structure")
+            initial_count = count_table_records(conn, "test_structure", schema=schema_name)
             print_item("Structure records in database (before):", initial_count)
             print()
             
             # Load structure
-            stats = load_structure_to_database(conn, structure_list)
+            stats = load_structure_to_database(conn, structure_list, schema=schema_name)
             print()
             
             # Check final count
-            final_count = count_table_records(conn, "test_structure")
+            final_count = count_table_records(conn, "test_structure", schema=schema_name)
             
             # Step 5: Get statistics
-            struct_stats = get_structure_statistics(conn)
+            struct_stats = get_structure_statistics(conn, schema=schema_name)
             print()
             
             # Step 6: Display summary

@@ -100,11 +100,13 @@ async def connect_repository(repo_data: RepositoryCreate):
             
             gitlab_service = GitLabService()
             
-            # Log token status for debugging
+            # Verify API token is configured
             import os
             token_set = bool(os.getenv('GITLAB_API_TOKEN'))
-            logger.info(f"GITLAB_API_TOKEN is {'set' if token_set else 'NOT set'}")
-            logger.info(f"GitLabService API token is {'set' if gitlab_service.api_token else 'NOT set'}")
+            if not token_set:
+                logger.warning("GITLAB_API_TOKEN is not set in environment variables")
+            if not gitlab_service.api_token:
+                logger.warning("GitLabService API token is not configured")
             
             has_access = await gitlab_service.validate_access(repo_data.url)
             
@@ -126,11 +128,13 @@ async def connect_repository(repo_data: RepositoryCreate):
             
             github_service = GitHubService()
             
-            # Log token status for debugging
+            # Verify API token is configured
             import os
             token_set = bool(os.getenv('GITHUB_API_TOKEN'))
-            logger.info(f"GITHUB_API_TOKEN is {'set' if token_set else 'NOT set'}")
-            logger.info(f"GitHubService API token is {'set' if github_service.api_token else 'NOT set'}")
+            if not token_set:
+                logger.warning("GITHUB_API_TOKEN is not set in environment variables")
+            if not github_service.api_token:
+                logger.warning("GitHubService API token is not configured")
             
             has_access = await github_service.validate_access(repo_data.url)
             

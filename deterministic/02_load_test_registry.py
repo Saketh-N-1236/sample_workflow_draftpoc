@@ -19,16 +19,24 @@ Run this script:
 import sys
 import json
 from pathlib import Path
+from typing import Optional
 
 # Add current directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from db_connection import get_connection, test_connection
+from db_connection import get_connection, get_connection_with_schema, test_connection, DB_SCHEMA
+import os
 from utils.db_helpers import batch_insert_test_registry, count_table_records
 from utils.output_formatter import print_header, print_section, print_item
 
 # Path to test registry JSON file
-TEST_ANALYSIS_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs"
+# Use schema-specific output directory if TEST_REPO_SCHEMA is set
+import os
+schema_name = os.getenv('TEST_REPO_SCHEMA')
+if schema_name:
+    TEST_ANALYSIS_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs" / schema_name
+else:
+    TEST_ANALYSIS_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs"
 TEST_REGISTRY_FILE = TEST_ANALYSIS_DIR / "03_test_registry.json"
 
 
@@ -97,7 +105,7 @@ def prepare_test_data(registry_data: dict, parser_registry=None) -> list:
     return prepared_tests
 
 
-def load_tests_to_database(conn, tests: list, batch_size: int = 50) -> dict:
+def load_tests_to_database(conn, tests: list, batch_size: int = 50, schema: Optional[str] = None) -> dict:
     """
     Load tests into database in batches.
     
@@ -125,7 +133,7 @@ def load_tests_to_database(conn, tests: list, batch_size: int = 50) -> dict:
         print_progress(i + len(batch), total_tests, "tests")
         
         # Insert batch
-        inserted = batch_insert_test_registry(conn, batch)
+        inserted = batch_insert_test_registry(conn, batch, schema=schema)
         
         if inserted == len(batch):
             loaded_count += inserted
@@ -164,6 +172,13 @@ def main():
     print_header("Step 2: Loading Test Registry")
     print()
     
+    # Get schema from environment (for multi-repo support)
+    schema_name = os.getenv('TEST_REPO_SCHEMA', None)
+    target_schema = schema_name or DB_SCHEMA
+    if schema_name:
+        print_section(f"Using schema: {target_schema}")
+        print()
+    
     # Step 1: Test database connection
     print_section("Testing database connection...")
     if not test_connection():
@@ -198,17 +213,23 @@ def main():
     
     # Step 5: Load into database
     try:
-        with get_connection() as conn:
+        # Use schema-specific connection if schema_name is provided
+        if schema_name:
+            conn_context = get_connection_with_schema(target_schema)
+        else:
+            conn_context = get_connection()
+        
+        with conn_context as conn:
             # Check current count
-            initial_count = count_table_records(conn, "test_registry")
+            initial_count = count_table_records(conn, "test_registry", schema=schema_name)
             print_item("Tests in database (before):", initial_count)
             print()
             
             # Load tests
-            stats = load_tests_to_database(conn, tests)
+            stats = load_tests_to_database(conn, tests, schema=schema_name)
             
             # Check final count
-            final_count = count_table_records(conn, "test_registry")
+            final_count = count_table_records(conn, "test_registry", schema=schema_name)
             print()
             
             # Step 5: Display summary

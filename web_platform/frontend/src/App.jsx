@@ -5,7 +5,8 @@ import Sidebar from './components/Sidebar';
 import AddRepository from './pages/AddRepository';
 import RepositoryList from './pages/RepositoryList';
 import RepositoryDetail from './pages/RepositoryDetail';
-import AnalysisResults from './pages/AnalysisResults';
+import ManageTestRepositories from './pages/ManageTestRepositories';
+import TestRepositoryAnalysis from './pages/TestRepositoryAnalysis';
 import './styles/App.css';
 
 function App() {
@@ -20,7 +21,8 @@ function App() {
               <Route path="/" element={<AddRepository />} />
               <Route path="/repositories" element={<RepositoryList />} />
               <Route path="/repositories/:repoId" element={<RepositoryDetail />} />
-              <Route path="/analysis-results" element={<AnalysisResults />} />
+              <Route path="/test-repositories" element={<ManageTestRepositories />} />
+              <Route path="/test-repositories/:testRepoId/analysis" element={<TestRepositoryAnalysis />} />
             </Routes>
           </div>
         </div>

@@ -10,23 +10,51 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 # Add parent directory to path
-sys.path.insert(0, str(Path(__file__).parent.parent))
+_project_root = Path(__file__).parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
-from deterministic.db_connection import get_connection, DB_SCHEMA
+# Add git_diff_processor directory to path for relative imports
+_git_diff_processor_dir = Path(__file__).parent
+if str(_git_diff_processor_dir) not in sys.path:
+    sys.path.insert(0, str(_git_diff_processor_dir))
 
-# Import from utils (relative to this file)
-sys.path.insert(0, str(Path(__file__).parent))
-from utils.diff_parser import (
-    parse_git_diff,
-    build_search_queries,
-)
+from deterministic.db_connection import get_connection, get_connection_with_schema, DB_SCHEMA
+
+# Import from utils (try absolute import first, then relative)
+try:
+    from git_diff_processor.utils.diff_parser import (
+        parse_git_diff,
+        build_search_queries,
+    )
+except ImportError:
+    # Fallback: use relative import (git_diff_processor dir is already in path)
+    from utils.diff_parser import (
+        parse_git_diff,
+        build_search_queries,
+    )
 
 # Import from main processor module (same directory)
 # We need to import the functions directly
 import importlib.util
 processor_path = Path(__file__).parent / "git_diff_processor.py"
+
+# Ensure paths are set before loading the module
+# This is critical for the module's imports to work correctly
+_git_diff_processor_dir = processor_path.parent
+if str(_git_diff_processor_dir) not in sys.path:
+    sys.path.insert(0, str(_git_diff_processor_dir))
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
 spec = importlib.util.spec_from_file_location("git_diff_processor_module", processor_path)
 processor_module = importlib.util.module_from_spec(spec)
+
+# Set __file__ and __name__ attributes before execution to help with imports
+processor_module.__file__ = str(processor_path)
+processor_module.__name__ = "git_diff_processor_module"
+processor_module.__package__ = "git_diff_processor"
+
 spec.loader.exec_module(processor_module)
 
 find_affected_tests = processor_module.find_affected_tests
@@ -38,7 +66,10 @@ async def process_diff_and_select_tests(
     diff_content: str,
     project_root: Optional[Path] = None,
     use_semantic: bool = True,
-    test_repo_path: Optional[str] = None
+    test_repo_path: Optional[str] = None,
+    schema_name: Optional[str] = None,
+    file_list: Optional[List[str]] = None,
+    semantic_config: Optional[Dict] = None
 ) -> Dict[str, Any]:
     """
     Process git diff content and return selected tests.
@@ -52,6 +83,7 @@ async def process_diff_and_select_tests(
         project_root: Optional project root path (for parsing, defaults to parent)
         use_semantic: Whether to use semantic search (default: True)
         test_repo_path: Optional test repository path (for module resolution)
+        schema_name: Optional schema name for multi-repo support (defaults to DB_SCHEMA)
     
     Returns:
         Dictionary with test selection results:
@@ -92,7 +124,8 @@ async def process_diff_and_select_tests(
     
     # Step 1: Parse git diff (works with any diff content)
     # Note: parse_git_diff doesn't need parser_registry - it's used in build_search_queries
-    parsed_diff = parse_git_diff(diff_content)
+    # Pass file_list for GitLab API diffs that don't include file headers
+    parsed_diff = parse_git_diff(diff_content, file_list=file_list)
     
     # Step 2: Build search queries (dynamic - works with any file changes)
     # Use test_repo_path if provided, otherwise use project_root
@@ -117,11 +150,42 @@ async def process_diff_and_select_tests(
     logger.info(f"Search queries - Function changes: {len(search_queries.get('changed_functions', []))}")
     logger.info(f"Search queries - Test file candidates: {len(search_queries.get('test_file_candidates', []))}")
     
-    with get_connection() as conn:
+    # Use schema-specific connection if schema_name is provided
+    target_schema = schema_name or DB_SCHEMA
+    connection_func = get_connection_with_schema(target_schema) if schema_name else get_connection()
+    
+    with connection_func as conn:
+        # Debug: Verify schema has data
+        with conn.cursor() as cursor:
+            try:
+                cursor.execute(f"SELECT COUNT(*) FROM {target_schema}.test_registry")
+                test_count = cursor.fetchone()[0]
+                cursor.execute(f"SELECT COUNT(*) FROM {target_schema}.reverse_index")
+                reverse_count = cursor.fetchone()[0]
+                cursor.execute(f"SELECT COUNT(*) FROM {target_schema}.test_function_mapping")
+                func_count = cursor.fetchone()[0]
+                logger.info(f"[{target_schema}] Database stats - Tests: {test_count}, Reverse index: {reverse_count}, Function mappings: {func_count}")
+            except Exception as e:
+                logger.warning(f"[{target_schema}] Could not query database stats: {e}")
+        
         # Get AST-based results (this uses all strategies: function-level, direct files, exact, module patterns)
-        logger.info("Running AST-based test selection...")
-        ast_results = find_tests_ast_only(conn, search_queries, parsed_diff.get('file_changes', []))
+        logger.info(f"Running AST-based test selection (schema: {target_schema})...")
+        logger.debug(f"Search queries: exact_matches={len(search_queries.get('exact_matches', []))}, "
+                    f"module_matches={len(search_queries.get('module_matches', []))}, "
+                    f"changed_functions={len(search_queries.get('changed_functions', []))}, "
+                    f"test_file_candidates={len(search_queries.get('test_file_candidates', []))}")
+        ast_results = find_tests_ast_only(conn, search_queries, parsed_diff.get('file_changes', []), schema=target_schema)
         logger.info(f"AST-based matching found {ast_results.get('total_tests', 0)} tests")
+        
+        # Debug: If no AST results, log what was searched
+        if ast_results.get('total_tests', 0) == 0:
+            logger.warning(f"[{target_schema}] No AST matches found. Search details:")
+            if search_queries.get('exact_matches'):
+                logger.warning(f"  Exact matches searched: {search_queries['exact_matches'][:5]}")
+            if search_queries.get('changed_functions'):
+                logger.warning(f"  Functions searched: {[f['module']+'.'+f['function'] for f in search_queries['changed_functions'][:5]]}")
+            if search_queries.get('test_file_candidates'):
+                logger.warning(f"  Test files searched: {search_queries['test_file_candidates'][:5]}")
         
         # Get semantic results if enabled
         semantic_results = {'total_tests': 0, 'tests': []}
@@ -130,7 +194,18 @@ async def process_diff_and_select_tests(
                 logger.info("Running semantic search...")
                 # Use async version since we're in an async context
                 from git_diff_processor.git_diff_processor import find_tests_semantic_only_async
-                semantic_results = await find_tests_semantic_only_async(conn, search_queries, parsed_diff.get('file_changes', []))
+                # Get test_repo_id from environment if available
+                import os
+                test_repo_id = os.getenv('TEST_REPO_ID')
+                semantic_results = await find_tests_semantic_only_async(
+                    conn, 
+                    search_queries, 
+                    parsed_diff.get('file_changes', []), 
+                    schema=target_schema, 
+                    test_repo_id=test_repo_id,
+                    semantic_config=semantic_config,
+                    diff_content=diff_content  # Pass diff content for Advanced RAG
+                )
                 logger.info(f"Semantic search found {semantic_results.get('total_tests', 0)} tests")
             except Exception as e:
                 logger.warning(f"Semantic search failed: {e}")
@@ -143,7 +218,10 @@ async def process_diff_and_select_tests(
             conn, 
             search_queries, 
             parsed_diff.get('file_changes', []),
-            prefer_function_level=True
+            prefer_function_level=True,
+            schema=target_schema,
+            semantic_config=semantic_config,  # Pass semantic config to find_affected_tests
+            diff_content=diff_content  # Pass diff content for Advanced RAG
         )
         logger.info(f"Combined results: {combined_results.get('total_tests', 0)} tests")
         
@@ -389,6 +467,9 @@ async def process_diff_and_select_tests(
             test_id = test.get('test_id')
             confidence_score = test.get('confidence_score', 0)
             
+            # Check if test has LLM score (LLM-assessed tests should be included)
+            has_llm_score = test_id in llm_scores_map or test.get('llm_score') is not None
+            
             # Check if test has semantic match
             # IMPORTANT: Only mark as semantic if it was ORIGINALLY found by semantic search
             # Don't rely on similarity value alone, as it might have been added during merging
@@ -407,21 +488,39 @@ async def process_diff_and_select_tests(
             
             # Include test if:
             # 1. Passes threshold, OR
-            # 2. Has semantic match (semantic matches are included regardless of AST score), OR
-            # 3. Has AST match ONLY (AST-only tests should be included because they're direct matches with high confidence)
+            # 2. Has LLM score (LLM-assessed tests are high priority), OR
+            # 3. Has semantic match (semantic matches are included regardless of AST score), OR
+            # 4. Has AST match ONLY (AST-only tests should be included because they're direct matches with high confidence)
             passes_threshold = (confidence_score / 100.0) >= MIN_CONFIDENCE_THRESHOLD
             
             # AST-only tests should be included because they're direct matches (high confidence)
             # Even if weighted score is low due to no semantic component
             is_ast_only = has_ast and not has_semantic
             
-            if passes_threshold or has_semantic or is_ast_only:
+            if passes_threshold or has_llm_score or has_semantic or is_ast_only:
                 # Set explicit flags based on match_details and original sources
                 test['is_ast_match'] = has_ast
                 test['is_semantic_match'] = has_semantic
                 filtered_tests.append(test)
         
         logger.info(f"Applied minimum threshold filter: {len(combined_results.get('tests', []))} -> {len(filtered_tests)} tests")
+        
+        # Log details about filtered tests for debugging
+        if llm_scores_map:
+            llm_filtered = [t for t in filtered_tests if t.get('test_id') in llm_scores_map]
+            logger.info(f"Tests with LLM scores in filtered results: {len(llm_filtered)} out of {len(llm_scores_map)} assessed")
+            if len(llm_filtered) < len(llm_scores_map):
+                missing_llm_tests = set(llm_scores_map.keys()) - {t.get('test_id') for t in filtered_tests}
+                logger.warning(f"LLM-assessed tests missing from filtered results: {len(missing_llm_tests)} tests")
+                if missing_llm_tests:
+                    logger.warning(f"Missing test IDs (first 5): {list(missing_llm_tests)[:5]}")
+                    # Log why they were filtered out
+                    for missing_id in list(missing_llm_tests)[:3]:
+                        # Try to find the test in combined_results before filtering
+                        missing_test = next((t for t in combined_results.get('tests', []) if t.get('test_id') == missing_id), None)
+                        if missing_test:
+                            logger.warning(f"  Test {missing_id}: confidence_score={missing_test.get('confidence_score', 0)}, has_ast={missing_test.get('is_ast_match', False)}, has_semantic={missing_test.get('is_semantic_match', False)}")
+        
         combined_results['tests'] = filtered_tests
         combined_results['total_tests'] = len(filtered_tests)
         
@@ -514,11 +613,13 @@ async def process_diff_and_select_tests(
         # Check database status
         try:
             with conn.cursor() as cursor:
-                cursor.execute(f"SELECT COUNT(*) FROM {DB_SCHEMA}.reverse_index")
+                # Use target_schema if available, otherwise DB_SCHEMA
+                target_schema = schema_name or DB_SCHEMA
+                cursor.execute(f"SELECT COUNT(*) FROM {target_schema}.reverse_index")
                 diagnostics['db_reverse_index_count'] = cursor.fetchone()[0]
-                cursor.execute(f"SELECT COUNT(*) FROM {DB_SCHEMA}.test_registry")
+                cursor.execute(f"SELECT COUNT(*) FROM {target_schema}.test_registry")
                 diagnostics['db_test_registry_count'] = cursor.fetchone()[0]
-                cursor.execute(f"SELECT COUNT(*) FROM {DB_SCHEMA}.test_function_mapping")
+                cursor.execute(f"SELECT COUNT(*) FROM {target_schema}.test_function_mapping")
                 diagnostics['db_function_mapping_count'] = cursor.fetchone()[0]
         except Exception as e:
             logger.warning(f"Could not get database diagnostics: {e}")

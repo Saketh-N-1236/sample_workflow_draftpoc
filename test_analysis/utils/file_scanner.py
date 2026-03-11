@@ -26,11 +26,22 @@ try:
 except ImportError:
     CONFIG_AVAILABLE = False
 
-# Default test file patterns (Python, for backward compatibility)
-DEFAULT_TEST_FILE_PATTERNS = [
-    r'test_.*\.py$',      # test_*.py
-    r'.*_test\.py$',      # *_test.py
-    r'.*Test\.py$',       # *Test.py (Java-style, but sometimes used in Python)
+# Default test file patterns - language-agnostic
+DEFAULT_TEST_FILE_PATTERNS = {
+    '.py':   [r'test_.*\.py$', r'.*_test\.py$', r'.*tests?\.py$'],
+    '.java': [r'.*Test\.java$', r'.*Tests\.java$', r'.*TestCase\.java$', r'Test.*\.java$'],
+    '.js':   [r'.*\.test\.js$', r'.*\.spec\.js$', r'.*test.*\.js$'],
+    '.ts':   [r'.*\.test\.ts$', r'.*\.spec\.ts$', r'.*test.*\.ts$'],
+    '.tsx':  [r'.*\.test\.tsx$', r'.*\.spec\.tsx$'],
+    '.kt':   [r'.*Test\.kt$', r'.*Tests\.kt$'],
+    '.rb':   [r'.*_spec\.rb$', r'.*_test\.rb$'],
+    '.go':   [r'.*_test\.go$'],
+    '.cs':   [r'.*Test\.cs$', r'.*Tests\.cs$'],
+}
+
+# Flatten for backward compatibility
+DEFAULT_TEST_FILE_PATTERNS_FLAT = [
+    pattern for patterns in DEFAULT_TEST_FILE_PATTERNS.values() for pattern in patterns
 ]
 
 # Global cache for language configs
@@ -111,8 +122,11 @@ def is_test_file(filepath: Path, config_path: Path = None) -> bool:
                         if re.match(regex, filename, re.IGNORECASE):
                             return True
     
-    # Fallback to default Python patterns
-    for pattern in DEFAULT_TEST_FILE_PATTERNS:
+    # Fallback to language-specific default patterns
+    file_ext = filepath.suffix.lower()
+    patterns = DEFAULT_TEST_FILE_PATTERNS.get(file_ext, DEFAULT_TEST_FILE_PATTERNS_FLAT)
+    
+    for pattern in patterns:
         if re.match(pattern, filename, re.IGNORECASE):
             return True
     
@@ -289,6 +303,7 @@ def get_file_metadata(filepath: Path) -> Dict[str, any]:
         - size_bytes: File size in bytes
         - line_count: Number of lines in file
         - directory: Directory name (e.g., 'unit', 'integration')
+        - language: Detected programming language
     
     Example:
         >>> metadata = get_file_metadata(Path("test_repository/unit/test_agent.py"))
@@ -307,12 +322,21 @@ def get_file_metadata(filepath: Path) -> Dict[str, any]:
         # Determine directory category
         directory = _categorize_directory(filepath)
         
+        # Detect language
+        try:
+            from utils.universal_parser import detect_language
+            language = detect_language(filepath)
+        except ImportError:
+            # Fallback if universal_parser not available
+            language = filepath.suffix[1:] if filepath.suffix else 'unknown'
+        
         return {
             "path": str(filepath),
             "absolute_path": str(filepath.absolute()),
             "size_bytes": size_bytes,
             "line_count": line_count,
-            "directory": directory
+            "directory": directory,
+            "language": language
         }
     except Exception as e:
         # Return minimal metadata if file can't be read
@@ -322,58 +346,52 @@ def get_file_metadata(filepath: Path) -> Dict[str, any]:
             "size_bytes": 0,
             "line_count": 0,
             "directory": "unknown",
+            "language": "unknown",
             "error": str(e)
         }
 
 
 def _categorize_directory(filepath: Path) -> str:
     """
-    Categorize a test file by its directory structure.
-    
-    Enhanced version with better detection for integration/e2e tests.
+    Categorize a test file based on its path — works for any repository layout.
+    Uses keyword matching on all path parts, not just top-level directories.
     
     Args:
         filepath: Path to the test file
     
     Returns:
-        Category string: 'unit', 'integration', 'e2e', or 'other'
+        Category string: 'unit', 'integration', 'e2e', or 'unit' (default)
     
     Example:
         >>> _categorize_directory(Path("test_repository/unit/test_agent.py"))
         'unit'
+        >>> _categorize_directory(Path("src/test/java/com/example/integration/TestService.java"))
+        'integration'
     """
-    parts = filepath.parts
     path_str = str(filepath).lower()
+    path_parts = set(filepath.parts)
     
-    # Check for e2e/end-to-end first (most specific)
-    if 'e2e' in path_str or 'end_to_end' in path_str or 'endtoend' in path_str or 'end-to-end' in path_str:
+    # E2E indicators (check first — more specific)
+    e2e_keywords = {'e2e', 'end_to_end', 'end-to-end', 'endtoend', 'acceptance', 'selenium', 'cypress', 'playwright', 'webdriver'}
+    if any(kw in path_str for kw in e2e_keywords):
         return 'e2e'
     
-    # Check for integration
-    if 'integration' in path_str:
+    # Integration indicators
+    integration_keywords = {'integration', 'integrated', 'functional', 'contract', 'api_test', 'api-test', 'api', 'service_test', 'service-test'}
+    if any(kw in path_str for kw in integration_keywords):
         return 'integration'
     
-    # Check for unit
-    if 'unit' in path_str:
+    # Unit indicators
+    unit_keywords = {'unit', 'unittest', 'spec', '__tests__', 'test_unit', 'test/unit', 'tests/unit'}
+    if any(kw in path_str for kw in unit_keywords):
         return 'unit'
     
-    # Check parent directory name
-    if len(parts) > 1:
-        parent_dir = parts[-2].lower()
-        if parent_dir in ['e2e', 'end_to_end', 'endtoend', 'end-to-end']:
-            return 'e2e'
-        elif parent_dir == 'integration':
-            return 'integration'
-        elif parent_dir == 'unit':
-            return 'unit'
+    # Default: if in a 'tests' or 'test' directory at any level, treat as unit
+    if any('test' in part.lower() for part in path_parts):
+        return 'unit'
     
-    # Default to unit if in test directories (generic, not hardcoded)
-    # Support common test directory patterns
-    test_dir_patterns = ['/test/', '/tests/', '\\test\\', '\\tests\\', 'test/', 'tests/']
-    if any(pattern in path_str for pattern in test_dir_patterns):
-        return 'unit'  # Default fallback
-    
-    return 'other'
+    # Final fallback: default to unit (most common test type)
+    return 'unit'
 
 
 def group_files_by_category(files: List[Path]) -> Dict[str, List[Path]]:

@@ -116,6 +116,15 @@ def scan_multi_language(
         # Get parser for each file and extract info
         for test_file in test_files:
             parser = get_parser(test_file)
+            
+            # Fallback: For TypeScript files, try JavaScript parser if TypeScript parser not available
+            if parser is None and test_file.suffix.lower() in ('.ts', '.tsx'):
+                # Try to get JavaScript parser as fallback (syntax is compatible for test extraction)
+                js_file = test_file.with_suffix('.js')
+                parser = get_parser(js_file)
+                if parser:
+                    print(f"Note: Using JavaScript parser for TypeScript file {test_file.name} (TypeScript parser not available)")
+            
             if parser:
                 file_info = {
                     'file_path': test_file,
@@ -124,6 +133,9 @@ def scan_multi_language(
                     'extension': test_file.suffix
                 }
                 results[language].append(file_info)
+            else:
+                # Log clearly instead of silent drop
+                print(f"WARNING: No parser available for {test_file.suffix}, skipping {test_file.name}")
     
     return dict(results)
 

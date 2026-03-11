@@ -24,15 +24,16 @@ import re
 sys.path.insert(0, str(Path(__file__).parent))
 
 from utils.file_scanner import scan_directory
-from utils.ast_parser import parse_file, extract_imports
+from utils.language_parser import parse_file, extract_imports
 from utils.output_formatter import (
     print_header, print_section, print_item, print_list,
     save_json, print_progress
 )
+from utils.config import get_test_repo_path, get_output_dir
 
 # Configuration
-TEST_REPO_PATH = Path(__file__).parent.parent / "test_repository"
-OUTPUT_DIR = Path(__file__).parent / "outputs"
+TEST_REPO_PATH = get_test_repo_path()
+OUTPUT_DIR = get_output_dir()
 OUTPUT_FILE = OUTPUT_DIR / "02_framework_detection.json"
 
 
@@ -41,10 +42,8 @@ def check_config_files(repo_path: Path) -> dict:
     Check for test framework configuration files.
     
     Looks for:
-    - pytest.ini
-    - setup.cfg (may contain pytest config)
-    - pyproject.toml (may contain pytest config)
-    - tox.ini (may contain pytest config)
+    - Python: pytest.ini, setup.cfg, pyproject.toml, tox.ini
+    - Java: pom.xml (Maven), build.gradle (Gradle)
     
     Returns:
         Dictionary with configuration file findings
@@ -54,6 +53,8 @@ def check_config_files(repo_path: Path) -> dict:
         "setup_cfg": None,
         "pyproject_toml": None,
         "tox_ini": None,
+        "pom_xml": None,
+        "build_gradle": None,
         "config_found": False
     }
     
@@ -88,6 +89,38 @@ def check_config_files(repo_path: Path) -> dict:
         findings["tox_ini"] = str(tox_ini)
         findings["config_found"] = True
     
+    # Check for pom.xml (Maven - Java)
+    pom_xml = repo_path / "pom.xml"
+    if pom_xml.exists():
+        findings["pom_xml"] = str(pom_xml)
+        findings["config_found"] = True
+        # Try to detect JUnit/TestNG dependencies
+        try:
+            with open(pom_xml, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+                if 'junit' in content.lower():
+                    findings["has_junit_dependency"] = True
+                if 'testng' in content.lower():
+                    findings["has_testng_dependency"] = True
+        except:
+            pass
+    
+    # Check for build.gradle (Gradle - Java)
+    build_gradle = repo_path / "build.gradle"
+    if build_gradle.exists():
+        findings["build_gradle"] = str(build_gradle)
+        findings["config_found"] = True
+        # Try to detect JUnit/TestNG dependencies
+        try:
+            with open(build_gradle, 'r', encoding='utf-8', errors='ignore') as f:
+                content = f.read()
+                if 'junit' in content.lower():
+                    findings["has_junit_dependency"] = True
+                if 'testng' in content.lower():
+                    findings["has_testng_dependency"] = True
+        except:
+            pass
+    
     return findings
 
 
@@ -113,7 +146,7 @@ def check_conftest(repo_path: Path) -> dict:
         # Parse conftest.py to check for pytest usage
         tree = parse_file(conftest)
         if tree:
-            imports = extract_imports(tree)
+            imports = extract_imports(tree, conftest)
             
             # Check for pytest imports
             if any('pytest' in imp.lower() for imp in imports['all_imports']):
@@ -151,6 +184,18 @@ def analyze_test_files(repo_path: Path) -> dict:
             "files_with_import": 0,
             "files_with_testcase": 0,
             "total_indicators": 0
+        },
+        "junit": {
+            "files_with_import": 0,
+            "files_with_test_annotation": 0,
+            "files_with_test_class": 0,
+            "total_indicators": 0
+        },
+        "testng": {
+            "files_with_import": 0,
+            "files_with_test_annotation": 0,
+            "files_with_test_class": 0,
+            "total_indicators": 0
         }
     }
     
@@ -163,7 +208,7 @@ def analyze_test_files(repo_path: Path) -> dict:
             continue
         
         # Extract imports
-        imports = extract_imports(tree)
+        imports = extract_imports(tree, filepath)
         all_imports_str = ' '.join(imports['all_imports']).lower()
         
         # Check for pytest
@@ -175,6 +220,16 @@ def analyze_test_files(repo_path: Path) -> dict:
         if 'unittest' in all_imports_str:
             framework_indicators["unittest"]["files_with_import"] += 1
             framework_indicators["unittest"]["total_indicators"] += 1
+        
+        # Check for JUnit (Java)
+        if 'junit' in all_imports_str or 'org.junit' in all_imports_str:
+            framework_indicators["junit"]["files_with_import"] += 1
+            framework_indicators["junit"]["total_indicators"] += 1
+        
+        # Check for TestNG (Java)
+        if 'testng' in all_imports_str or 'org.testng' in all_imports_str:
+            framework_indicators["testng"]["files_with_import"] += 1
+            framework_indicators["testng"]["total_indicators"] += 1
         
         # Check file content for patterns
         try:
@@ -195,6 +250,21 @@ def analyze_test_files(repo_path: Path) -> dict:
                 if 'TestCase' in content and 'unittest' in content:
                     framework_indicators["unittest"]["files_with_testcase"] += 1
                     framework_indicators["unittest"]["total_indicators"] += 1
+                
+                # Check for JUnit @Test annotation (Java)
+                if '@Test' in content or '@org.junit.Test' in content:
+                    framework_indicators["junit"]["files_with_test_annotation"] += 1
+                    framework_indicators["junit"]["total_indicators"] += 1
+                
+                # Check for JUnit test classes (ending with Test)
+                if filepath.suffix == '.java' and (filepath.stem.endswith('Test') or filepath.stem.endswith('Tests')):
+                    framework_indicators["junit"]["files_with_test_class"] += 1
+                    framework_indicators["junit"]["total_indicators"] += 1
+                
+                # Check for TestNG @Test annotation (Java)
+                if '@org.testng.annotations.Test' in content:
+                    framework_indicators["testng"]["files_with_test_annotation"] += 1
+                    framework_indicators["testng"]["total_indicators"] += 1
         except:
             pass
     
@@ -219,8 +289,10 @@ def determine_framework(config_findings: dict, conftest_findings: dict,
     
     pytest_score = 0
     unittest_score = 0
+    junit_score = 0
+    testng_score = 0
     
-    # Score from config files
+    # Score from config files (Python)
     if config_findings.get("pytest_ini"):
         pytest_score += 3
         result["indicators"].append("pytest.ini found")
@@ -234,32 +306,59 @@ def determine_framework(config_findings: dict, conftest_findings: dict,
         pytest_score += 1
         result["indicators"].append("conftest.py uses pytest")
     
+    # Score from Java config files
+    if config_findings.get("pom_xml"):
+        if config_findings.get("has_junit_dependency"):
+            junit_score += 3
+            result["indicators"].append("pom.xml with JUnit dependency found")
+        if config_findings.get("has_testng_dependency"):
+            testng_score += 3
+            result["indicators"].append("pom.xml with TestNG dependency found")
+    
+    if config_findings.get("build_gradle"):
+        if config_findings.get("has_junit_dependency"):
+            junit_score += 3
+            result["indicators"].append("build.gradle with JUnit dependency found")
+        if config_findings.get("has_testng_dependency"):
+            testng_score += 3
+            result["indicators"].append("build.gradle with TestNG dependency found")
+    
     # Score from file analysis
     pytest_file_score = file_indicators["pytest"]["total_indicators"]
     unittest_file_score = file_indicators["unittest"]["total_indicators"]
+    junit_file_score = file_indicators["junit"]["total_indicators"]
+    testng_file_score = file_indicators["testng"]["total_indicators"]
     
     pytest_score += pytest_file_score
     unittest_score += unittest_file_score
+    junit_score += junit_file_score
+    testng_score += testng_file_score
     
-    # Determine primary framework
-    if pytest_score > unittest_score and pytest_score > 0:
-        result["primary_framework"] = "pytest"
-        if pytest_score >= 5:
+    # Determine primary framework (prioritize Java frameworks if Java files detected)
+    scores = {
+        "pytest": pytest_score,
+        "unittest": unittest_score,
+        "junit": junit_score,
+        "testng": testng_score
+    }
+    
+    max_score = max(scores.values())
+    if max_score > 0:
+        # Get framework with highest score
+        primary = max(scores.items(), key=lambda x: x[1])[0]
+        result["primary_framework"] = primary
+        
+        if max_score >= 5:
             result["confidence"] = "high"
-        elif pytest_score >= 3:
+        elif max_score >= 3:
             result["confidence"] = "medium"
-    elif unittest_score > pytest_score and unittest_score > 0:
-        result["primary_framework"] = "unittest"
-        if unittest_score >= 3:
-            result["confidence"] = "high"
         else:
-            result["confidence"] = "medium"
-    elif pytest_score == unittest_score and pytest_score > 0:
-        result["primary_framework"] = "mixed"
-        result["confidence"] = "medium"
+            result["confidence"] = "low"
     
     result["pytest_score"] = pytest_score
     result["unittest_score"] = unittest_score
+    result["junit_score"] = junit_score
+    result["testng_score"] = testng_score
     
     return result
 
@@ -317,6 +416,15 @@ def main():
     print_item("  - Files with unittest import:", file_indicators["unittest"]["files_with_import"])
     print_item("  - Files with TestCase:", file_indicators["unittest"]["files_with_testcase"])
     print()
+    print_item("JUnit indicators:", file_indicators["junit"]["total_indicators"])
+    print_item("  - Files with JUnit import:", file_indicators["junit"]["files_with_import"])
+    print_item("  - Files with @Test annotation:", file_indicators["junit"]["files_with_test_annotation"])
+    print_item("  - Files with Test class:", file_indicators["junit"]["files_with_test_class"])
+    print()
+    print_item("TestNG indicators:", file_indicators["testng"]["total_indicators"])
+    print_item("  - Files with TestNG import:", file_indicators["testng"]["files_with_import"])
+    print_item("  - Files with @Test annotation:", file_indicators["testng"]["files_with_test_annotation"])
+    print()
     
     # Step 4: Determine primary framework
     print_section("Determining primary framework...")
@@ -326,6 +434,8 @@ def main():
     print_item("Confidence:", framework_result["confidence"])
     print_item("Pytest score:", framework_result["pytest_score"])
     print_item("Unittest score:", framework_result["unittest_score"])
+    print_item("JUnit score:", framework_result["junit_score"])
+    print_item("TestNG score:", framework_result["testng_score"])
     print()
     
     if framework_result["indicators"]:
@@ -335,11 +445,15 @@ def main():
         print()
     
     # Step 5: Prepare output data
+    primary_framework = framework_result["primary_framework"]
     output_data = {
-        "primary_framework": framework_result["primary_framework"],
+        "primary_framework": primary_framework,
+        "framework": primary_framework,  # Add this for API compatibility
         "confidence": framework_result["confidence"],
         "pytest_score": framework_result["pytest_score"],
         "unittest_score": framework_result["unittest_score"],
+        "junit_score": framework_result["junit_score"],
+        "testng_score": framework_result["testng_score"],
         "config_files": config_findings,
         "conftest": conftest_findings,
         "file_indicators": file_indicators,

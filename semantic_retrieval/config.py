@@ -5,7 +5,7 @@ Configuration constants for semantic search.
 import os
 from pathlib import Path
 
-# Vector backend selection ('pinecone', 'chromadb', or 'pgvector')
+# Vector backend selection (only 'pinecone' is supported)
 VECTOR_BACKEND = os.getenv('VECTOR_BACKEND', 'pinecone').lower()
 
 # Pinecone configuration
@@ -13,13 +13,7 @@ PINECONE_API_KEY = os.getenv('PINECONE_API_KEY', '')
 PINECONE_INDEX_NAME = os.getenv('PINECONE_INDEX_NAME', 'test-embeddings')
 PINECONE_ENVIRONMENT = os.getenv('PINECONE_ENVIRONMENT', 'us-east-1')
 
-# ChromaDB data path (default: semantic_retrieval/chromadb_data)
-# Deprecated: Use Pinecone instead
-_default_chromadb_path = Path(__file__).parent / "chromadb_data"
-CHROMADB_DATA_PATH = os.getenv('CHROMADB_DATA_PATH', str(_default_chromadb_path))
-
 # Default similarity threshold (0.3 = 30% similarity minimum)
-# Note: ChromaDB uses L2 distance, converted to similarity, so scores are typically 0.2-0.5
 # Lower threshold (0.3) allows more semantic matches while still filtering noise
 DEFAULT_SIMILARITY_THRESHOLD = 0.3
 
@@ -41,3 +35,13 @@ SEMANTIC_THRESHOLD_STRICT = 0.5
 SEMANTIC_THRESHOLD_MODERATE = 0.4
 SEMANTIC_THRESHOLD_LENIENT = 0.3
 MIN_RESULTS_PER_TIER = 5
+
+# Advanced RAG default configuration
+DEFAULT_USE_ADVANCED_RAG = True
+DEFAULT_USE_QUERY_REWRITING = True
+DEFAULT_USE_LLM_RERANKING = True
+DEFAULT_RERANK_TOP_K = 50
+DEFAULT_NUM_QUERY_VARIATIONS = 3
+# Quality threshold for Advanced RAG filtering (0.0-1.0)
+# Only tests with rerank_score >= this threshold will be returned
+DEFAULT_QUALITY_THRESHOLD = 0.4  # 40% minimum relevance

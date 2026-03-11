@@ -5,7 +5,8 @@ import os
 import json
 import asyncio
 from pathlib import Path
-from fastapi import APIRouter, HTTPException
+from typing import Optional
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from datetime import datetime
 
@@ -229,8 +230,14 @@ async def refresh_analysis():
 
 
 @analysis_router.get("/embedding-status")
-async def get_embedding_status():
-    """Get status of embeddings in Pinecone."""
+async def get_embedding_status(test_repo_id: Optional[str] = Query(None)):
+    """
+    Get status of embeddings in Pinecone.
+    
+    Args:
+        test_repo_id: Optional test repository ID to filter embeddings by.
+                     If provided, only counts embeddings for that test repository.
+    """
     try:
         import os
         from datetime import datetime
@@ -252,29 +259,46 @@ async def get_embedding_status():
                 
                 if backend_name == "pinecone" and hasattr(backend, 'index'):
                     try:
-                        # Get index stats
-                        stats = backend.index.describe_index_stats()
-                        total_embeddings = stats.get('total_vector_count', 0)
+                        if test_repo_id:
+                            # Filter by test_repo_id using Pinecone metadata filter
+                            # We need to query with a filter to count vectors for this test_repo_id
+                            # Use a dummy query vector (all zeros) with filter
+                            dummy_vector = [0.0] * EMBEDDING_DIMENSIONS
+                            
+                            # Query with metadata filter to count vectors
+                            # Note: Pinecone doesn't have a direct count API with filters,
+                            # so we query with a very high top_k and count results
+                            filter_dict = {"test_repo_id": {"$eq": str(test_repo_id)}}
+                            
+                            try:
+                                # Query with filter to get count
+                                # Use top_k=10000 (max) to get all matching vectors
+                                query_result = backend.index.query(
+                                    vector=dummy_vector,
+                                    top_k=10000,
+                                    filter=filter_dict,
+                                    include_metadata=False
+                                )
+                                total_embeddings = len(query_result.matches)
+                            except Exception as filter_error:
+                                import logging
+                                logger = logging.getLogger(__name__)
+                                logger.warning(f"Failed to filter embeddings by test_repo_id: {filter_error}")
+                                # Fallback: get total count without filter
+                                stats = backend.index.describe_index_stats()
+                                total_embeddings = stats.get('total_vector_count', 0)
+                        else:
+                            # Get total index stats (no filter)
+                            stats = backend.index.describe_index_stats()
+                            total_embeddings = stats.get('total_vector_count', 0)
+                        
                         index_health = "healthy" if total_embeddings > 0 else "empty"
                     except Exception as e:
                         import logging
                         logger = logging.getLogger(__name__)
                         logger.warning(f"Failed to get Pinecone stats: {e}")
                         index_health = "unhealthy"
-                elif backend_name == "pgvector":
-                    # Query database for embedding count
-                    try:
-                        cursor = conn.cursor()
-                        cursor.execute("SELECT COUNT(*) FROM test_metadata WHERE embedding IS NOT NULL")
-                        result = cursor.fetchone()
-                        total_embeddings = result[0] if result else 0
-                        index_health = "healthy" if total_embeddings > 0 else "empty"
-                        cursor.close()
-                    except Exception as e:
-                        import logging
-                        logger = logging.getLogger(__name__)
-                        logger.warning(f"Failed to get pgvector count: {e}")
-                        index_health = "unhealthy"
+                # Only Pinecone is supported - no pgvector handling needed
                 
                 # Try to get last generated time from analysis outputs
                 last_generated = None
@@ -294,7 +318,8 @@ async def get_embedding_status():
                     "index_health": index_health,
                     "embedding_dimensions": EMBEDDING_DIMENSIONS,
                     "backend": backend_name,
-                    "index_name": index_name if backend_name == "pinecone" else None
+                    "index_name": index_name if backend_name == "pinecone" else None,
+                    "test_repo_id": test_repo_id  # Include test_repo_id in response
                 }
         except Exception as e:
             import logging
@@ -307,6 +332,7 @@ async def get_embedding_status():
                 "embedding_dimensions": EMBEDDING_DIMENSIONS,
                 "backend": backend_name,
                 "index_name": index_name if backend_name == "pinecone" else None,
+                "test_repo_id": test_repo_id,
                 "error": str(e)
             }
     except Exception as e:

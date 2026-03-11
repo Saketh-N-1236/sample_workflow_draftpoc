@@ -90,3 +90,29 @@ def get_language_config_path() -> Optional[Path]:
         return default_config.resolve()
     
     return None
+
+
+def get_output_dir() -> Path:
+    """
+    Get output directory for test analysis results.
+    
+    If TEST_REPO_SCHEMA is set, creates a schema-specific subdirectory.
+    This ensures each test repository's analysis results are isolated.
+    
+    Returns:
+        Path to output directory (absolute path)
+    """
+    project_root = get_project_root()
+    base_output_dir = project_root / "test_analysis" / "outputs"
+    
+    # Check for schema-specific output directory
+    schema_name = os.getenv('TEST_REPO_SCHEMA')
+    if schema_name:
+        # Use schema-specific subdirectory
+        schema_output_dir = base_output_dir / schema_name
+        schema_output_dir.mkdir(parents=True, exist_ok=True)
+        return schema_output_dir.resolve()
+    
+    # Fallback to default output directory
+    base_output_dir.mkdir(parents=True, exist_ok=True)
+    return base_output_dir.resolve()

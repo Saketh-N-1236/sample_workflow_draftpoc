@@ -19,17 +19,24 @@ Run this script:
 
 import sys
 import json
+import os
 from pathlib import Path
+from typing import Optional
 
 # Add current directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from db_connection import get_connection, test_connection
+from db_connection import get_connection, get_connection_with_schema, test_connection, DB_SCHEMA
 from utils.db_helpers import batch_insert_test_function_mapping, count_table_records
 from utils.output_formatter import print_header, print_section, print_item
 
 # Path to function calls JSON file
-TEST_ANALYSIS_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs"
+# Use schema-specific output directory if TEST_REPO_SCHEMA is set
+schema_name = os.getenv('TEST_REPO_SCHEMA')
+if schema_name:
+    TEST_ANALYSIS_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs" / schema_name
+else:
+    TEST_ANALYSIS_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs"
 FUNCTION_CALLS_FILE = TEST_ANALYSIS_DIR / "04b_function_calls.json"
 
 
@@ -86,13 +93,14 @@ def prepare_function_mapping_data(function_calls_data: dict) -> list:
     return valid_mappings
 
 
-def load_function_mappings_to_database(conn, mappings: list, batch_size: int = 100) -> dict:
+def load_function_mappings_to_database(conn, mappings: list, schema: Optional[str] = None, batch_size: int = 100) -> dict:
     """
     Load function mappings into database in batches.
     
     Args:
         conn: Database connection
         mappings: List of function mapping dictionaries
+        schema: Optional schema name
         batch_size: Number of mappings to insert per batch
     
     Returns:
@@ -114,7 +122,7 @@ def load_function_mappings_to_database(conn, mappings: list, batch_size: int = 1
         print(f"Processing: {current}/{total_mappings} mappings ({percentage:.1f}%)", end='\r')
         
         # Insert batch
-        inserted = batch_insert_test_function_mapping(conn, batch)
+        inserted = batch_insert_test_function_mapping(conn, batch, schema=schema)
         
         if inserted == len(batch):
             loaded_count += inserted
@@ -131,46 +139,50 @@ def load_function_mappings_to_database(conn, mappings: list, batch_size: int = 1
     }
 
 
-def get_function_mapping_statistics(conn) -> dict:
+def get_function_mapping_statistics(conn, schema: Optional[str] = None) -> dict:
     """
     Get statistics about loaded function mappings.
     
     Args:
         conn: Database connection
+        schema: Optional schema name
     
     Returns:
         Dictionary with statistics
     """
+    # Use schema prefix if provided
+    table_prefix = f"{schema}." if schema else ""
+    
     with conn.cursor() as cursor:
         # Total mappings
-        cursor.execute("SELECT COUNT(*) FROM test_function_mapping")
+        cursor.execute(f"SELECT COUNT(*) FROM {table_prefix}test_function_mapping")
         total_mappings = cursor.fetchone()[0]
         
         # Unique tests
-        cursor.execute("SELECT COUNT(DISTINCT test_id) FROM test_function_mapping")
+        cursor.execute(f"SELECT COUNT(DISTINCT test_id) FROM {table_prefix}test_function_mapping")
         unique_tests = cursor.fetchone()[0]
         
         # Unique module.function combinations
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT COUNT(DISTINCT module_name || '.' || function_name) 
-            FROM test_function_mapping
+            FROM {table_prefix}test_function_mapping
         """)
         unique_functions = cursor.fetchone()[0]
         
         # Most called functions
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT module_name, function_name, COUNT(*) as test_count
-            FROM test_function_mapping
+            FROM {table_prefix}test_function_mapping
             GROUP BY module_name, function_name
             ORDER BY test_count DESC
             LIMIT 10
         """)
         top_functions = cursor.fetchall()
         
-        # Count by source type
-        cursor.execute("""
+        # Count by source type (if column exists)
+        cursor.execute(f"""
             SELECT source, COUNT(*) as count
-            FROM test_function_mapping
+            FROM {table_prefix}test_function_mapping
             GROUP BY source
         """)
         by_source = cursor.fetchall()
@@ -225,21 +237,28 @@ def main():
     
     # Step 4: Load into database
     try:
-        with get_connection() as conn:
+        # Use schema-specific connection if schema_name is provided
+        schema_name = os.getenv('TEST_REPO_SCHEMA')
+        if schema_name:
+            conn_context = get_connection_with_schema(schema_name)
+        else:
+            conn_context = get_connection()
+        
+        with conn_context as conn:
             # Check current count
-            initial_count = count_table_records(conn, "test_function_mapping")
+            initial_count = count_table_records(conn, "test_function_mapping", schema=schema_name)
             print_item("Function mappings in database (before):", initial_count)
             print()
             
             # Load function mappings
-            stats = load_function_mappings_to_database(conn, mappings)
+            stats = load_function_mappings_to_database(conn, mappings, schema=schema_name)
             print()
             
             # Check final count
-            final_count = count_table_records(conn, "test_function_mapping")
+            final_count = count_table_records(conn, "test_function_mapping", schema=schema_name)
             
             # Step 5: Get statistics
-            func_stats = get_function_mapping_statistics(conn)
+            func_stats = get_function_mapping_statistics(conn, schema=schema_name)
             print()
             
             # Step 6: Display summary

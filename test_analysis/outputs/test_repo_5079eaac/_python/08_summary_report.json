@@ -1,0 +1,47 @@
+{
+  "generated_at": "2026-03-09T19:00:50.552642",
+  "data": {
+    "test_repository_overview": {
+      "total_test_files": 16,
+      "total_lines_of_code": 2856,
+      "test_framework": "pytest",
+      "framework_confidence": "high",
+      "language": "python"
+    },
+    "test_inventory": {
+      "total_tests": 171,
+      "total_test_classes": 0,
+      "tests_by_type": {
+        "e2e": 7,
+        "integration": 10,
+        "unit": 154
+      }
+    },
+    "dependencies": {
+      "total_production_classes_referenced": 140,
+      "total_dependency_mappings": 105,
+      "average_tests_per_class": 1.22,
+      "tests_with_dependencies": 13
+    },
+    "metadata": {
+      "tests_with_descriptions": 171,
+      "tests_with_markers": 119,
+      "async_tests": 0,
+      "parameterized_tests": 0,
+      "disabled_tests": 0
+    },
+    "summary_for_db": {
+      "files_analyzed": 16,
+      "functions_extracted": 0,
+      "modules_identified": 10,
+      "test_files": 16,
+      "total_tests": 171,
+      "total_test_classes": 0,
+      "total_test_methods": 171,
+      "total_dependencies": 105,
+      "total_production_classes": 140,
+      "tests_with_descriptions": 171,
+      "framework": "pytest"
+    }
+  }
+}

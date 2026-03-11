@@ -37,15 +37,10 @@ const AnalysisResults = () => {
     
     try {
       const response = await api.refreshAnalysis();
-      console.log('Analysis refreshed:', response.data);
       
       // Display progress messages if available
       if (response.data.progress && Array.isArray(response.data.progress)) {
         setProgressMessages(response.data.progress);
-        // Log each progress message to console
-        response.data.progress.forEach(msg => {
-          console.log(`[Analysis Progress] ${msg}`);
-        });
       }
       
       // Reload results after refresh
@@ -363,15 +358,15 @@ const AnalysisResults = () => {
   };
 
   const sections = [
-    { id: 'summary', label: 'Summary', icon: '📊' },
-    { id: 'test_files', label: 'Test Files', icon: '📄' },
-    { id: 'framework', label: 'Framework Detection', icon: '🔍' },
-    { id: 'test_registry', label: 'Test Registry', icon: '📋' },
-    { id: 'test_metadata', label: 'Test Metadata', icon: '🏷️' },
-    { id: 'static_dependencies', label: 'Static Dependencies', icon: '🔗' },
-    { id: 'function_calls', label: 'Function Calls', icon: '⚙️' },
-    { id: 'reverse_index', label: 'Reverse Index', icon: '🔄' },
-    { id: 'test_structure', label: 'Test Structure', icon: '🗂️' },
+    { id: 'summary', label: 'Summary' },
+    { id: 'test_files', label: 'Test Files' },
+    { id: 'framework', label: 'Framework Detection' },
+    { id: 'test_registry', label: 'Test Registry' },
+    { id: 'test_metadata', label: 'Test Metadata' },
+    { id: 'static_dependencies', label: 'Static Dependencies' },
+    { id: 'function_calls', label: 'Function Calls' },
+    { id: 'reverse_index', label: 'Reverse Index' },
+    { id: 'test_structure', label: 'Test Structure' },
   ];
 
   if (isLoading) {
@@ -433,7 +428,7 @@ const AnalysisResults = () => {
         }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
             <h3 style={{ margin: 0, fontSize: '16px', color: '#333' }}>
-              {isRefreshing ? '🔄 Analysis in Progress...' : '✅ Analysis Complete'}
+              {isRefreshing ? 'Analysis in Progress...' : 'Analysis Complete'}
             </h3>
             {!isRefreshing && progressMessages.length > 0 && (
               <button
@@ -460,8 +455,8 @@ const AnalysisResults = () => {
                 key={idx} 
                 style={{ 
                   padding: '4px 0',
-                  color: msg.includes('❌') ? '#c62828' : msg.includes('✅') ? '#2e7d32' : msg.includes('⚠️') ? '#f57c00' : '#333',
-                  borderLeft: msg.includes('❌') ? '3px solid #c62828' : msg.includes('✅') ? '3px solid #2e7d32' : '3px solid transparent',
+                  color: msg.includes('[ERROR]') || msg.includes('ERROR') ? '#c62828' : msg.includes('[OK]') || msg.includes('SUCCESS') ? '#2e7d32' : msg.includes('[WARN]') || msg.includes('WARNING') ? '#f57c00' : '#333',
+                  borderLeft: msg.includes('[ERROR]') || msg.includes('ERROR') ? '3px solid #c62828' : msg.includes('[OK]') || msg.includes('SUCCESS') ? '3px solid #2e7d32' : '3px solid transparent',
                   paddingLeft: '8px',
                   marginLeft: msg.startsWith('  →') ? '16px' : '0'
                 }}
@@ -502,7 +497,6 @@ const AnalysisResults = () => {
             className={`tab ${activeSection === section.id ? 'active' : ''}`}
             onClick={() => setActiveSection(section.id)}
           >
-            <span style={{ marginRight: '8px' }}>{section.icon}</span>
             {section.label}
           </button>
         ))}

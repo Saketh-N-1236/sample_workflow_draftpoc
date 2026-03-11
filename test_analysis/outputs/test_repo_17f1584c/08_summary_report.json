@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-03-10T12:09:51.925572",
+  "data": {
+    "test_repository_overview": {
+      "total_test_files": 100,
+      "total_lines_of_code": 3255,
+      "test_framework": "junit5",
+      "framework_confidence": "high"
+    },
+    "test_inventory": {
+      "total_tests": 386,
+      "total_test_classes": 100,
+      "tests_by_type": {
+        "unit": 374,
+        "integration": 12
+      }
+    },
+    "summary_for_db": {
+      "files_analyzed": 100,
+      "total_tests": 386,
+      "framework": "junit5"
+    }
+  }
+}

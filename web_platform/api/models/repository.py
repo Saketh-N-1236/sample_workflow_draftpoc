@@ -104,7 +104,8 @@ class LLMInputOutput(BaseModel):
 
 class SelectionResponse(BaseModel):
     """Response model for test selection results."""
-    totalTests: int = 0
+    totalTests: int = 0  # Number of selected tests
+    totalTestsInDb: int = 0  # Total tests in database (for coverage calculation)
     astMatches: int = 0
     semanticMatches: int = 0
     tests: list[dict] = []

@@ -9,6 +9,11 @@ psycopg2-binary>=2.9.0
 # Environment variable management (.env file support)
 python-dotenv>=1.0.0
 
+# Web Framework (FastAPI)
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6  # Required for file uploads (UploadFile, Form)
+
 # Optional: Enhanced AST parsing (for better docstring extraction)
 # Uncomment if needed for advanced parsing features
 # ast-comments>=1.1.3
@@ -23,12 +28,13 @@ python-dotenv>=1.0.0
 # - typing (Type hints)
 # - contextlib (Context managers)
 # - sys, os (System operations)
+# - zipfile (ZIP file handling)
+# - hashlib (SHA-256 hashing)
+# - shutil (File operations)
 
 # Vector database for semantic search
-# Pinecone is the default and recommended backend
+# Pinecone is the only supported backend
 pinecone>=3.0.0
-# ChromaDB is deprecated but kept for backward compatibility
-# chromadb>=0.4.0
 pydantic>=2.0.0
 pydantic-settings>=2.0.0
 httpx>=0.24.0

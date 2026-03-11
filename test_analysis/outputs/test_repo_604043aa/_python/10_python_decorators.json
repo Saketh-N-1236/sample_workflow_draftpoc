@@ -1,0 +1,759 @@
+{
+  "generated_at": "2026-03-10T17:08:22.844738",
+  "data": {
+    "total_decorators": 150,
+    "tests_with_decorators": 114,
+    "decorators": [
+      {
+        "test_id": "test_0001",
+        "decorator_name": "pytest.fixture",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0001",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0002",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0003",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0004",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0005",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0006",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0007",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0008",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0009",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0009",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0010",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0011",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0011",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0012",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0013",
+        "decorator_name": "pytest.fixture",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0034",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0035",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0039",
+        "decorator_name": "pytest.fixture",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0039",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0040",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0041",
+        "decorator_name": "pytest.fixture",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0042",
+        "decorator_name": "pytest.fixture",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0043",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0044",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0046",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0047",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0048",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0049",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0049",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0057",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0058",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0059",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0060",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0061",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0062",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0063",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0063",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0064",
+        "decorator_name": "pytest.fixture",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0064",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0065",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0066",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0067",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0068",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0069",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0070",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0071",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0071",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0072",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0073",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0074",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0075",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0076",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0077",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0078",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0079",
+        "decorator_name": "pytest.fixture",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0087",
+        "decorator_name": "pytest.fixture",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0087",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0088",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0089",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0090",
+        "decorator_name": "pytest.fixture",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0092",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0093",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0094",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0095",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0096",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0097",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0098",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0114",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0115",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0115",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0116",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0116",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0117",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0117",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0118",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0119",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0120",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0120",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0121",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0121",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0122",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0122",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0123",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0123",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0124",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0124",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0125",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0125",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0126",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0126",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0127",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0127",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0128",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0128",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0129",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0129",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0130",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0130",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0131",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0131",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0132",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0132",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0133",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0133",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0134",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0134",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0135",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0135",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0135",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0136",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0136",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0137",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0142",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0143",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0144",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0163",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0164",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0164",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0165",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0166",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0167",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0187",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0188",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0188",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0189",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0189",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0190",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0191",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0192",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0193",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0194",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0195",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0196",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0197",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0198",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0199",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0200",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0200",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0201",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0201",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0236",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0237",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0238",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0239",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0240",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0243",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0244",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0245",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      },
+      {
+        "test_id": "test_0245",
+        "decorator_name": "pytest.mark.asyncio",
+        "decorator_args": {}
+      }
+    ]
+  }
+}

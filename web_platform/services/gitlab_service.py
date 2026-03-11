@@ -317,9 +317,16 @@ class GitLabService:
                     if file_diff.get('diff'):
                         diff_content.append(file_diff['diff'])
                 
-                # Calculate stats
+                # Calculate stats - try API fields first, fallback to parsing diff content
                 additions = sum(d.get('added_lines', 0) or 0 for d in diff_text)
                 deletions = sum(d.get('removed_lines', 0) or 0 for d in diff_text)
+                
+                # If API doesn't provide line counts, parse the diff content
+                if additions == 0 and deletions == 0 and diff_content:
+                    full_diff = '\n'.join(diff_content)
+                    # Count lines starting with + (added) and - (removed)
+                    additions = sum(1 for line in full_diff.split('\n') if line.startswith('+') and not line.startswith('+++'))
+                    deletions = sum(1 for line in full_diff.split('\n') if line.startswith('-') and not line.startswith('---'))
                 
                 return {
                     "diff": '\n'.join(diff_content),
@@ -389,8 +396,16 @@ class GitLabService:
                     changed_files = [d.get('new_path', d.get('old_path', '')) for d in diff_data]
                     diff_content = [d.get('diff', '') for d in diff_data if d.get('diff')]
                     
+                    # Calculate stats - try API fields first, fallback to parsing diff content
                     additions = sum(d.get('added_lines', 0) or 0 for d in diff_data)
                     deletions = sum(d.get('removed_lines', 0) or 0 for d in diff_data)
+                    
+                    # If API doesn't provide line counts, parse the diff content
+                    if additions == 0 and deletions == 0 and diff_content:
+                        full_diff = '\n'.join(diff_content)
+                        # Count lines starting with + (added) and - (removed)
+                        additions = sum(1 for line in full_diff.split('\n') if line.startswith('+') and not line.startswith('+++'))
+                        deletions = sum(1 for line in full_diff.split('\n') if line.startswith('-') and not line.startswith('---'))
                     
                     return {
                         "diff": '\n'.join(diff_content),

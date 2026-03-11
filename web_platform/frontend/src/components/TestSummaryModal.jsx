@@ -5,10 +5,12 @@ import api from '../services/api';
 const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb }) => {
   const [allTests, setAllTests] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [totalTestsFromApi, setTotalTestsFromApi] = useState(0);
 
   useEffect(() => {
     if (isOpen) {
       loadAllTests();
+      loadTotalTestsCount();
     }
   }, [isOpen]);
 
@@ -25,12 +27,30 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
     }
   };
 
+  const loadTotalTestsCount = async () => {
+    try {
+      const response = await api.getTotalTestsCount();
+      setTotalTestsFromApi(response.data.total_tests || 0);
+    } catch (error) {
+      console.error('Failed to load total tests count:', error);
+      setTotalTestsFromApi(0);
+    }
+  };
+
   if (!isOpen) return null;
 
   // Calculate statistics
   const selectedTests = selectionResults?.tests || [];
   const selectedCount = selectedTests.length;
-  const totalTests = allTests.length || totalTestsInDb || 0;
+  
+  // Use totalTestsInDb from selectionResults first (total tests in database), then fallback to totalTestsInDb prop, then API call, then allTests.length
+  // Check both camelCase and snake_case for compatibility
+  const totalTests = selectionResults?.totalTestsInDb 
+    || selectionResults?.total_tests_in_db 
+    || totalTestsInDb 
+    || totalTestsFromApi
+    || allTests.length 
+    || 0;
   const notSelectedCount = Math.max(0, totalTests - selectedCount);
   const selectedTestIds = new Set(selectedTests.map(t => String(t.test_id)));
   
@@ -280,7 +300,7 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
             boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
           }}>
             <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: 'white' }}>
-              📊 Confidence Score Calculation Process
+              Confidence Score Calculation Process
             </h3>
             
             <div style={{ 
@@ -401,7 +421,7 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                   marginBottom: '16px'
                 }}>
                   <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: 'white' }}>
-                    📝 Example Calculation (from selected tests):
+                    Example Calculation (from selected tests):
                   </h4>
                   <div style={{ 
                     fontFamily: 'monospace', 
@@ -456,7 +476,7 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                   border: '1px solid rgba(255, 255, 255, 0.3)'
                 }}>
                   <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: 'white' }}>
-                    🔢 Actual Calculations (Top {testsWithBreakdown.length} Selected Tests):
+                    Actual Calculations (Top {testsWithBreakdown.length} Selected Tests):
                   </h4>
                   <div style={{ 
                     maxHeight: '400px',
@@ -584,11 +604,11 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
           return (
             <div style={{ marginBottom: '24px', padding: '16px', background: '#f5f5f5', borderRadius: '6px', border: '2px solid #ff9800' }}>
               <h3 style={{ fontSize: '18px', fontWeight: '600', marginBottom: '16px', color: '#e65100' }}>
-                🤖 LLM Reasoning Details
+                LLM Reasoning Details
               </h3>
               <div style={{ marginBottom: '16px' }}>
                 <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#666' }}>
-                  📥 Input (Prompt sent to LLM):
+                  Input (Prompt sent to LLM):
                 </h4>
                 <div style={{ 
                   padding: '12px', 
@@ -608,7 +628,7 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
               </div>
               <div>
                 <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '8px', color: '#666' }}>
-                  📤 Output (LLM Response):
+                  Output (LLM Response):
                 </h4>
                 <div style={{ 
                   padding: '12px', 
@@ -638,7 +658,7 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
         {/* All Tests Table */}
         <div style={{ marginBottom: '24px' }}>
           <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px' }}>
-            All Tests ({totalTests})
+            Selected Tests ({selectedTests.length > 0 ? selectedTests.length : (totalTests || 0)})
           </h3>
           {loading ? (
             <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
@@ -666,10 +686,12 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                   </tr>
                 </thead>
                 <tbody>
-                  {allTests.map((test, idx) => {
-                    const testId = String(test.test_id);
-                    const isSelected = selectedTestIdsSet.has(testId);
-                    const selectedTest = selectedTestsMap.get(testId);
+                  {selectedTests.length > 0 ? (
+                    // Show selected tests if available
+                    selectedTests.map((test, idx) => {
+                      const testId = String(test.test_id);
+                      const isSelected = true; // All tests in selectedTests are selected
+                      const selectedTest = test;
                     
                     // Get match type and similarity from selected test if available
                     const matchType = selectedTest?.match_type || (isSelected ? 'Unknown' : '-');
@@ -854,7 +876,197 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                         </td>
                       </tr>
                     );
-                  })}
+                  })
+                  ) : (
+                    // Fallback: show allTests if selectedTests is empty
+                    allTests.length > 0 ? (
+                      allTests.map((test, idx) => {
+                        const testId = String(test.test_id);
+                        const isSelected = selectedTestIdsSet.has(testId);
+                        const selectedTest = selectedTestsMap.get(testId);
+                        
+                        // Get match type and similarity from selected test if available
+                        const matchType = selectedTest?.match_type || (isSelected ? 'Unknown' : '-');
+                        const similarity = selectedTest?.similarity;
+                        const confidence = selectedTest?.confidence || (isSelected ? 'medium' : '-');
+                        const confidenceScore = selectedTest?.confidence_score;
+                        const confidenceBreakdown = selectedTest?.confidence_breakdown;
+                        const llmScore = selectedTest?.llm_score;
+                        const llmExplanation = selectedTest?.llm_explanation;
+                        
+                        return (
+                          <tr 
+                            key={idx} 
+                            style={{ 
+                              borderBottom: '1px solid #f0f0f0',
+                              background: isSelected ? '#e8f5e9' : '#fff',
+                              color: isSelected ? '#1b5e20' : '#333'
+                            }}
+                          >
+                            <td style={{ padding: '8px', fontFamily: 'monospace', fontSize: '12px' }}>
+                              {test.test_id}
+                            </td>
+                            <td style={{ padding: '8px' }}>
+                              {test.method_name || 'N/A'}
+                            </td>
+                            <td style={{ padding: '8px' }}>
+                              {test.class_name || '-'}
+                            </td>
+                            <td style={{ padding: '8px' }}>
+                              <span style={{
+                                display: 'inline-block',
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                background: '#e3f2fd',
+                                color: '#1976d2'
+                              }}>
+                                {test.test_type || 'unknown'}
+                              </span>
+                            </td>
+                            <td style={{ padding: '8px' }}>
+                              {matchType !== '-' ? (
+                                <span style={{
+                                  display: 'inline-block',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  background: matchType === 'Semantic' ? '#f3e5f5' : 
+                                             matchType === 'AST' ? '#e8f5e9' : 
+                                             matchType === 'Both' ? '#e1bee7' : '#e0e0e0',
+                                  color: matchType === 'Semantic' ? '#7b1fa2' : 
+                                         matchType === 'AST' ? '#2e7d32' : 
+                                         matchType === 'Both' ? '#6a1b9a' : '#666'
+                                }}>
+                                  {matchType}
+                                </span>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+                            <td style={{ padding: '8px' }}>
+                              {similarity !== undefined && similarity !== null ? (
+                                <span style={{ color: similarity >= 0.6 ? '#2e7d32' : similarity >= 0.4 ? '#f57c00' : '#c62828' }}>
+                                  {(similarity * 100).toFixed(1)}%
+                                </span>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+                            <td style={{ padding: '8px', fontSize: '11px', minWidth: '130px' }}>
+                              {confidenceBreakdown ? (
+                                <div style={{ 
+                                  display: 'flex', 
+                                  flexDirection: 'column', 
+                                  gap: '3px', 
+                                  padding: '6px', 
+                                  background: '#f9f9f9', 
+                                  borderRadius: '4px',
+                                  border: '1px solid #e0e0e0'
+                                }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ color: '#666', fontSize: '10px', fontWeight: '500' }}>AST:</span>
+                                    <strong style={{ color: '#1976d2', fontSize: '11px' }}>
+                                      {(confidenceBreakdown.ast_percentage ?? confidenceBreakdown.astPercentage ?? 0).toFixed(1)}%
+                                    </strong>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ color: '#666', fontSize: '10px', fontWeight: '500' }}>Semantic:</span>
+                                    <strong style={{ color: '#7b1fa2', fontSize: '11px' }}>
+                                      {(confidenceBreakdown.semantic_percentage ?? confidenceBreakdown.semanticPercentage ?? 0).toFixed(1)}%
+                                    </strong>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ color: '#666', fontSize: '10px', fontWeight: '500' }}>LLM:</span>
+                                    <strong style={{ color: '#f57c00', fontSize: '11px' }}>
+                                      {(confidenceBreakdown.llm_percentage ?? confidenceBreakdown.llmPercentage ?? 0).toFixed(1)}%
+                                    </strong>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span style={{ color: '#666', fontSize: '10px', fontWeight: '500' }}>Speed:</span>
+                                    <strong style={{ color: '#666', fontSize: '11px' }}>
+                                      {(confidenceBreakdown.speed_percentage ?? confidenceBreakdown.speedPercentage ?? 0).toFixed(1)}%
+                                    </strong>
+                                  </div>
+                                </div>
+                              ) : (
+                                <span style={{ color: '#999', fontSize: '10px', fontStyle: 'italic' }}>N/A</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '8px' }}>
+                              {confidenceScore !== undefined && confidenceScore !== null ? (
+                                <span style={{
+                                  display: 'inline-block',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  background: confidenceScore >= 70 ? '#c8e6c9' : 
+                                             confidenceScore >= 50 ? '#fff9c4' : '#ffccbc',
+                                  color: confidenceScore >= 70 ? '#1b5e20' : 
+                                         confidenceScore >= 50 ? '#f57c00' : '#c62828',
+                                  fontWeight: '500'
+                                }}>
+                                  {confidenceScore}%
+                                </span>
+                              ) : confidence !== '-' ? (
+                                <span style={{
+                                  display: 'inline-block',
+                                  padding: '2px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '11px',
+                                  background: confidence === 'high' ? '#c8e6c9' : 
+                                             confidence === 'medium' ? '#fff9c4' : '#ffccbc',
+                                  color: confidence === 'high' ? '#1b5e20' : 
+                                         confidence === 'medium' ? '#f57c00' : '#c62828'
+                                }}>
+                                  {confidence}
+                                </span>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+                            <td style={{ padding: '8px', fontSize: '11px', minWidth: '180px' }}>
+                              {llmScore !== undefined && llmScore !== null ? (
+                                <div style={{ 
+                                  display: 'flex', 
+                                  flexDirection: 'column', 
+                                  gap: '2px'
+                                }}>
+                                  <span style={{ 
+                                    color: llmScore >= 0.7 ? '#2e7d32' : llmScore >= 0.5 ? '#f57c00' : '#c62828',
+                                    fontWeight: '500'
+                                  }}>
+                                    {(llmScore * 100).toFixed(0)}%
+                                  </span>
+                                  {llmExplanation && (
+                                    <span style={{ 
+                                      fontSize: '9px', 
+                                      color: '#666', 
+                                      fontStyle: 'italic',
+                                      maxWidth: '200px',
+                                      overflow: 'hidden',
+                                      textOverflow: 'ellipsis',
+                                      whiteSpace: 'nowrap'
+                                    }} title={llmExplanation}>
+                                      {llmExplanation.substring(0, 50)}...
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                '-'
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan="9" style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+                          No tests available. {selectedTests.length === 0 && 'No tests were selected from the diff analysis.'}
+                        </td>
+                      </tr>
+                    )
+                  )}
                 </tbody>
               </table>
             </div>

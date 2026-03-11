@@ -2,19 +2,19 @@ import React, { useState, useEffect } from 'react';
 import api from '../services/api';
 import '../styles/App.css';
 
-const EmbeddingStatus = ({ onRegenerate }) => {
+const EmbeddingStatus = ({ testRepoId = null, onRegenerate }) => {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchStatus();
-  }, []);
+  }, [testRepoId]);
 
   const fetchStatus = async () => {
     try {
       setLoading(true);
-      const response = await api.getEmbeddingStatus();
+      const response = await api.getEmbeddingStatus(testRepoId);
       setStatus(response.data);
       setError(null);
     } catch (err) {
@@ -138,7 +138,7 @@ const EmbeddingStatus = ({ onRegenerate }) => {
       }}>
         <div>
           <div style={{ fontSize: '12px', color: '#666', marginBottom: '4px' }}>
-            Total Embeddings
+            {status.test_repo_id ? 'Embeddings (This Repository)' : 'Total Embeddings'}
           </div>
           <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1976d2' }}>
             {status.total_embeddings || 0}

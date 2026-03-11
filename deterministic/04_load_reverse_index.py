@@ -20,17 +20,25 @@ Run this script:
 
 import sys
 import json
+import os
 from pathlib import Path
+from typing import Optional
 
 # Add current directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from db_connection import get_connection, test_connection
+from db_connection import get_connection, get_connection_with_schema, test_connection, DB_SCHEMA
+import os
 from utils.db_helpers import batch_insert_reverse_index, count_table_records
 from utils.output_formatter import print_header, print_section, print_item
 
 # Path to reverse index JSON file
-TEST_ANALYSIS_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs"
+# Use schema-specific output directory if TEST_REPO_SCHEMA is set
+schema_name = os.getenv('TEST_REPO_SCHEMA')
+if schema_name:
+    TEST_ANALYSIS_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs" / schema_name
+else:
+    TEST_ANALYSIS_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs"
 REVERSE_INDEX_FILE = TEST_ANALYSIS_DIR / "06_reverse_index.json"
 
 
@@ -84,7 +92,7 @@ def prepare_reverse_index_data(reverse_index_data: dict) -> list:
     return all_entries
 
 
-def load_reverse_index_to_database(conn, entries: list, batch_size: int = 100) -> dict:
+def load_reverse_index_to_database(conn, entries: list, batch_size: int = 100, schema: Optional[str] = None) -> dict:
     """
     Load reverse index entries into database in batches.
     
@@ -112,7 +120,7 @@ def load_reverse_index_to_database(conn, entries: list, batch_size: int = 100) -
         print(f"Processing: {current}/{total_entries} entries ({percentage:.1f}%)", end='\r')
         
         # Insert batch
-        inserted = batch_insert_reverse_index(conn, batch)
+        inserted = batch_insert_reverse_index(conn, batch, schema=schema)
         
         if inserted == len(batch):
             loaded_count += inserted
@@ -129,33 +137,37 @@ def load_reverse_index_to_database(conn, entries: list, batch_size: int = 100) -
     }
 
 
-def get_reverse_index_statistics(conn) -> dict:
+def get_reverse_index_statistics(conn, schema: Optional[str] = None) -> dict:
     """
     Get statistics about loaded reverse index.
     
     Args:
         conn: Database connection
+        schema: Optional schema name (defaults to DB_SCHEMA or search_path)
     
     Returns:
         Dictionary with statistics
     """
+    target_schema = schema or DB_SCHEMA
+    table_name = f"{target_schema}.reverse_index" if schema else "reverse_index"
+    
     with conn.cursor() as cursor:
         # Total entries
-        cursor.execute("SELECT COUNT(*) FROM reverse_index")
+        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
         total_entries = cursor.fetchone()[0]
         
         # Unique production classes
-        cursor.execute("SELECT COUNT(DISTINCT production_class) FROM reverse_index")
+        cursor.execute(f"SELECT COUNT(DISTINCT production_class) FROM {table_name}")
         unique_classes = cursor.fetchone()[0]
         
         # Unique tests
-        cursor.execute("SELECT COUNT(DISTINCT test_id) FROM reverse_index")
+        cursor.execute(f"SELECT COUNT(DISTINCT test_id) FROM {table_name}")
         unique_tests = cursor.fetchone()[0]
         
         # Most referenced classes (classes with most tests)
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT production_class, COUNT(*) as test_count
-            FROM reverse_index
+            FROM {table_name}
             GROUP BY production_class
             ORDER BY test_count DESC
             LIMIT 10
@@ -174,6 +186,13 @@ def main():
     """Main function to load reverse index."""
     print_header("Step 4: Loading Reverse Index")
     print()
+    
+    # Get schema from environment (for multi-repo support)
+    schema_name = os.getenv('TEST_REPO_SCHEMA', None)
+    target_schema = schema_name or DB_SCHEMA
+    if schema_name:
+        print_section(f"Using schema: {target_schema}")
+        print()
     
     # Step 1: Test database connection
     print_section("Testing database connection...")
@@ -207,21 +226,27 @@ def main():
     
     # Step 4: Load into database
     try:
-        with get_connection() as conn:
+        # Use schema-specific connection if schema_name is provided
+        if schema_name:
+            conn_context = get_connection_with_schema(target_schema)
+        else:
+            conn_context = get_connection()
+        
+        with conn_context as conn:
             # Check current count
-            initial_count = count_table_records(conn, "reverse_index")
+            initial_count = count_table_records(conn, "reverse_index", schema=schema_name)
             print_item("Reverse index entries in database (before):", initial_count)
             print()
             
             # Load reverse index
-            stats = load_reverse_index_to_database(conn, entries)
+            stats = load_reverse_index_to_database(conn, entries, schema=schema_name)
             print()
             
             # Check final count
-            final_count = count_table_records(conn, "reverse_index")
+            final_count = count_table_records(conn, "reverse_index", schema=schema_name)
             
             # Step 5: Get statistics
-            rev_stats = get_reverse_index_statistics(conn)
+            rev_stats = get_reverse_index_statistics(conn, schema=schema_name)
             print()
             
             # Step 6: Display summary
@@ -264,7 +289,7 @@ def main():
             
             print_header("Step 4 Complete!")
             print(f"Loaded {stats['loaded']} reverse index entries into database")
-            print("Reverse index is ready for fast code → tests lookups!")
+            print("Reverse index is ready for fast code -> tests lookups!")
             
     except Exception as e:
         print(f"ERROR: {e}")

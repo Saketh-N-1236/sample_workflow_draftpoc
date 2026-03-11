@@ -1,0 +1,105 @@
+{
+  "collections": {
+    "products": {
+      "name": "products",
+      "description": "Product documents collection",
+      "document_count": 100,
+      "embedding_dimension": 384
+    },
+    "documents": {
+      "name": "documents",
+      "description": "General documents collection",
+      "document_count": 50,
+      "embedding_dimension": 384
+    }
+  },
+  "sample_documents": [
+    {
+      "id": "doc_001",
+      "content": "This is a product description for a high-quality laptop computer with advanced features.",
+      "metadata": {
+        "title": "Laptop Computer",
+        "category": "electronics",
+        "price": 999.99,
+        "brand": "TechCorp"
+      },
+      "embedding": null
+    },
+    {
+      "id": "doc_002",
+      "content": "A comprehensive guide to machine learning and artificial intelligence concepts.",
+      "metadata": {
+        "title": "ML Guide",
+        "category": "education",
+        "type": "book"
+      },
+      "embedding": null
+    },
+    {
+      "id": "doc_003",
+      "content": "Product information for wireless headphones with noise cancellation technology.",
+      "metadata": {
+        "title": "Wireless Headphones",
+        "category": "electronics",
+        "price": 199.99,
+        "brand": "AudioTech"
+      },
+      "embedding": null
+    }
+  ],
+  "sample_search_results": {
+    "electronics_search": {
+      "query": "electronics",
+      "results": [
+        {
+          "id": "doc_001",
+          "content": "This is a product description for a high-quality laptop computer with advanced features.",
+          "metadata": {
+            "title": "Laptop Computer",
+            "category": "electronics",
+            "price": 999.99
+          },
+          "distance": 0.92,
+          "score": 0.92
+        },
+        {
+          "id": "doc_003",
+          "content": "Product information for wireless headphones with noise cancellation technology.",
+          "metadata": {
+            "title": "Wireless Headphones",
+            "category": "electronics",
+            "price": 199.99
+          },
+          "distance": 0.88,
+          "score": 0.88
+        }
+      ],
+      "count": 2
+    },
+    "empty_search": {
+      "query": "nonexistent",
+      "results": [],
+      "count": 0
+    },
+    "limit_search": {
+      "query": "product",
+      "results": [
+        {
+          "id": "doc_001",
+          "content": "This is a product description...",
+          "metadata": {"title": "Laptop Computer"},
+          "distance": 0.95,
+          "score": 0.95
+        }
+      ],
+      "count": 1,
+      "limit": 1
+    }
+  },
+  "embedding_config": {
+    "provider": "ollama",
+    "model": "nomic-embed-text",
+    "dimension": 384,
+    "normalize": true
+  }
+}

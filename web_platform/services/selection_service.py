@@ -35,7 +35,7 @@ class SelectionService:
         
         Args:
             diff_data: Dictionary with diff content, changed_files, and stats
-            repository_id: Optional repository ID for audit logging
+            repository_id: Optional repository ID for audit logging and getting bound test repos
             
         Returns:
             Dictionary with test selection results
@@ -45,6 +45,10 @@ class SelectionService:
         
         try:
             diff_content = diff_data.get("diff", "")
+            changed_files_from_api = diff_data.get("changed_files", diff_data.get("changedFiles", []))
+            # Filter out empty strings
+            if changed_files_from_api:
+                changed_files_from_api = [f for f in changed_files_from_api if f and f.strip()]
             
             if not diff_content:
                 logger.warning("Empty diff content provided")
@@ -65,26 +69,77 @@ class SelectionService:
                 sys.path.insert(0, str(self.project_root))
                 from git_diff_processor.process_diff_programmatic import process_diff_and_select_tests
             
-            # Get test repository path from environment (dynamic)
-            test_repo_path = None
-            try:
-                import os
-                test_repo_path = os.getenv('TEST_REPO_PATH')
-                if test_repo_path:
-                    logger.info(f"Using test repository path from environment: {test_repo_path}")
-            except Exception:
-                pass
+            # Get bound test repositories if repository_id is provided
+            test_repo_schemas = []
+            test_repo_paths = []
             
-            # Process the diff and get test selection results (works dynamically with any repository)
+            if repository_id:
+                try:
+                    from services.repository_db import get_test_repository_bindings
+                    bound_repos = get_test_repository_bindings(repository_id)
+                    for repo in bound_repos:
+                        schema_name = repo.get('schema_name')
+                        extracted_path = repo.get('extracted_path')
+                        if schema_name:
+                            test_repo_schemas.append(schema_name)
+                        if extracted_path:
+                            test_repo_paths.append(extracted_path)
+                    logger.info(f"Found {len(bound_repos)} bound test repositories for repository {repository_id}")
+                except Exception as e:
+                    logger.warning(f"Failed to get bound test repositories: {e}")
+            
+            # Fallback to environment variable if no bound repos
+            if not test_repo_paths:
+                try:
+                    import os
+                    test_repo_path = os.getenv('TEST_REPO_PATH')
+                    if test_repo_path:
+                        test_repo_paths.append(test_repo_path)
+                        logger.info(f"Using test repository path from environment: {test_repo_path}")
+                except Exception:
+                    pass
+            
+            # Process the diff and get test selection results
+            # If multiple schemas, we'll need to query each one and combine results
             logger.info("Processing git diff for test selection...")
             logger.info(f"Diff content length: {len(diff_content)} characters")
-            logger.info(f"Changed files in diff: {len(diff_content.split('diff --git')) - 1}")
+            logger.info(f"Changed files from API: {len(changed_files_from_api)} files: {changed_files_from_api[:3] if changed_files_from_api else 'None'}")
+            logger.info(f"Diff starts with: {diff_content[:50] if diff_content else 'EMPTY'}")
+            logger.info(f"Changed files in diff (by header): {len(diff_content.split('diff --git')) - 1}")
+            logger.info(f"Using {len(test_repo_schemas)} test repository schema(s): {test_repo_schemas}")
+            
+            # Use first schema if multiple (or None for default)
+            schema_name = test_repo_schemas[0] if test_repo_schemas else None
+            test_repo_path = test_repo_paths[0] if test_repo_paths else None
+            
+            # Get test_repo_id from bound repos if available
+            test_repo_id = None
+            if bound_repos and len(bound_repos) > 0:
+                # Use primary test repo if available, otherwise first one
+                primary_repo = next((r for r in bound_repos if r.get('is_primary')), None)
+                test_repo_id = (primary_repo or bound_repos[0]).get('id')
+            
+            # Set TEST_REPO_ID in environment for embedding queries
+            if test_repo_id:
+                import os
+                os.environ['TEST_REPO_ID'] = test_repo_id
+            
+            # Get semantic config from repository if available
+            semantic_config = None
+            if repository_id:
+                from services.repository_db import get_repository_by_id
+                repo = get_repository_by_id(repository_id)
+                if repo and repo.get('semantic_config'):
+                    semantic_config = repo.get('semantic_config')
             
             results = await process_diff_and_select_tests(
                 diff_content=diff_content,
                 project_root=self.project_root,
                 use_semantic=True,
-                test_repo_path=test_repo_path  # Optional - works without it too
+                test_repo_path=test_repo_path,
+                schema_name=schema_name,  # Pass schema name to processor
+                file_list=changed_files_from_api,  # Pass file list from API for headerless diffs
+                semantic_config=semantic_config  # Pass saved semantic config
             )
             
             logger.info(f"Test selection completed: {results.get('total_tests', 0)} tests selected")
@@ -94,8 +149,42 @@ class SelectionService:
             if results.get('tests'):
                 logger.info(f"  - First test: {results['tests'][0]}")
             
+            # Calculate total tests count from repository-specific schema(s)
+            total_tests_in_db = 0
+            if test_repo_schemas:
+                try:
+                    from deterministic.db_connection import get_connection_with_schema
+                    for schema_name in test_repo_schemas:
+                        try:
+                            # get_connection_with_schema is already a context manager, no need for double ()
+                            with get_connection_with_schema(schema_name) as conn:
+                                with conn.cursor() as cursor:
+                                    cursor.execute(f"SELECT COUNT(*) FROM {schema_name}.test_registry")
+                                    count = cursor.fetchone()[0]
+                                    total_tests_in_db += count
+                                    logger.info(f"Schema {schema_name} has {count} tests")
+                        except Exception as e:
+                            logger.error(f"Failed to get test count from schema {schema_name}: {e}", exc_info=True)
+                except Exception as e:
+                    logger.error(f"Failed to calculate total tests count: {e}", exc_info=True)
+            else:
+                # Fallback to default schema if no bound repos
+                try:
+                    from deterministic.db_connection import get_connection, DB_SCHEMA
+                    with get_connection() as conn:
+                        with conn.cursor() as cursor:
+                            cursor.execute(f"SELECT COUNT(*) FROM {DB_SCHEMA}.test_registry")
+                            total_tests_in_db = cursor.fetchone()[0]
+                except Exception as e:
+                    logger.warning(f"Failed to get test count from default schema: {e}")
+            
+            # Add total tests count to results
+            results['total_tests_in_db'] = total_tests_in_db
+            logger.info(f"Total tests in database: {total_tests_in_db}")
+            
             # Enhance results with semantic-specific details
             enhanced_results = self._enhance_selection_results(results)
+            enhanced_results['total_tests_in_db'] = total_tests_in_db  # Ensure it's in enhanced results too
             logger.info(f"Enhanced results - total_tests: {enhanced_results.get('total_tests', 0)}")
             logger.info(f"Enhanced results - tests list length: {len(enhanced_results.get('tests', []))}")
             
@@ -322,5 +411,10 @@ class SelectionService:
         enhanced['overlap_count'] = overlap_count
         enhanced['embedding_status'] = embedding_status
         enhanced['semantic_config'] = semantic_config
+        
+        # Ensure total_tests_in_db is preserved if it exists in results
+        if 'total_tests_in_db' in results:
+            enhanced['total_tests_in_db'] = results['total_tests_in_db']
+            logger.info(f"_enhance_selection_results: Preserved total_tests_in_db={results['total_tests_in_db']}")
         
         return enhanced

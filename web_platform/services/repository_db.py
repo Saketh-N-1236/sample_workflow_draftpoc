@@ -79,6 +79,18 @@ def create_repositories_table():
                     logger.warning(f"Could not add risk_threshold column (may already exist): {e}")
                     conn.rollback()
                 
+                # Add semantic_config column if it doesn't exist (migration)
+                try:
+                    cursor.execute(f"""
+                        ALTER TABLE {DB_SCHEMA}.repositories 
+                        ADD COLUMN IF NOT EXISTS semantic_config JSONB
+                    """)
+                    conn.commit()
+                    logger.info("Semantic config column added/verified")
+                except Exception as e:
+                    logger.warning(f"Could not add semantic_config column (may already exist): {e}")
+                    conn.rollback()
+                
                 return True
     except Exception as e:
         logger.error(f"Failed to create repositories table: {e}", exc_info=True)
@@ -194,7 +206,7 @@ def get_repository_by_id(repo_id: str) -> Optional[Dict]:
             with conn.cursor() as cursor:
                 cursor.execute(f"""
                     SELECT id, url, provider, local_path, selected_branch, 
-                           default_branch, last_commit, created_at, last_refreshed, risk_threshold
+                           default_branch, last_commit, created_at, last_refreshed, risk_threshold, semantic_config
                     FROM {DB_SCHEMA}.repositories
                     WHERE id = %s
                 """, (repo_id,))
@@ -211,6 +223,15 @@ def get_repository_by_id(repo_id: str) -> Optional[Dict]:
                         risk_threshold = int(risk_threshold_val)
                     # If risk_threshold_val is None, keep it as None (don't default to 20)
                 
+                # Handle semantic_config
+                semantic_config = None
+                if len(row) > 10 and row[10] is not None:
+                    import json
+                    if isinstance(row[10], dict):
+                        semantic_config = row[10]
+                    elif isinstance(row[10], str):
+                        semantic_config = json.loads(row[10])
+                
                 return {
                     "id": row[0],
                     "url": row[1],
@@ -221,7 +242,8 @@ def get_repository_by_id(repo_id: str) -> Optional[Dict]:
                     "last_commit": row[6],
                     "createdAt": row[7],
                     "lastRefreshed": row[8],
-                    "risk_threshold": risk_threshold
+                    "risk_threshold": risk_threshold,
+                    "semantic_config": semantic_config
                 }
     except Exception as e:
         logger.error(f"Failed to get repository by ID: {e}", exc_info=True)
@@ -243,7 +265,7 @@ def get_repository_by_url(url: str) -> Optional[Dict]:
             with conn.cursor() as cursor:
                 cursor.execute(f"""
                     SELECT id, url, provider, local_path, selected_branch, 
-                           default_branch, last_commit, created_at, last_refreshed, risk_threshold
+                           default_branch, last_commit, created_at, last_refreshed, risk_threshold, semantic_config
                     FROM {DB_SCHEMA}.repositories
                     WHERE url = %s
                 """, (url,))
@@ -260,6 +282,15 @@ def get_repository_by_url(url: str) -> Optional[Dict]:
                         risk_threshold = int(risk_threshold_val)
                     # If risk_threshold_val is None, keep it as None (don't default to 20)
                 
+                # Handle semantic_config
+                semantic_config = None
+                if len(row) > 10 and row[10] is not None:
+                    import json
+                    if isinstance(row[10], dict):
+                        semantic_config = row[10]
+                    elif isinstance(row[10], str):
+                        semantic_config = json.loads(row[10])
+                
                 return {
                     "id": row[0],
                     "url": row[1],
@@ -270,7 +301,8 @@ def get_repository_by_url(url: str) -> Optional[Dict]:
                     "last_commit": row[6],
                     "createdAt": row[7],
                     "lastRefreshed": row[8],
-                    "risk_threshold": risk_threshold
+                    "risk_threshold": risk_threshold,
+                    "semantic_config": semantic_config
                 }
     except Exception as e:
         logger.error(f"Failed to get repository by URL: {e}", exc_info=True)
@@ -289,7 +321,7 @@ def list_repositories() -> List[Dict]:
             with conn.cursor() as cursor:
                 cursor.execute(f"""
                     SELECT id, url, provider, local_path, selected_branch, 
-                           default_branch, last_commit, created_at, last_refreshed, risk_threshold
+                           default_branch, last_commit, created_at, last_refreshed, risk_threshold, semantic_config
                     FROM {DB_SCHEMA}.repositories
                     ORDER BY created_at DESC
                 """)
@@ -305,6 +337,15 @@ def list_repositories() -> List[Dict]:
                             risk_threshold = int(risk_threshold_val)
                         # If risk_threshold_val is None, keep it as None (don't default to 20)
                     
+                    # Handle semantic_config
+                    semantic_config = None
+                    if len(row) > 10 and row[10] is not None:
+                        import json
+                        if isinstance(row[10], dict):
+                            semantic_config = row[10]
+                        elif isinstance(row[10], str):
+                            semantic_config = json.loads(row[10])
+                    
                     result.append({
                         "id": row[0],
                         "url": row[1],
@@ -315,7 +356,8 @@ def list_repositories() -> List[Dict]:
                         "last_commit": row[6],
                         "createdAt": row[7],
                         "lastRefreshed": row[8],
-                        "risk_threshold": risk_threshold
+                        "risk_threshold": risk_threshold,
+                        "semantic_config": semantic_config
                     })
                 return result
     except Exception as e:
@@ -330,7 +372,8 @@ def update_repository(
     last_commit: Optional[str] = None,
     last_refreshed: Optional[datetime] = None,
     risk_threshold: Optional[int] = None,
-    _update_risk_threshold: bool = False
+    _update_risk_threshold: bool = False,
+    semantic_config: Optional[Dict] = None
 ) -> Optional[Dict]:
     """
     Update repository fields.
@@ -375,6 +418,12 @@ def update_repository(
                     # Backward compatibility: if flag not set but value provided, update it
                     updates.append("risk_threshold = %s")
                     params.append(risk_threshold)
+                
+                # Handle semantic_config
+                if semantic_config is not None:
+                    import json
+                    updates.append("semantic_config = %s::jsonb")
+                    params.append(json.dumps(semantic_config))
                 
                 if last_refreshed is not None:
                     updates.append("last_refreshed = %s")
@@ -427,3 +476,78 @@ def delete_repository(repo_id: str) -> bool:
     except Exception as e:
         logger.error(f"Failed to delete repository: {e}", exc_info=True)
         raise
+
+
+def get_test_repository_bindings(repository_id: str) -> List[Dict]:
+    """
+    Get all test repositories bound to a repository.
+    
+    Args:
+        repository_id: ID of the repository
+        
+    Returns:
+        List of test repository dictionaries
+    """
+    try:
+        from services.test_repo_service import get_bound_test_repositories
+        return get_bound_test_repositories(repository_id)
+    except Exception as e:
+        logger.error(f"Failed to get test repository bindings: {e}")
+        return []
+
+
+def bind_test_repository(repository_id: str, test_repository_id: str, is_primary: bool = False) -> bool:
+    """
+    Bind a test repository to a repository.
+    
+    Args:
+        repository_id: ID of the repository
+        test_repository_id: ID of the test repository
+        is_primary: Whether this is the primary test repository
+        
+    Returns:
+        True if successful
+    """
+    try:
+        from services.test_repo_service import bind_test_repository_to_repo
+        return bind_test_repository_to_repo(repository_id, test_repository_id, is_primary)
+    except Exception as e:
+        logger.error(f"Failed to bind test repository: {e}")
+        return False
+
+
+def unbind_test_repository(repository_id: str, test_repository_id: str) -> bool:
+    """
+    Unbind a test repository from a repository.
+    
+    Args:
+        repository_id: ID of the repository
+        test_repository_id: ID of the test repository
+        
+    Returns:
+        True if successful
+    """
+    try:
+        from services.test_repo_service import unbind_test_repository_from_repo
+        return unbind_test_repository_from_repo(repository_id, test_repository_id)
+    except Exception as e:
+        logger.error(f"Failed to unbind test repository: {e}")
+        return False
+
+
+def get_primary_test_repository(repository_id: str) -> Optional[Dict]:
+    """
+    Get the primary test repository for a repository.
+    
+    Args:
+        repository_id: ID of the repository
+        
+    Returns:
+        Test repository dictionary or None
+    """
+    try:
+        from services.test_repo_service import get_primary_test_repository
+        return get_primary_test_repository(repository_id)
+    except Exception as e:
+        logger.error(f"Failed to get primary test repository: {e}")
+        return None

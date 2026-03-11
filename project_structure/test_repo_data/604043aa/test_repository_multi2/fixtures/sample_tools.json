@@ -1,0 +1,229 @@
+{
+  "mcp_tools": {
+    "catalog": [
+      {
+        "name": "list_tables",
+        "description": "List all tables in the database",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "catalog_name": {
+              "type": "string",
+              "description": "Optional catalog name",
+              "default": null
+            },
+            "schema_name": {
+              "type": "string",
+              "description": "Optional schema name",
+              "default": null
+            }
+          },
+          "required": []
+        }
+      },
+      {
+        "name": "describe_table",
+        "description": "Get schema information for a table",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "table_name": {
+              "type": "string",
+              "description": "Name of the table to describe"
+            },
+            "catalog_name": {
+              "type": "string",
+              "description": "Optional catalog name",
+              "default": null
+            }
+          },
+          "required": ["table_name"]
+        }
+      },
+      {
+        "name": "search_tables",
+        "description": "Search for tables by name pattern",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "pattern": {
+              "type": "string",
+              "description": "Search pattern (supports wildcards)"
+            },
+            "limit": {
+              "type": "integer",
+              "description": "Maximum number of results",
+              "default": 10
+            }
+          },
+          "required": ["pattern"]
+        }
+      }
+    ],
+    "sql_query": [
+      {
+        "name": "execute_query",
+        "description": "Execute a read-only SQL query",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "SQL query to execute (read-only)"
+            }
+          },
+          "required": ["query"]
+        }
+      }
+    ],
+    "vector_search": [
+      {
+        "name": "search_documents",
+        "description": "Search documents using vector similarity",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Search query text"
+            },
+            "limit": {
+              "type": "integer",
+              "description": "Maximum number of results",
+              "default": 10
+            },
+            "collection_name": {
+              "type": "string",
+              "description": "Collection name to search in",
+              "default": null
+            }
+          },
+          "required": ["query"]
+        }
+      },
+      {
+        "name": "add_documents",
+        "description": "Add documents to a collection",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "documents": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "content": {
+                    "type": "string"
+                  },
+                  "metadata": {
+                    "type": "object"
+                  }
+                }
+              },
+              "description": "List of documents to add"
+            },
+            "collection_name": {
+              "type": "string",
+              "description": "Collection name",
+              "default": null
+            }
+          },
+          "required": ["documents"]
+        }
+      }
+    ]
+  },
+  "tool_responses": {
+    "catalog_list_tables": {
+      "isError": false,
+      "result": {
+        "tables": ["users", "products", "orders", "categories"],
+        "count": 4
+      }
+    },
+    "catalog_describe_table": {
+      "isError": false,
+      "result": {
+        "table_name": "users",
+        "columns": [
+          {
+            "name": "id",
+            "type": "INTEGER",
+            "nullable": false,
+            "primary_key": true
+          },
+          {
+            "name": "name",
+            "type": "TEXT",
+            "nullable": false
+          },
+          {
+            "name": "email",
+            "type": "TEXT",
+            "nullable": true
+          }
+        ]
+      }
+    },
+    "sql_query_execute_query": {
+      "isError": false,
+      "result": {
+        "rows": [
+          {
+            "id": 1,
+            "name": "John Doe",
+            "email": "john@example.com"
+          },
+          {
+            "id": 2,
+            "name": "Jane Smith",
+            "email": "jane@example.com"
+          }
+        ],
+        "row_count": 2
+      }
+    },
+    "vector_search_search_documents": {
+      "isError": false,
+      "result": {
+        "results": [
+          {
+            "content": "Product description for item 1",
+            "metadata": {
+              "title": "Product 1",
+              "category": "electronics"
+            },
+            "distance": 0.85
+          },
+          {
+            "content": "Product description for item 2",
+            "metadata": {
+              "title": "Product 2",
+              "category": "clothing"
+            },
+            "distance": 0.78
+          }
+        ],
+        "count": 2
+      }
+    }
+  },
+  "tool_errors": {
+    "connection_error": {
+      "isError": true,
+      "error": "Cannot connect to MCP server. Make sure the server is running."
+    },
+    "timeout_error": {
+      "isError": true,
+      "error": "Request timed out after 30 seconds"
+    },
+    "validation_error": {
+      "isError": true,
+      "error": "Invalid input: missing required field 'query'"
+    },
+    "execution_error": {
+      "isError": true,
+      "error": "SQL query execution failed: syntax error"
+    }
+  }
+}

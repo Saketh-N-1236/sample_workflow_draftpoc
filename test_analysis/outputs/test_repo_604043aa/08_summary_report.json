@@ -1,0 +1,25 @@
+{
+  "generated_at": "2026-03-10T17:08:23.305789",
+  "data": {
+    "test_repository_overview": {
+      "total_test_files": 28,
+      "total_lines_of_code": 4333,
+      "test_framework": "pytest",
+      "framework_confidence": "high"
+    },
+    "test_inventory": {
+      "total_tests": 245,
+      "total_test_classes": 0,
+      "tests_by_type": {
+        "unit": 226,
+        "e2e": 7,
+        "integration": 12
+      }
+    },
+    "summary_for_db": {
+      "files_analyzed": 28,
+      "total_tests": 245,
+      "framework": "pytest"
+    }
+  }
+}

@@ -1,0 +1,135 @@
+{
+  "generated_at": "2026-03-09T19:00:50.552642",
+  "data": {
+    "directory_structure": {
+      "root_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\5079eaac\\test_repository",
+      "directories": {
+        "unit": {
+          "file_count": 12,
+          "test_count": 154,
+          "total_lines": 2281
+        },
+        "integration": {
+          "file_count": 3,
+          "test_count": 10,
+          "total_lines": 430
+        },
+        "e2e": {
+          "file_count": 1,
+          "test_count": 7,
+          "total_lines": 145
+        },
+        "other": {
+          "file_count": 0,
+          "test_count": 0,
+          "total_lines": 0
+        }
+      },
+      "files_by_directory": {
+        "unit": [
+          {
+            "path": "conftest.py",
+            "name": "conftest.py",
+            "line_count": 378
+          },
+          {
+            "path": "run_tests.py",
+            "name": "run_tests.py",
+            "line_count": 47
+          },
+          {
+            "path": "unit\\test_agent_pool.py",
+            "name": "test_agent_pool.py",
+            "line_count": 126
+          },
+          {
+            "path": "unit\\test_edge_cases.py",
+            "name": "test_edge_cases.py",
+            "line_count": 234
+          },
+          {
+            "path": "unit\\test_fixtures_example.py",
+            "name": "test_fixtures_example.py",
+            "line_count": 107
+          },
+          {
+            "path": "unit\\test_langgraph_builder.py",
+            "name": "test_langgraph_builder.py",
+            "line_count": 154
+          },
+          {
+            "path": "unit\\test_langgraph_nodes.py",
+            "name": "test_langgraph_nodes.py",
+            "line_count": 234
+          },
+          {
+            "path": "unit\\test_llm_factory.py",
+            "name": "test_llm_factory.py",
+            "line_count": 117
+          },
+          {
+            "path": "unit\\test_mcp_client.py",
+            "name": "test_mcp_client.py",
+            "line_count": 289
+          },
+          {
+            "path": "unit\\test_settings.py",
+            "name": "test_settings.py",
+            "line_count": 125
+          },
+          {
+            "path": "unit\\test_state_converter.py",
+            "name": "test_state_converter.py",
+            "line_count": 203
+          },
+          {
+            "path": "unit\\test_tool_converter.py",
+            "name": "test_tool_converter.py",
+            "line_count": 267
+          }
+        ],
+        "integration": [
+          {
+            "path": "integration\\test_agent_flow.py",
+            "name": "test_agent_flow.py",
+            "line_count": 164
+          },
+          {
+            "path": "integration\\test_api_integration.py",
+            "name": "test_api_integration.py",
+            "line_count": 86
+          },
+          {
+            "path": "unit\\test_api_routes.py",
+            "name": "test_api_routes.py",
+            "line_count": 180
+          }
+        ],
+        "e2e": [
+          {
+            "path": "e2e\\test_complete_chat_flow.py",
+            "name": "test_complete_chat_flow.py",
+            "line_count": 145
+          }
+        ],
+        "other": []
+      }
+    },
+    "summary": {
+      "total_directories": 4,
+      "total_files": 16,
+      "categories": [
+        "unit",
+        "integration",
+        "e2e",
+        "other"
+      ],
+      "test_categories": [
+        "unit",
+        "integration",
+        "e2e",
+        "other"
+      ]
+    }
+  }
+}

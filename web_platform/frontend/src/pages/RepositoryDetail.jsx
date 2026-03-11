@@ -10,6 +10,7 @@ import EmbeddingStatus from '../components/EmbeddingStatus';
 import SemanticConfigPanel from '../components/SemanticConfigPanel';
 import TestSummaryModal from '../components/TestSummaryModal';
 import RiskAnalysisPanel from '../components/RiskAnalysisPanel';
+import TestRepositoryBinding from '../components/TestRepositoryBinding';
 import '../styles/App.css';
 import api from '../services/api';
 
@@ -225,7 +226,7 @@ const RepositoryDetail = () => {
                   fontWeight: '500'
                 }}
               >
-                📊 Test Summary
+                Test Summary
               </button>
             )}
             <button
@@ -263,7 +264,6 @@ const RepositoryDetail = () => {
             <RiskAnalysisPanel 
               repoId={repository.id}
               onSave={async (threshold) => {
-                console.log('Risk threshold saved:', threshold);
                 // Reload repository to get updated threshold
                 await loadRepository();
                 // Clear selection results if threshold is disabled (to hide stale warning)
@@ -282,7 +282,6 @@ const RepositoryDetail = () => {
             <SemanticConfigPanel 
               repoId={repository.id}
               onSave={(config) => {
-                console.log('Semantic config saved:', config);
                 setShowSemanticConfig(false);
               }}
               onCancel={() => setShowSemanticConfig(false)}
@@ -306,13 +305,24 @@ const RepositoryDetail = () => {
           borderRadius: '4px',
           color: '#856404'
         }}>
-          <strong>⚠️ Risk Threshold Exceeded</strong>
+          <strong>Risk Threshold Exceeded</strong>
           <p style={{ margin: '8px 0 0 0' }}>
             {selectionResults.riskAnalysis.message || 
               `Changed files (${selectionResults.riskAnalysis.changed_files}) exceed threshold (${selectionResults.riskAnalysis.threshold}). All tests will be executed.`}
           </p>
         </div>
       )}
+
+      {/* Test Repository Bindings */}
+      <div style={{ marginBottom: '20px', padding: '20px', backgroundColor: '#fafafa', borderRadius: '8px', border: '1px solid #ddd' }}>
+        <TestRepositoryBinding 
+          repositoryId={repository.id}
+          onUpdate={() => {
+            // Reload repository data if needed
+            loadRepository();
+          }}
+        />
+      </div>
 
       <div className="tabs" style={{ flexShrink: 0 }}>
         <button

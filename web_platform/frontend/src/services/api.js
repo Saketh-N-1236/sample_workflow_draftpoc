@@ -68,12 +68,17 @@ export default {
   },
 
   // Semantic Retrieval
-  getEmbeddingStatus: () => {
-    return api.get('/analysis/embedding-status');
+  getEmbeddingStatus: (testRepoId = null) => {
+    const params = testRepoId ? { params: { test_repo_id: testRepoId } } : {};
+    return api.get('/analysis/embedding-status', params);
   },
 
   configureSemanticSearch: (repoId, config) => {
     return api.post(`/repositories/${repoId}/configure-semantic`, config);
+  },
+
+  getSemanticConfig: (repoId) => {
+    return api.get(`/repositories/${repoId}/semantic-config`);
   },
 
   getTotalTestsCount: () => {
@@ -91,5 +96,55 @@ export default {
 
   getRiskThreshold: (repoId) => {
     return api.get(`/repositories/${repoId}`);
+  },
+
+  // Test Repositories
+  uploadTestRepository: (file, name) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('name', name);
+    return api.post('/test-repositories/upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+  },
+
+  listTestRepositories: () => {
+    return api.get('/test-repositories');
+  },
+
+  getTestRepository: (testRepoId) => {
+    return api.get(`/test-repositories/${testRepoId}`);
+  },
+
+  deleteTestRepository: (testRepoId) => {
+    return api.delete(`/test-repositories/${testRepoId}`);
+  },
+
+  analyzeTestRepository: (testRepoId) => {
+    return api.post(`/test-repositories/${testRepoId}/analyze`);
+  },
+
+  bindTestRepository: (repoId, testRepoId, isPrimary = false) => {
+    return api.post(`/test-repositories/repositories/${repoId}/bind-test-repo`, {
+      test_repository_id: testRepoId,
+      is_primary: isPrimary,
+    });
+  },
+
+  unbindTestRepository: (repoId, testRepoId) => {
+    return api.delete(`/test-repositories/repositories/${repoId}/unbind-test-repo/${testRepoId}`);
+  },
+
+  getBoundTestRepositories: (repoId) => {
+    return api.get(`/test-repositories/repositories/${repoId}/test-repositories`);
+  },
+
+  setPrimaryTestRepository: (repoId, testRepoId) => {
+    return api.put(`/test-repositories/repositories/${repoId}/primary-test-repo/${testRepoId}`);
+  },
+  getTestRepositoryAnalysis: (testRepoId) => {
+    return api.get(`/test-repositories/${testRepoId}/analysis`);
   },
 };

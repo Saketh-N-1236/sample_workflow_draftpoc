@@ -24,25 +24,51 @@ import asyncio
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 
+# Determine paths - handle both script execution and module loading contexts
+# When loaded via importlib, __file__ might not be set, so we need to handle that
+try:
+    _current_file = Path(__file__)
+except NameError:
+    # If __file__ is not set (shouldn't happen, but be safe), use current working directory
+    _current_file = Path.cwd() / "git_diff_processor" / "git_diff_processor.py"
+
+_project_root = _current_file.parent.parent
+_git_diff_processor_dir = _current_file.parent
+
 # Add parent directory to path to import deterministic modules
-sys.path.insert(0, str(Path(__file__).parent.parent))
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+# Add git_diff_processor directory to path for relative imports
+if str(_git_diff_processor_dir) not in sys.path:
+    sys.path.insert(0, str(_git_diff_processor_dir))
 
 # Import deterministic database connection
 from deterministic.db_connection import get_connection, test_connection, DB_SCHEMA
 from deterministic.utils.db_helpers import get_tests_for_production_class
 
-# Import diff parser
-sys.path.insert(0, str(Path(__file__).parent))
-from utils.diff_parser import (
-    parse_git_diff, 
-    read_diff_file, 
-    build_search_queries,
-    extract_production_classes_from_file,
-    extract_test_file_candidates
-)
+# Import diff parser (try absolute import first, then relative)
+try:
+    from git_diff_processor.utils.diff_parser import (
+        parse_git_diff, 
+        read_diff_file, 
+        build_search_queries,
+        extract_production_classes_from_file,
+        extract_test_file_candidates
+    )
+except ImportError:
+    # Fallback: use relative import (git_diff_processor dir is already in path)
+    from utils.diff_parser import (
+        parse_git_diff, 
+        read_diff_file, 
+        build_search_queries,
+        extract_production_classes_from_file,
+        extract_test_file_candidates
+    )
 
 # Import semantic search
 from semantic_retrieval.semantic_search import find_tests_semantic
+from semantic_retrieval.config import DEFAULT_MAX_RESULTS
 
 
 def print_header(title: str, width: int = 50) -> None:
@@ -152,7 +178,7 @@ def display_search_strategy(search_queries: Dict) -> None:
     print()
 
 
-def query_tests_for_functions(conn, changed_functions: List[Dict[str, str]]) -> List[Dict]:
+def query_tests_for_functions(conn, changed_functions: List[Dict[str, str]], schema: str = None) -> List[Dict]:
     """
     Query database for tests that call/patch specific functions.
     
@@ -162,6 +188,7 @@ def query_tests_for_functions(conn, changed_functions: List[Dict[str, str]]) -> 
     Args:
         conn: Database connection
         changed_functions: List of {'module': 'agent.langgraph_agent', 'function': 'initialize'}
+        schema: Database schema name (defaults to DB_SCHEMA if not provided)
     
     Returns:
         List of test dictionaries with match details
@@ -169,13 +196,20 @@ def query_tests_for_functions(conn, changed_functions: List[Dict[str, str]]) -> 
     if not changed_functions:
         return []
     
+    target_schema = schema or DB_SCHEMA
     all_tests = []
     seen_test_ids = set()
+    
+    import logging
+    logger = logging.getLogger(__name__)
     
     with conn.cursor() as cursor:
         for func_change in changed_functions:
             module_name = func_change['module']
             function_name = func_change['function']
+            
+            # Debug: Log what we're searching for
+            logger.debug(f"[{target_schema}] Searching for function: {module_name}.{function_name}")
             
             # Query test_function_mapping table
             cursor.execute(f"""
@@ -188,8 +222,8 @@ def query_tests_for_functions(conn, changed_functions: List[Dict[str, str]]) -> 
                     tfm.call_type,
                     tfm.source,
                     CASE WHEN tfm.source = 'patch_ref' THEN 1 ELSE 2 END as source_priority
-                FROM {DB_SCHEMA}.test_function_mapping tfm
-                JOIN {DB_SCHEMA}.test_registry tr ON tfm.test_id = tr.test_id
+                FROM {target_schema}.test_function_mapping tfm
+                JOIN {target_schema}.test_registry tr ON tfm.test_id = tr.test_id
                 WHERE tfm.module_name = %s
                 AND tfm.function_name = %s
                 ORDER BY 
@@ -197,7 +231,24 @@ def query_tests_for_functions(conn, changed_functions: List[Dict[str, str]]) -> 
                     tr.test_id
             """, (module_name, function_name))
             
-            for row in cursor.fetchall():
+            rows = cursor.fetchall()
+            if not rows:
+                # Debug: Check if table exists and has data
+                cursor.execute(f"""
+                    SELECT COUNT(*) FROM {target_schema}.test_function_mapping
+                """)
+                total_mappings = cursor.fetchone()[0]
+                cursor.execute(f"""
+                    SELECT DISTINCT module_name, function_name 
+                    FROM {target_schema}.test_function_mapping 
+                    LIMIT 5
+                """)
+                sample_mappings = cursor.fetchall()
+                logger.debug(f"[{target_schema}] No matches found. Total mappings in DB: {total_mappings}")
+                if sample_mappings:
+                    logger.debug(f"[{target_schema}] Sample mappings: {sample_mappings[:3]}")
+            
+            for row in rows:
                 test_id = row[0]
                 if test_id not in seen_test_ids:
                     seen_test_ids.add(test_id)
@@ -216,29 +267,54 @@ def query_tests_for_functions(conn, changed_functions: List[Dict[str, str]]) -> 
     return all_tests
 
 
-def query_tests_for_classes(conn, production_classes: List[str]) -> Dict[str, List[Dict]]:
+def query_tests_for_classes(conn, production_classes: List[str], schema: str = None) -> Dict[str, List[Dict]]:
     """
     Query database to find tests for given production classes.
     
     Args:
         conn: Database connection
         production_classes: List of production class/module names
+        schema: Database schema name (defaults to DB_SCHEMA if not provided)
     
     Returns:
         Dictionary mapping production_class -> list of test dictionaries
     """
+    target_schema = schema or DB_SCHEMA
     results = {}
     
+    import logging
+    logger = logging.getLogger(__name__)
+    
     for prod_class in production_classes:
-        tests = get_tests_for_production_class(conn, prod_class, schema=DB_SCHEMA)
+        logger.debug(f"[{target_schema}] Searching for class: {prod_class}")
+        tests = get_tests_for_production_class(conn, prod_class, schema=target_schema)
         if tests:
             results[prod_class] = tests
+            logger.debug(f"[{target_schema}] Found {len(tests)} tests for {prod_class}")
+        else:
+            # Debug: Check what's in reverse_index
+            with conn.cursor() as cursor:
+                cursor.execute(f"""
+                    SELECT COUNT(*) FROM {target_schema}.reverse_index 
+                    WHERE production_class = %s
+                """, (prod_class,))
+                count = cursor.fetchone()[0]
+                if count == 0:
+                    # Check for similar entries
+                    cursor.execute(f"""
+                        SELECT DISTINCT production_class 
+                        FROM {target_schema}.reverse_index 
+                        WHERE production_class LIKE %s
+                        LIMIT 5
+                    """, (f"%{prod_class.split('.')[-1]}%",))
+                    similar = cursor.fetchall()
+                    logger.debug(f"[{target_schema}] No matches for {prod_class}. Similar entries: {[s[0] for s in similar]}")
     
     return results
 
 
 def query_tests_module_pattern(conn, module_pattern: str, prefer_direct: bool = True, 
-                                specific_classes: List[str] = None, require_direct: bool = False) -> List[Dict]:
+                                specific_classes: List[str] = None, require_direct: bool = False, schema: str = None) -> List[Dict]:
     """
     Query database for tests matching a module pattern (e.g., 'agent.*').
     
@@ -252,10 +328,12 @@ def query_tests_module_pattern(conn, module_pattern: str, prefer_direct: bool = 
         prefer_direct: If True, prefer direct references over indirect
         specific_classes: Optional list of specific class names to match (filters broad module matches)
         require_direct: If True, only return tests with direct references (filters false positives)
+        schema: Database schema name (defaults to DB_SCHEMA if not provided)
     
     Returns:
         List of test dictionaries with reference_type
     """
+    target_schema = schema or DB_SCHEMA
     module_prefix = module_pattern.replace('.*', '')
     
     with conn.cursor() as cursor:
@@ -278,8 +356,8 @@ def query_tests_module_pattern(conn, module_pattern: str, prefer_direct: bool = 
                         ri.reference_type,
                         CASE WHEN ri.production_class = %s THEN 1 ELSE 2 END as exact_match_priority,
                         CASE WHEN ri.reference_type IN ('direct_import', 'string_ref') THEN 1 ELSE 2 END as ref_type_priority
-                    FROM {DB_SCHEMA}.reverse_index ri
-                    JOIN {DB_SCHEMA}.test_registry tr ON ri.test_id = tr.test_id
+                    FROM {target_schema}.reverse_index ri
+                    JOIN {target_schema}.test_registry tr ON ri.test_id = tr.test_id
                     WHERE ri.production_class IN ({placeholders})
                        OR (ri.production_class = %s AND ri.reference_type IN ('direct_import', 'string_ref'))
                     ORDER BY 
@@ -298,8 +376,8 @@ def query_tests_module_pattern(conn, module_pattern: str, prefer_direct: bool = 
                         ri.reference_type,
                         CASE WHEN ri.production_class = %s THEN 1 ELSE 2 END as exact_match_priority,
                         CASE WHEN ri.reference_type IN ('direct_import', 'string_ref') THEN 1 ELSE 2 END as ref_type_priority
-                    FROM {DB_SCHEMA}.reverse_index ri
-                    JOIN {DB_SCHEMA}.test_registry tr ON ri.test_id = tr.test_id
+                    FROM {target_schema}.reverse_index ri
+                    JOIN {target_schema}.test_registry tr ON ri.test_id = tr.test_id
                     WHERE ri.production_class = %s
                        OR (ri.production_class LIKE %s 
                            AND ri.reference_type IN ('direct_import', 'string_ref'))
@@ -334,7 +412,7 @@ def query_tests_module_pattern(conn, module_pattern: str, prefer_direct: bool = 
 
 def find_direct_test_files_enhanced(conn, test_file_candidates: List[str], 
                                      module_name: str = None, 
-                                     file_path: str = None) -> List[Dict]:
+                                     file_path: str = None, schema: str = None) -> List[Dict]:
     """
     Enhanced direct test file matching with multiple strategies.
     
@@ -349,17 +427,27 @@ def find_direct_test_files_enhanced(conn, test_file_candidates: List[str],
         test_file_candidates: List of test file names to search for
         module_name: Optional module name (e.g., "agent.agent_pool")
         file_path: Optional production file path for additional patterns
+        schema: Database schema name (defaults to DB_SCHEMA if not provided)
     
     Returns:
         List of test dictionaries with match details
     """
+    target_schema = schema or DB_SCHEMA
     if not test_file_candidates:
         return []
+    
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.debug(f"[{target_schema}] Searching for test files: {test_file_candidates[:5]}")
     
     direct_tests = []
     seen_test_ids = set()  # Avoid duplicates
     
     with conn.cursor() as cursor:
+        # Debug: Check total tests in registry
+        cursor.execute(f"SELECT COUNT(*) FROM {target_schema}.test_registry")
+        total_tests = cursor.fetchone()[0]
+        logger.debug(f"[{target_schema}] Total tests in registry: {total_tests}")
         # Strategy 1: Exact filename matches
         for test_file in test_file_candidates:
             # Remove wildcard patterns for exact match
@@ -374,7 +462,7 @@ def find_direct_test_files_enhanced(conn, test_file_candidates: List[str],
             for pattern in patterns:
                 cursor.execute(f"""
                     SELECT DISTINCT test_id, class_name, method_name, file_path, test_type
-                    FROM {DB_SCHEMA}.test_registry
+                    FROM {target_schema}.test_registry
                     WHERE file_path LIKE %s
                     ORDER BY test_id
                 """, (pattern,))
@@ -406,7 +494,7 @@ def find_direct_test_files_enhanced(conn, test_file_candidates: List[str],
                 for pattern in [pattern1, pattern2]:
                     cursor.execute(f"""
                         SELECT DISTINCT test_id, class_name, method_name, file_path, test_type
-                        FROM {DB_SCHEMA}.test_registry
+                        FROM {target_schema}.test_registry
                         WHERE file_path LIKE %s
                         ORDER BY test_id
                     """, (pattern,))
@@ -501,7 +589,7 @@ def find_direct_test_files(conn, test_file_candidates: List[str]) -> List[Dict]:
     return find_direct_test_files_enhanced(conn, test_file_candidates)
 
 
-def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = None, prefer_function_level: bool = True) -> Dict[str, Any]:
+def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = None, prefer_function_level: bool = True, schema: str = None, semantic_config: Dict = None, diff_content: str = None) -> Dict[str, Any]:
     """
     Find all affected tests using multiple search strategies with enhanced matching.
     
@@ -517,10 +605,12 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
         search_queries: Dictionary with search strategies
         file_changes: List of file change dictionaries (for filtering import-only changes)
         prefer_function_level: If True, only use module patterns if no function matches found
+        schema: Database schema name (defaults to DB_SCHEMA if not provided)
     
     Returns:
         Dictionary with test results and metadata
     """
+    target_schema = schema or DB_SCHEMA
     all_tests = {}  # test_id -> test info with match details
     match_details = {}  # test_id -> list of match reasons
     has_function_matches = False
@@ -528,7 +618,7 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
     # Strategy 0: Function-level matching (very high confidence) - NEW
     if search_queries.get('changed_functions'):
         print_section("Querying database (Function-level matching - highest precision)...")
-        function_tests = query_tests_for_functions(conn, search_queries['changed_functions'])
+        function_tests = query_tests_for_functions(conn, search_queries['changed_functions'], schema=target_schema)
         
         if function_tests:
             has_function_matches = True
@@ -579,7 +669,7 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
         # Build module name and file path mappings for enhanced search
         module_file_map = {}
         if file_changes:
-            from utils.diff_parser import extract_production_classes_from_file
+            from git_diff_processor.utils.diff_parser import extract_production_classes_from_file
             for file_change in file_changes:
                 file_path = file_change.get('file', '')
                 if file_path and file_path.endswith('.py'):
@@ -603,7 +693,8 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
             enhanced_results = find_direct_test_files_enhanced(
                 conn, [candidate], 
                 module_name=module_name,
-                file_path=file_path
+                file_path=file_path,
+                schema=target_schema
             )
             direct_tests.extend(enhanced_results)
         
@@ -656,7 +747,7 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
     # Strategy 1.5: Integration tests for changed modules
     if file_changes:
         print_section("Querying database (Integration/e2e tests)...")
-        from utils.diff_parser import extract_production_classes_from_file, analyze_file_change_type
+        from git_diff_processor.utils.diff_parser import extract_production_classes_from_file, analyze_file_change_type
         
         integration_tests_found = []
         for file_change in file_changes:
@@ -670,7 +761,7 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
             if file_path and file_path.endswith('.py'):
                 classes = extract_production_classes_from_file(file_path)
                 for module_name in classes[:1]:  # Check first class only
-                    integration_tests = find_integration_tests_for_module(conn, module_name)
+                    integration_tests = find_integration_tests_for_module(conn, module_name, schema=target_schema)
                     for test in integration_tests:
                         test_id = test['test_id']
                         if test_id not in all_tests:
@@ -702,7 +793,7 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
     # Strategy 2: Exact matches (high confidence) - includes string references from patch()
     if search_queries['exact_matches']:
         print_section("Querying database (Exact matches - includes string refs from patch/Mock)...")
-        exact_results = query_tests_for_classes(conn, search_queries['exact_matches'])
+        exact_results = query_tests_for_classes(conn, search_queries['exact_matches'], schema=target_schema)
         
         if exact_results:
             for prod_class, tests in exact_results.items():
@@ -745,7 +836,7 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
                     
                     cursor.execute(f"""
                         SELECT DISTINCT production_class, reference_type
-                        FROM {DB_SCHEMA}.reverse_index 
+                        FROM {target_schema}.reverse_index 
                         WHERE LOWER(production_class) LIKE LOWER(%s) 
                            OR LOWER(production_class) LIKE LOWER(%s)
                         LIMIT 10
@@ -758,7 +849,7 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
                         # Show sample of what's actually in the database
                         cursor.execute(f"""
                             SELECT DISTINCT production_class 
-                            FROM {DB_SCHEMA}.reverse_index 
+                            FROM {target_schema}.reverse_index 
                             ORDER BY production_class 
                             LIMIT 10
                         """)
@@ -783,7 +874,7 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
         print_section("Querying database (Module patterns - direct references only)...")
         
         # Build map of module -> specific changed classes for better filtering
-        from utils.diff_parser import analyze_file_change_type, extract_production_classes_from_file
+        from git_diff_processor.utils.diff_parser import analyze_file_change_type, extract_production_classes_from_file
         module_to_classes = {}  # module_prefix -> set of changed classes
         code_changed_modules = set()
         
@@ -817,7 +908,8 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
                 conn, module_pattern, 
                 prefer_direct=True,
                 specific_classes=specific_classes if specific_classes else None,
-                require_direct=True  # Only return tests with direct references
+                require_direct=True,  # Only return tests with direct references
+                schema=target_schema
             )
             
             # Count by reference type
@@ -854,6 +946,21 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
     if changed_functions_for_semantic:
         print_section("Querying database (Semantic search - meaning-based)...")
         try:
+            # Extract semantic config parameters if provided
+            similarity_threshold = None
+            max_results = DEFAULT_MAX_RESULTS
+            use_adaptive_thresholds = True
+            top_k = None
+            top_p = None
+            
+            if semantic_config:
+                similarity_threshold = semantic_config.get('similarity_threshold')
+                if semantic_config.get('max_results') is not None:
+                    max_results = semantic_config.get('max_results')
+                use_adaptive_thresholds = semantic_config.get('use_adaptive_thresholds', True)
+                top_k = semantic_config.get('top_k')
+                top_p = semantic_config.get('top_p')
+            
             # Check if we're in an async context - if so, skip semantic search here
             # (it should be done separately in the async caller)
             try:
@@ -865,12 +972,34 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
                 else:
                     # Loop exists but not running - safe to use asyncio.run()
                     semantic_matches = asyncio.run(
-                        find_tests_semantic(conn, changed_functions_for_semantic, file_changes)
+                        find_tests_semantic(
+                            conn, 
+                            changed_functions_for_semantic, 
+                            file_changes,
+                            similarity_threshold=similarity_threshold,
+                            max_results=max_results,
+                            use_adaptive_thresholds=use_adaptive_thresholds,
+                            top_k=top_k,
+                            top_p=top_p,
+                            diff_content=diff_content,
+                            semantic_config=semantic_config
+                        )
                     )
             except RuntimeError:
                 # No event loop - safe to create one
                 semantic_matches = asyncio.run(
-                    find_tests_semantic(conn, changed_functions_for_semantic, file_changes)
+                    find_tests_semantic(
+                        conn, 
+                        changed_functions_for_semantic, 
+                        file_changes,
+                        similarity_threshold=similarity_threshold,
+                        max_results=max_results,
+                        use_adaptive_thresholds=use_adaptive_thresholds,
+                        top_k=top_k,
+                        top_p=top_p,
+                        diff_content=diff_content,
+                        semantic_config=semantic_config
+                    )
                 )
 
             # Combine AST and semantic results (not just add missing)
@@ -968,19 +1097,28 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
     }
 
 
-def find_tests_ast_only(conn, search_queries: Dict, file_changes: List[Dict] = None) -> Dict[str, Any]:
+def find_tests_ast_only(conn, search_queries: Dict, file_changes: List[Dict] = None, schema: str = None) -> Dict[str, Any]:
     """
     Find tests using only AST-based strategies (0-3), excluding semantic search.
+    
+    Args:
+        conn: Database connection
+        search_queries: Dictionary with search queries
+        file_changes: List of file change dictionaries
+        schema: Database schema name (defaults to DB_SCHEMA if not provided)
     
     Returns:
         Dictionary with test results from AST-based matching only
     """
+    # Use provided schema or fall back to DB_SCHEMA
+    target_schema = schema or DB_SCHEMA
+    
     all_tests = {}
     match_details = {}
     
     # Strategy 0: Function-level matching
     if search_queries.get('changed_functions'):
-        function_tests = query_tests_for_functions(conn, search_queries['changed_functions'])
+        function_tests = query_tests_for_functions(conn, search_queries['changed_functions'], schema=target_schema)
         for test in function_tests:
             test_id = test['test_id']
             if test_id not in all_tests:
@@ -998,7 +1136,8 @@ def find_tests_ast_only(conn, search_queries: Dict, file_changes: List[Dict] = N
     if search_queries.get('test_file_candidates'):
         direct_tests = find_direct_test_files_enhanced(
             conn, 
-            search_queries['test_file_candidates']
+            search_queries['test_file_candidates'],
+            schema=target_schema
         )
         for test in direct_tests:
             test_id = test['test_id']
@@ -1017,12 +1156,12 @@ def find_tests_ast_only(conn, search_queries: Dict, file_changes: List[Dict] = N
         for file_change in file_changes:
             file_path = file_change.get('file', '')
             if file_path and file_path.endswith('.py'):
-                from utils.diff_parser import extract_production_classes_from_file, analyze_file_change_type
+                from git_diff_processor.utils.diff_parser import extract_production_classes_from_file, analyze_file_change_type
                 change_type = analyze_file_change_type(file_change)
                 if change_type != 'import_only':
                     classes = extract_production_classes_from_file(file_path)
                     for module_name in classes[:1]:
-                        integration_tests = find_integration_tests_for_module(conn, module_name)
+                        integration_tests = find_integration_tests_for_module(conn, module_name, schema=target_schema)
                         for test in integration_tests:
                             test_id = test['test_id']
                             if test_id not in all_tests:
@@ -1037,7 +1176,7 @@ def find_tests_ast_only(conn, search_queries: Dict, file_changes: List[Dict] = N
     # Strategy 2: Exact matches
     if search_queries.get('exact_matches'):
         for prod_class in search_queries['exact_matches']:
-            exact_tests = query_tests_for_classes(conn, [prod_class])
+            exact_tests = query_tests_for_classes(conn, [prod_class], schema=target_schema)
             for test_list in exact_tests.values():
                 for test in test_list:
                     test_id = test['test_id']
@@ -1054,7 +1193,7 @@ def find_tests_ast_only(conn, search_queries: Dict, file_changes: List[Dict] = N
     # Strategy 3: Module patterns
     if search_queries.get('module_matches'):
         for module_pattern in search_queries['module_matches']:
-            module_tests = query_tests_module_pattern(conn, module_pattern, prefer_direct=True)
+            module_tests = query_tests_module_pattern(conn, module_pattern, prefer_direct=True, schema=target_schema)
             for test in module_tests:
                 test_id = test['test_id']
                 if test_id not in all_tests:
@@ -1090,9 +1229,25 @@ def find_tests_ast_only(conn, search_queries: Dict, file_changes: List[Dict] = N
     }
 
 
-async def find_tests_semantic_only_async(conn, search_queries: Dict, file_changes: List[Dict] = None) -> Dict[str, Any]:
+async def find_tests_semantic_only_async(conn, search_queries: Dict, file_changes: List[Dict] = None, schema: str = None, test_repo_id: str = None, semantic_config: Dict = None, diff_content: str = None) -> Dict[str, Any]:
     """
     Async version: Find tests using only semantic search (vector embeddings).
+    
+    Args:
+        conn: Database connection (not used for semantic search, but kept for compatibility)
+        semantic_config: Optional semantic search configuration dict with:
+            - similarity_threshold: Optional[float]
+            - max_results: int
+            - use_adaptive_thresholds: bool
+            - use_multi_query: bool
+            - use_advanced_rag: bool
+            - use_query_rewriting: bool
+            - use_llm_reranking: bool
+        search_queries: Dictionary with search queries
+        file_changes: List of file change dictionaries
+        schema: Database schema name (not used for semantic search, but kept for compatibility)
+        test_repo_id: Test repository ID to filter embeddings in Pinecone
+        diff_content: Optional git diff content for Advanced RAG
     
     Returns:
         Dictionary with test results from semantic search only
@@ -1110,7 +1265,35 @@ async def find_tests_semantic_only_async(conn, search_queries: Dict, file_change
         }
     
     try:
-        semantic_matches = await find_tests_semantic(conn, changed_functions, file_changes)
+        # Extract config parameters if provided
+        similarity_threshold = None
+        max_results = DEFAULT_MAX_RESULTS  # Use default if not provided
+        use_adaptive_thresholds = True
+        top_k = None
+        top_p = None
+        
+        if semantic_config:
+            similarity_threshold = semantic_config.get('similarity_threshold')
+            # Use max_results from config if provided, otherwise keep default
+            if semantic_config.get('max_results') is not None:
+                max_results = semantic_config.get('max_results')
+            use_adaptive_thresholds = semantic_config.get('use_adaptive_thresholds', True)
+            top_k = semantic_config.get('top_k')
+            top_p = semantic_config.get('top_p')
+        
+        semantic_matches = await find_tests_semantic(
+            conn, 
+            changed_functions, 
+            file_changes, 
+            similarity_threshold=similarity_threshold,
+            max_results=max_results,
+            use_adaptive_thresholds=use_adaptive_thresholds,
+            test_repo_id=test_repo_id,
+            top_k=top_k,
+            top_p=top_p,
+            diff_content=diff_content,
+            semantic_config=semantic_config
+        )
         
         for test in semantic_matches:
             test_id = test['test_id']
@@ -1368,18 +1551,24 @@ def get_all_tests_from_database(conn) -> Dict[str, Dict]:
     return all_tests
 
 
-def find_integration_tests_for_module(conn, production_class: str) -> List[Dict]:
+def find_integration_tests_for_module(conn, production_class: str, schema: str = None) -> List[Dict]:
     """
     Find integration/e2e tests that reference a production module.
     
     Args:
         conn: Database connection
         production_class: Production class/module name (e.g., "agent.langgraph_agent")
+        schema: Database schema name (defaults to DB_SCHEMA if not provided)
     
     Returns:
         List of test dictionaries (integration/e2e tests only)
     """
+    target_schema = schema or DB_SCHEMA
     integration_tests = []
+    
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.debug(f"[{target_schema}] Searching for integration tests for: {production_class}")
     
     with conn.cursor() as cursor:
         # Query for integration/e2e tests that reference this production class
@@ -1391,14 +1580,25 @@ def find_integration_tests_for_module(conn, production_class: str) -> List[Dict]
                 tr.file_path,
                 tr.test_type,
                 ri.reference_type
-            FROM {DB_SCHEMA}.reverse_index ri
-            JOIN {DB_SCHEMA}.test_registry tr ON ri.test_id = tr.test_id
+            FROM {target_schema}.reverse_index ri
+            JOIN {target_schema}.test_registry tr ON ri.test_id = tr.test_id
             WHERE ri.production_class = %s
               AND tr.test_type IN ('integration', 'e2e')
             ORDER BY tr.test_type, tr.test_id
         """, (production_class,))
         
-        for row in cursor.fetchall():
+        rows = cursor.fetchall()
+        if not rows:
+            # Debug: Check test types available
+            cursor.execute(f"""
+                SELECT DISTINCT test_type, COUNT(*) 
+                FROM {target_schema}.test_registry 
+                GROUP BY test_type
+            """)
+            test_types = cursor.fetchall()
+            logger.debug(f"[{target_schema}] No integration tests found. Available test types: {test_types}")
+        
+        for row in rows:
             integration_tests.append({
                 'test_id': row[0],
                 'class_name': row[1],
@@ -1428,7 +1628,7 @@ def diagnose_missing_tests(conn, changed_files: List[Dict],
     diagnostics = {}
     
     from pathlib import Path
-    from utils.diff_parser import extract_production_classes_from_file, extract_test_file_candidates
+    from git_diff_processor.utils.diff_parser import extract_production_classes_from_file, extract_test_file_candidates
     
     with conn.cursor() as cursor:
         for file_change in changed_files:
@@ -1455,7 +1655,7 @@ def diagnose_missing_tests(conn, changed_files: List[Dict],
                 exact_pattern = pattern.replace('*.py', '.py')
                 cursor.execute(f"""
                     SELECT test_id, file_path, test_type, class_name, method_name
-                    FROM {DB_SCHEMA}.test_registry
+                    FROM {target_schema}.test_registry
                     WHERE file_path LIKE %s
                     LIMIT 10
                 """, (f"%{exact_pattern}",))
@@ -1474,8 +1674,8 @@ def diagnose_missing_tests(conn, changed_files: List[Dict],
             if module_name:
                 cursor.execute(f"""
                     SELECT DISTINCT ri.test_id, ri.reference_type, tr.file_path, tr.test_type
-                    FROM {DB_SCHEMA}.reverse_index ri
-                    JOIN {DB_SCHEMA}.test_registry tr ON ri.test_id = tr.test_id
+                    FROM {target_schema}.reverse_index ri
+                    JOIN {target_schema}.test_registry tr ON ri.test_id = tr.test_id
                     WHERE ri.production_class = %s
                     LIMIT 10
                 """, (module_name,))
@@ -2428,8 +2628,8 @@ def main():
     
     # Import indexing utilities
     sys.path.insert(0, str(Path(__file__).parent))
-    from utils.indexing_utils import verify_indexing_completeness, reindex_missing_files, diagnose_integration_tests
-    from utils.deduplicate_tests import find_duplicate_tests, remove_duplicate_tests
+    from git_diff_processor.utils.indexing_utils import verify_indexing_completeness, reindex_missing_files, diagnose_integration_tests
+    from git_diff_processor.utils.deduplicate_tests import find_duplicate_tests, remove_duplicate_tests
     
     # Determine test repo path
     if args.test_repo:
@@ -2607,7 +2807,7 @@ def main():
     parsed_diff = parse_git_diff(diff_content)
     
     # Filter and show production files (language-agnostic)
-    from utils.diff_parser import is_production_file
+    from git_diff_processor.utils.diff_parser import is_production_file
     production_files = [f for f in parsed_diff['file_changes'] 
                        if is_production_file(f['file'], parser_registry, config)]
     non_production_files = [f for f in parsed_diff['file_changes'] 

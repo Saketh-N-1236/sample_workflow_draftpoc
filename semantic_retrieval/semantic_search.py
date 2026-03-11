@@ -2,8 +2,11 @@
 Semantic search functions for test selection using vector embeddings.
 """
 
+import logging
 from typing import List, Dict, Any, Optional
 from config.settings import get_settings
+
+logger = logging.getLogger(__name__)
 from llm.factory import LLMFactory
 from llm.models import EmbeddingRequest
 from semantic_retrieval.backends import get_backend
@@ -98,7 +101,12 @@ async def find_tests_semantic(
     file_changes: Optional[List[Dict]] = None,
     similarity_threshold: Optional[float] = None,
     max_results: int = DEFAULT_MAX_RESULTS,
-    use_adaptive_thresholds: bool = True
+    use_adaptive_thresholds: bool = True,
+    test_repo_id: str = None,
+    top_k: Optional[int] = None,
+    top_p: Optional[float] = None,
+    diff_content: Optional[str] = None,
+    semantic_config: Optional[Dict] = None
 ) -> list:
     """
     Semantic search layer — finds tests by meaning, not name.
@@ -106,7 +114,8 @@ async def find_tests_semantic(
     Runs as Strategy 4 inside find_affected_tests().
     Only adds tests NOT already found by strategies 0-3.
 
-    Uses the configured vector backend (ChromaDB or pgvector) for search.
+    Uses Pinecone for vector search.
+    Can use Advanced RAG if enabled in semantic_config.
 
     Args:
         conn: Database connection
@@ -116,6 +125,8 @@ async def find_tests_semantic(
         similarity_threshold: Optional fixed threshold (if None, uses adaptive)
         max_results: Maximum number of results to return
         use_adaptive_thresholds: If True, tries multiple thresholds with fallback
+        diff_content: Optional git diff content for Advanced RAG
+        semantic_config: Optional configuration dict with Advanced RAG settings
 
     Returns:
         List of test dicts with confidence_score already set (max 60).
@@ -126,6 +137,44 @@ async def find_tests_semantic(
     """
     if not changed_functions:
         return []
+
+    # Check if Advanced RAG is enabled
+    use_advanced_rag = True  # Default to True
+    if semantic_config:
+        use_advanced_rag = semantic_config.get('use_advanced_rag', True)
+    
+    # Route to Advanced RAG if enabled
+    if use_advanced_rag:
+        try:
+            from semantic_retrieval.advanced_rag.advanced_semantic_search import find_tests_advanced_rag
+            
+            # Extract Advanced RAG config
+            use_query_rewriting = semantic_config.get('use_query_rewriting', True) if semantic_config else True
+            use_llm_reranking = semantic_config.get('use_llm_reranking', True) if semantic_config else True
+            rerank_top_k = semantic_config.get('rerank_top_k', 50) if semantic_config else 50
+            num_query_variations = semantic_config.get('num_query_variations', 3) if semantic_config else 3
+            quality_threshold = semantic_config.get('quality_threshold', 0.4) if semantic_config else 0.4
+            
+            logger.info("Using Advanced RAG for semantic search")
+            return await find_tests_advanced_rag(
+                conn=conn,
+                changed_functions=changed_functions,
+                file_changes=file_changes,
+                diff_content=diff_content,
+                similarity_threshold=similarity_threshold,
+                max_results=max_results,
+                test_repo_id=test_repo_id,
+                top_k=top_k,
+                top_p=top_p,
+                use_query_rewriting=use_query_rewriting,
+                use_llm_reranking=use_llm_reranking,
+                rerank_top_k=rerank_top_k,
+                num_query_variations=num_query_variations,
+                quality_threshold=quality_threshold
+            )
+        except Exception as e:
+            logger.warning(f"Advanced RAG failed: {e}, falling back to basic semantic search", exc_info=True)
+            # Fall through to basic semantic search
 
     # Build rich description of what changed
     change_description = build_rich_change_description(changed_functions, file_changes)
@@ -145,15 +194,19 @@ async def find_tests_semantic(
     backend = get_backend(conn)
     
     # Use adaptive thresholds if enabled
-    # Remove limit by using a very high max_results value
-    effective_max_results = max(max_results, 10000) if max_results > 0 else 10000
+    # For adaptive thresholds, we need to query more than max_results to find the best matches
+    # But we'll limit the final results to max_results
+    # Query up to 2x max_results to ensure we have enough candidates for filtering
+    query_limit = max(max_results * 2, 100) if max_results > 0 else 10000
     
     if use_adaptive_thresholds and similarity_threshold is None:
         # Try strict threshold first
         results = await backend.search_similar(
             query_embedding,
             SEMANTIC_THRESHOLD_STRICT,
-            effective_max_results
+            query_limit,
+            top_k=top_k,
+            top_p=top_p
         )
         
         # If not enough results, try moderate
@@ -161,7 +214,10 @@ async def find_tests_semantic(
             moderate_results = await backend.search_similar(
                 query_embedding,
                 SEMANTIC_THRESHOLD_MODERATE,
-                effective_max_results
+                query_limit,
+                test_repo_id=test_repo_id,
+                top_k=top_k,
+                top_p=top_p
             )
             # Combine and deduplicate (prefer higher similarity)
             seen_ids = {r.get('test_id') for r in results}
@@ -174,7 +230,10 @@ async def find_tests_semantic(
             lenient_results = await backend.search_similar(
                 query_embedding,
                 SEMANTIC_THRESHOLD_LENIENT,
-                effective_max_results
+                query_limit,
+                test_repo_id=test_repo_id,
+                top_k=top_k,
+                top_p=top_p
             )
             # Combine and deduplicate
             seen_ids = {r.get('test_id') for r in results}
@@ -187,9 +246,18 @@ async def find_tests_semantic(
         results = await backend.search_similar(
             query_embedding,
             threshold,
-            effective_max_results
+            query_limit,
+            top_k=top_k,
+            top_p=top_p
         )
-
+    
+    # Sort by similarity (descending) to ensure best matches first
+    results.sort(key=lambda x: x.get('similarity', 0), reverse=True)
+    
+    # Apply max_results limit at the end (respect user's configuration)
+    if max_results > 0:
+        results = results[:max_results]
+    
     return results
 
 
@@ -197,7 +265,8 @@ async def find_tests_semantic_multi_query(
     conn,
     changed_functions: list,
     file_changes: Optional[List[Dict]] = None,
-    max_results: int = DEFAULT_MAX_RESULTS
+    max_results: int = DEFAULT_MAX_RESULTS,
+    test_repo_id: Optional[str] = None
 ) -> list:
     """
     Multi-query semantic search - generates multiple query variations and combines results.
@@ -238,7 +307,10 @@ async def find_tests_semantic_multi_query(
         func_results = await backend.search_similar(
             func_embedding,
             SEMANTIC_THRESHOLD_LENIENT,
-            max_results
+            max_results,
+            top_k=None,
+            top_p=None,
+            test_repo_id=test_repo_id
         )
         # Weight function queries higher
         for r in func_results:
@@ -256,7 +328,10 @@ async def find_tests_semantic_multi_query(
         module_results = await backend.search_similar(
             module_embedding,
             SEMANTIC_THRESHOLD_LENIENT,
-            max_results
+            max_results,
+            top_k=None,
+            top_p=None,
+            test_repo_id=test_repo_id
         )
         # Weight module queries lower
         for r in module_results:
@@ -273,7 +348,10 @@ async def find_tests_semantic_multi_query(
         rich_results = await backend.search_similar(
             rich_embedding,
             SEMANTIC_THRESHOLD_LENIENT,
-            max_results
+            max_results,
+            test_repo_id=test_repo_id,
+            top_k=None,
+            top_p=None
         )
         # Weight rich queries highest
         for r in rich_results:

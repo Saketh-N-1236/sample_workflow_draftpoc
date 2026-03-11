@@ -20,6 +20,7 @@ Run this script:
 from pathlib import Path
 import sys
 import json
+import logging
 from collections import defaultdict
 
 # Add utils to path
@@ -30,10 +31,13 @@ from utils.output_formatter import (
     print_header, print_section, print_item, print_list,
     save_json, print_summary
 )
+from utils.config import get_test_repo_path, get_output_dir
+
+logger = logging.getLogger(__name__)
 
 # Configuration
-TEST_REPO_PATH = Path(__file__).parent.parent / "test_repository"
-OUTPUT_DIR = Path(__file__).parent / "outputs"
+TEST_REPO_PATH = get_test_repo_path()
+OUTPUT_DIR = get_output_dir()
 STEP1_OUTPUT = OUTPUT_DIR / "01_test_files.json"
 OUTPUT_FILE = OUTPUT_DIR / "07_test_structure.json"
 
@@ -51,6 +55,39 @@ def analyze_directory_structure(repo_path: Path) -> dict:
         "files_by_directory": defaultdict(list),
         "package_structure": {}
     }
+    
+    # Load test registry to count tests per directory
+    test_counts_by_dir = defaultdict(int)
+    test_registry_file = OUTPUT_DIR / "03_test_registry.json"
+    if test_registry_file.exists():
+        try:
+            with open(test_registry_file, 'r', encoding='utf-8') as f:
+                registry_data = json.load(f)
+                # Handle wrapped and unwrapped formats
+                data = registry_data.get('data', registry_data)
+                tests = data.get('tests', [])
+                for test in tests:
+                    file_path = test.get('file_path', '')
+                    if file_path:
+                        try:
+                            # Normalize path and get directory
+                            file_path_obj = Path(file_path)
+                            # Get relative directory path
+                            if file_path_obj.is_absolute():
+                                try:
+                                    dir_key = str(file_path_obj.relative_to(repo_path).parent)
+                                except ValueError:
+                                    # If not relative to repo_path, use absolute parent
+                                    dir_key = str(file_path_obj.parent)
+                            else:
+                                dir_key = str(file_path_obj.parent)
+                            # Normalize separators
+                            dir_key = dir_key.replace('\\', '/')
+                            test_counts_by_dir[dir_key] += 1
+                        except Exception as e:
+                            logger.debug(f"Could not process file path {file_path}: {e}")
+        except Exception as e:
+            logger.warning(f"Could not load test registry for test counts: {e}")
     
     # Scan all test files
     test_files = scan_directory(repo_path)
@@ -99,14 +136,77 @@ def analyze_directory_structure(repo_path: Path) -> dict:
             structure["package_structure"][package]["subdirectories"]
         )
     
-    # Add directory statistics
-    structure["directories"] = {
-        category: {
+    # Build a map of file paths to test counts from test registry
+    # Load test registry again to get file-level counts
+    file_test_counts = defaultdict(int)
+    file_test_counts_by_name = defaultdict(int)  # Fallback: count by filename
+    if test_registry_file.exists():
+        try:
+            with open(test_registry_file, 'r', encoding='utf-8') as f:
+                registry_data = json.load(f)
+                data = registry_data.get('data', registry_data)
+                tests = data.get('tests', [])
+                for test in tests:
+                    file_path = test.get('file_path', '')
+                    if file_path:
+                        try:
+                            # Normalize the file path for matching
+                            file_path_obj = Path(file_path)
+                            if file_path_obj.is_absolute():
+                                try:
+                                    # Get relative path from repo root
+                                    rel_path = file_path_obj.relative_to(repo_path)
+                                    file_key = str(rel_path).replace('\\', '/')
+                                except ValueError:
+                                    # Use absolute path if can't make relative
+                                    file_key = str(file_path_obj).replace('\\', '/')
+                            else:
+                                file_key = str(file_path_obj).replace('\\', '/')
+                            file_test_counts[file_key] += 1
+                            # Also index by filename for fallback matching
+                            file_test_counts_by_name[file_path_obj.name] += 1
+                        except Exception as e:
+                            logger.debug(f"Could not process file path {file_path}: {e}")
+        except Exception as e:
+            logger.warning(f"Could not load test registry for file-level test counts: {e}")
+    
+    # Add directory statistics with test counts
+    structure["directories"] = {}
+    for category, files in structure["files_by_directory"].items():
+        # Calculate test count for this category by matching actual file paths
+        category_test_count = 0
+        matched_files = set()  # Track which files we've matched to avoid double counting
+        
+        for file_info in files:
+            # Get the file path (relative)
+            file_path_relative = file_info.get('path', '')
+            if not file_path_relative:
+                continue
+                
+            try:
+                # Normalize the path for matching
+                file_path_normalized = file_path_relative.replace('\\', '/')
+                
+                # Try exact match first
+                if file_path_normalized in file_test_counts:
+                    category_test_count += file_test_counts[file_path_normalized]
+                    matched_files.add(file_path_normalized)
+                else:
+                    # Try matching by filename (in case paths differ slightly)
+                    file_name = Path(file_path_relative).name
+                    if file_name not in matched_files:
+                        # Check if this filename exists in test registry
+                        if file_name in file_test_counts_by_name:
+                            category_test_count += file_test_counts_by_name[file_name]
+                            matched_files.add(file_name)
+            except Exception as e:
+                logger.debug(f"Could not match file for {file_path_relative}: {e}")
+        
+        structure["directories"][category] = {
             "file_count": len(files),
+            "test_count": category_test_count,
             "total_lines": sum(f['line_count'] for f in files)
         }
-        for category, files in structure["files_by_directory"].items()
-    }
     
     return structure
 
@@ -145,10 +245,10 @@ def find_shared_utilities(repo_path: Path) -> dict:
 
 def build_structure_map() -> dict:
     """
-    Build complete structure map.
+    Build complete structure map with test counts.
     
     Returns:
-        Dictionary with complete structure information
+        Dictionary with complete structure information including structure_rows for DB
     """
     print_section("Analyzing directory structure...")
     directory_structure = analyze_directory_structure(TEST_REPO_PATH)
@@ -156,9 +256,24 @@ def build_structure_map() -> dict:
     print_section("Finding shared utilities...")
     shared_utilities = find_shared_utilities(TEST_REPO_PATH)
     
+    # Build structure_rows for database insertion (includes test_count)
+    structure_rows = []
+    directories = directory_structure.get('directories', {})
+    files_by_directory = directory_structure.get('files_by_directory', {})
+    
+    for category, stats in directories.items():
+        structure_rows.append({
+            "category": category,
+            "directory_path": category,
+            "file_count": stats.get('file_count', 0),
+            "test_count": stats.get('test_count', 0),
+            "total_lines": stats.get('total_lines', 0),
+        })
+    
     return {
         "directory_structure": directory_structure,
         "shared_utilities": shared_utilities,
+        "structure_rows": structure_rows,  # For DB loader
         "summary": {
             "total_directories": len(directory_structure["package_structure"]),
             "total_files": sum(

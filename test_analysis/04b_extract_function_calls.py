@@ -25,14 +25,15 @@ from typing import Optional
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from utils.language_parser import parse_file, extract_function_calls, extract_string_references
+from utils.language_parser import parse_file, extract_function_calls, extract_string_references, extract_imports
 from utils.output_formatter import (
     print_header, print_section, print_item, print_list,
     save_json, print_progress, print_summary
 )
+from utils.config import get_output_dir
 
 # Configuration
-OUTPUT_DIR = Path(__file__).parent / "outputs"
+OUTPUT_DIR = get_output_dir()
 STEP3_OUTPUT = OUTPUT_DIR / "03_test_registry.json"
 OUTPUT_FILE = OUTPUT_DIR / "04b_function_calls.json"
 
@@ -254,8 +255,7 @@ def build_function_mapping() -> dict:
         imports_data = {}
         if tree:
             try:
-                from utils.ast_parser import extract_imports
-                imports_data = extract_imports(tree)
+                imports_data = extract_imports(tree, filepath)
             except (AttributeError, TypeError) as e:
                 # Parser not initialized or tree is invalid
                 print(f"Warning: Could not extract imports from {filepath.name}: {e}")

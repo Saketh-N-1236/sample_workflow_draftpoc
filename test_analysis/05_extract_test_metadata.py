@@ -32,9 +32,10 @@ from utils.output_formatter import (
     print_header, print_section, print_item, print_list,
     save_json, print_progress, print_summary
 )
+from utils.config import get_output_dir
 
 # Configuration
-OUTPUT_DIR = Path(__file__).parent / "outputs"
+OUTPUT_DIR = get_output_dir()
 STEP3_OUTPUT = OUTPUT_DIR / "03_test_registry.json"
 OUTPUT_FILE = OUTPUT_DIR / "05_test_metadata.json"
 

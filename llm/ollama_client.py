@@ -25,7 +25,8 @@ class OllamaClient(LLMProvider):
         self._base_url = base_url.rstrip('/')
         self._chat_model = chat_model
         self._embedding_model = embedding_model
-        self._client = httpx.AsyncClient(timeout=60.0)
+        # Increased timeout for embedding generation (can take longer for large batches)
+        self._client = httpx.AsyncClient(timeout=300.0)  # 5 minutes timeout
     
     @property
     def provider_name(self) -> str:

@@ -29,9 +29,10 @@ from utils.output_formatter import (
     print_header, print_section, print_item, print_list,
     save_json, print_summary
 )
+from utils.config import get_output_dir
 
 # Configuration
-OUTPUT_DIR = Path(__file__).parent / "outputs"
+OUTPUT_DIR = get_output_dir()
 OUTPUT_FILE = OUTPUT_DIR / "08_summary_report.json"
 
 # Step output files
@@ -92,7 +93,7 @@ def generate_summary_report() -> dict:
         "test_repository_overview": {
             "total_test_files": step1_data.get("total_files", 0),
             "total_lines_of_code": step1_data.get("total_lines", 0),
-            "test_framework": step2_data.get("primary_framework", "unknown"),
+            "test_framework": step2_data.get("framework") or step2_data.get("primary_framework", "unknown"),
             "framework_confidence": step2_data.get("confidence", "unknown")
         },
         "test_inventory": {

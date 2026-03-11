@@ -452,7 +452,6 @@ class GitService:
             }
         }
         
-        # Log for debugging
         logger.info(f"Generated diff: {len(result['diff'])} chars, {len(result['changed_files'])} files, stats={result['stats']}")
         if not result['diff'] and result['changed_files']:
             logger.warning(f"WARNING: Diff text is empty but {len(result['changed_files'])} files changed!")

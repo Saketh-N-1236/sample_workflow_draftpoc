@@ -160,7 +160,108 @@ def get_connection():
             pool.putconn(conn)
 
 
-def test_connection():
+def create_schema_if_not_exists(schema_name: str):
+    """
+    Create a database schema if it doesn't exist.
+    
+    Args:
+        schema_name: Name of the schema to create
+        
+    Returns:
+        True if schema was created or already exists, False on error
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                # Validate schema name (PostgreSQL limit: 63 chars, alphanumeric + underscore)
+                if len(schema_name) > 63:
+                    raise ValueError(f"Schema name too long: {schema_name} (max 63 characters)")
+                if not schema_name.replace('_', '').isalnum():
+                    raise ValueError(f"Invalid schema name: {schema_name} (must be alphanumeric + underscore)")
+                
+                cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {schema_name}")
+                conn.commit()
+                return True
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to create schema {schema_name}: {e}")
+        return False
+
+
+def drop_schema_if_exists(schema_name: str, cascade: bool = True):
+    """
+    Drop a database schema if it exists.
+    
+    Args:
+        schema_name: Name of the schema to drop
+        cascade: If True, drop all objects in schema (CASCADE)
+        
+    Returns:
+        True if schema was dropped or didn't exist, False on error
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cursor:
+                cascade_clause = "CASCADE" if cascade else "RESTRICT"
+                cursor.execute(f"DROP SCHEMA IF EXISTS {schema_name} {cascade_clause}")
+                conn.commit()
+                return True
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to drop schema {schema_name}: {e}")
+        return False
+
+
+@contextmanager
+def get_connection_with_schema(schema_name: str):
+    """
+    Get a database connection with a specific schema search path.
+    
+    This function:
+    1. Creates a connection pool if it doesn't exist
+    2. Sets the schema search path to the specified schema
+    3. Returns a connection from the pool
+    
+    Args:
+        schema_name: Name of the schema to use
+        
+    Yields:
+        psycopg2.connection: Database connection object with schema set
+    """
+    pool = create_connection_pool()
+    conn = None
+    
+    try:
+        # Get connection from pool
+        conn = pool.getconn()
+        
+        if conn is None:
+            raise Exception("Failed to get connection from pool")
+        
+        # Set schema search path
+        with conn.cursor() as cursor:
+            cursor.execute(f"SET search_path TO {schema_name}, public")
+            conn.commit()
+        
+        # Yield connection for use
+        yield conn
+        
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Database connection error: {e}")
+        raise
+    finally:
+        # Return connection to pool
+        if conn:
+            pool.putconn(conn)
+
+
+def test_connection(schema_to_test=None):
     """
     Test database connection and schema access.
     
@@ -168,6 +269,9 @@ def test_connection():
     1. Attempts to connect to the database
     2. Verifies the schema exists
     3. Returns True if successful, False otherwise
+    
+    Args:
+        schema_to_test: Optional schema name to test (defaults to DB_SCHEMA or TEST_REPO_SCHEMA)
     
     Returns:
         bool: True if connection successful, False otherwise
@@ -179,6 +283,9 @@ def test_connection():
         ...     print("Database connection failed!")
     """
     try:
+        # Use provided schema, or TEST_REPO_SCHEMA env var, or default DB_SCHEMA
+        test_schema = schema_to_test or os.getenv('TEST_REPO_SCHEMA') or DB_SCHEMA
+        
         with get_connection() as conn:
             with conn.cursor() as cursor:
                 # Test basic query
@@ -191,19 +298,19 @@ def test_connection():
                     SELECT schema_name 
                     FROM information_schema.schemata 
                     WHERE schema_name = %s
-                """, (DB_SCHEMA,))
+                """, (test_schema,))
                 
                 schema_exists = cursor.fetchone() is not None
                 
                 if schema_exists:
                     print(f"[OK] Connected to database: {db_name}")
-                    print(f"[OK] Using schema: {DB_SCHEMA}")
+                    print(f"[OK] Using schema: {test_schema}")
                     print(f"[OK] Schema exists and is accessible")
                     return True
                 else:
-                    print(f"[ERROR] Schema '{DB_SCHEMA}' does not exist!")
+                    print(f"[ERROR] Schema '{test_schema}' does not exist!")
                     print(f"  Please create the schema in pgAdmin or using SQL:")
-                    print(f"  CREATE SCHEMA IF NOT EXISTS {DB_SCHEMA};")
+                    print(f"  CREATE SCHEMA IF NOT EXISTS {test_schema};")
                     return False
                     
     except OperationalError as e:

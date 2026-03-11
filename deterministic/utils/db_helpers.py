@@ -62,13 +62,14 @@ def insert_test_registry(conn, test_data: Dict[str, Any]) -> bool:
         return False
 
 
-def batch_insert_test_registry(conn, tests: List[Dict[str, Any]]) -> int:
+def batch_insert_test_registry(conn, tests: List[Dict[str, Any]], schema: Optional[str] = None) -> int:
     """
     Insert multiple tests in batch (more efficient than one-by-one).
     
     Args:
         conn: Database connection
         tests: List of test dictionaries
+        schema: Optional schema name (defaults to DB_SCHEMA)
     
     Returns:
         Number of tests successfully inserted
@@ -77,6 +78,9 @@ def batch_insert_test_registry(conn, tests: List[Dict[str, Any]]) -> int:
         return 0
     
     try:
+        from db_connection import DB_SCHEMA
+        target_schema = schema or DB_SCHEMA
+        
         with conn.cursor() as cursor:
             # Prepare data for batch insert
             values = [
@@ -93,14 +97,11 @@ def batch_insert_test_registry(conn, tests: List[Dict[str, Any]]) -> int:
                 for t in tests
             ]
             
-            # Get schema from db_connection
-            from db_connection import DB_SCHEMA
-            
             # Use execute_values for efficient batch insert
             execute_values(
                 cursor,
                 f"""
-                INSERT INTO {DB_SCHEMA}.test_registry 
+                INSERT INTO {target_schema}.test_registry 
                 (test_id, file_path, class_name, method_name, test_type, line_number, language, repository_path)
                 VALUES %s
                 ON CONFLICT (test_id) DO UPDATE SET
@@ -151,7 +152,7 @@ def insert_test_dependency(conn, test_id: str, referenced_class: str,
         return False
 
 
-def batch_insert_test_dependencies(conn, dependencies: List[Dict[str, Any]]) -> int:
+def batch_insert_test_dependencies(conn, dependencies: List[Dict[str, Any]], schema: Optional[str] = None) -> int:
     """
     Insert multiple test dependencies in batch.
     
@@ -161,6 +162,7 @@ def batch_insert_test_dependencies(conn, dependencies: List[Dict[str, Any]]) -> 
             - test_id: Test identifier
             - referenced_class: Production class name
             - import_type: Type of import (optional)
+        schema: Optional schema name (defaults to DB_SCHEMA or search_path)
     
     Returns:
         Number of dependencies inserted
@@ -169,6 +171,9 @@ def batch_insert_test_dependencies(conn, dependencies: List[Dict[str, Any]]) -> 
         return 0
     
     try:
+        from db_connection import DB_SCHEMA
+        target_schema = schema or DB_SCHEMA
+        
         with conn.cursor() as cursor:
             values = [
                 (
@@ -179,10 +184,12 @@ def batch_insert_test_dependencies(conn, dependencies: List[Dict[str, Any]]) -> 
                 for d in dependencies
             ]
             
+            # Use schema prefix if provided, otherwise rely on search_path
+            table_name = f"{target_schema}.test_dependencies" if schema else "test_dependencies"
             execute_values(
                 cursor,
-                """
-                INSERT INTO test_dependencies 
+                f"""
+                INSERT INTO {table_name} 
                 (test_id, referenced_class, import_type)
                 VALUES %s
                 """,
@@ -227,13 +234,14 @@ def insert_reverse_index(conn, production_class: str, test_id: str,
         return False
 
 
-def batch_insert_reverse_index(conn, reverse_entries: List[Dict[str, Any]]) -> int:
+def batch_insert_reverse_index(conn, reverse_entries: List[Dict[str, Any]], schema: Optional[str] = None) -> int:
     """
     Insert multiple reverse index entries in batch.
     
     Args:
         conn: Database connection
         reverse_entries: List of reverse index dictionaries
+        schema: Optional schema name (defaults to DB_SCHEMA or search_path)
     
     Returns:
         Number of entries inserted
@@ -242,6 +250,9 @@ def batch_insert_reverse_index(conn, reverse_entries: List[Dict[str, Any]]) -> i
         return 0
     
     try:
+        from db_connection import DB_SCHEMA
+        target_schema = schema or DB_SCHEMA
+        
         with conn.cursor() as cursor:
             values = [
                 (
@@ -253,10 +264,12 @@ def batch_insert_reverse_index(conn, reverse_entries: List[Dict[str, Any]]) -> i
                 for e in reverse_entries
             ]
             
+            # Use schema prefix if provided, otherwise rely on search_path
+            table_name = f"{target_schema}.reverse_index" if schema else "reverse_index"
             execute_values(
                 cursor,
-                """
-                INSERT INTO reverse_index 
+                f"""
+                INSERT INTO {table_name} 
                 (production_class, test_id, test_file_path, reference_type)
                 VALUES %s
                 """,
@@ -303,12 +316,16 @@ def get_tests_for_production_class(conn, production_class: str, schema: str = 'p
                     ROW_NUMBER() OVER (
                         PARTITION BY r.test_id 
                         ORDER BY 
-                            CASE WHEN r.production_class = %s THEN 1 ELSE 2 END,
+                            CASE WHEN r.production_class = %s THEN 1 
+                                 WHEN r.production_class LIKE %s THEN 2
+                                 WHEN r.production_class LIKE %s THEN 3
+                                 ELSE 4 END,
                             CASE WHEN r.reference_type = 'string_ref' THEN 1 ELSE 2 END
                     ) as rn
                 FROM {schema}.reverse_index r
                 JOIN {schema}.test_registry t ON r.test_id = t.test_id
                 WHERE r.production_class = %s
+                   OR r.production_class LIKE %s
                    OR r.production_class LIKE %s
             )
             SELECT 
@@ -322,7 +339,14 @@ def get_tests_for_production_class(conn, production_class: str, schema: str = 'p
             ORDER BY 
                 CASE WHEN reference_type = 'string_ref' THEN 1 ELSE 2 END,
                 test_id
-        """, (production_class, production_class, f"{production_class}.%"))
+        """, (
+            production_class,  # For ORDER BY exact match
+            f"{production_class}.%",  # For ORDER BY prefix match
+            f"%.{production_class}",  # For ORDER BY suffix match (e.g., 'agent.module.__init__')
+            production_class,  # For WHERE exact match
+            f"{production_class}.%",  # For WHERE prefix match
+            f"%.{production_class}"  # For WHERE suffix match (e.g., 'agent.module.__init__')
+        ))
         
         results = cursor.fetchall()
         return [
@@ -337,7 +361,7 @@ def get_tests_for_production_class(conn, production_class: str, schema: str = 'p
         ]
 
 
-def batch_insert_test_function_mapping(conn, mappings: List[Dict[str, Any]]) -> int:
+def batch_insert_test_function_mapping(conn, mappings: List[Dict[str, Any]], schema: Optional[str] = None) -> int:
     """
     Insert multiple test function mappings in batch.
     
@@ -369,10 +393,14 @@ def batch_insert_test_function_mapping(conn, mappings: List[Dict[str, Any]]) -> 
                 for m in mappings
             ]
             
+            from db_connection import DB_SCHEMA
+            target_schema = schema or DB_SCHEMA
+            # Use schema prefix if provided, otherwise rely on search_path
+            table_name = f"{target_schema}.test_function_mapping" if schema else "test_function_mapping"
             execute_values(
                 cursor,
-                """
-                INSERT INTO test_function_mapping 
+                f"""
+                INSERT INTO {table_name} 
                 (test_id, module_name, function_name, call_type, source)
                 VALUES %s
                 ON CONFLICT DO NOTHING
@@ -387,17 +415,22 @@ def batch_insert_test_function_mapping(conn, mappings: List[Dict[str, Any]]) -> 
         return 0
 
 
-def count_table_records(conn, table_name: str) -> int:
+def count_table_records(conn, table_name: str, schema: Optional[str] = None) -> int:
     """
     Count records in a table.
     
     Args:
         conn: Database connection
         table_name: Name of the table (without schema prefix)
+        schema: Optional schema name (defaults to DB_SCHEMA or search_path)
     
     Returns:
         Number of records
     """
+    from db_connection import DB_SCHEMA
+    target_schema = schema or DB_SCHEMA
+    # Use schema prefix if provided, otherwise rely on search_path
+    full_table_name = f"{target_schema}.{table_name}" if schema else table_name
     with conn.cursor() as cursor:
-        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
+        cursor.execute(f"SELECT COUNT(*) FROM {full_table_name}")
         return cursor.fetchone()[0]

@@ -27,11 +27,11 @@ from utils.output_formatter import (
     print_header, print_section, print_item, print_list, 
     print_summary, save_json, print_progress
 )
-from utils.config import get_test_repo_path, get_project_root, get_language_config_path
+from utils.config import get_test_repo_path, get_project_root, get_language_config_path, get_output_dir
 
 # Configuration: Path to test repository (configurable via TEST_REPO_PATH env var)
 TEST_REPO_PATH = get_test_repo_path()
-OUTPUT_DIR = Path(__file__).parent / "outputs"
+OUTPUT_DIR = get_output_dir()
 OUTPUT_FILE = OUTPUT_DIR / "01_test_files.json"
 
 # Add project root to path for multi-language support

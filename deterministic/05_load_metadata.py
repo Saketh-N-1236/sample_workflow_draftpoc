@@ -19,17 +19,24 @@ Run this script:
 import sys
 import json
 from pathlib import Path
+from typing import Optional
 
 # Add current directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-from db_connection import get_connection, test_connection
+from db_connection import get_connection, get_connection_with_schema, test_connection, DB_SCHEMA
 from utils.db_helpers import count_table_records
 from utils.output_formatter import print_header, print_section, print_item
 from psycopg2.extras import execute_values
 
 # Path to metadata JSON file
-TEST_ANALYSIS_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs"
+# Use schema-specific output directory if TEST_REPO_SCHEMA is set
+import os
+schema_name = os.getenv('TEST_REPO_SCHEMA')
+if schema_name:
+    TEST_ANALYSIS_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs" / schema_name
+else:
+    TEST_ANALYSIS_DIR = Path(__file__).parent.parent / "test_analysis" / "outputs"
 METADATA_FILE = TEST_ANALYSIS_DIR / "05_test_metadata.json"
 
 
@@ -85,13 +92,14 @@ def prepare_metadata_data(metadata_data: dict) -> list:
     return prepared_metadata
 
 
-def load_metadata_to_database(conn, metadata_list: list, batch_size: int = 50) -> dict:
+def load_metadata_to_database(conn, metadata_list: list, schema: Optional[str] = None, batch_size: int = 50) -> dict:
     """
     Load metadata into database in batches.
     
     Args:
         conn: Database connection
         metadata_list: List of metadata dictionaries
+        schema: Optional schema name (defaults to DB_SCHEMA or search_path)
         batch_size: Number of records to insert per batch
     
     Returns:
@@ -100,6 +108,9 @@ def load_metadata_to_database(conn, metadata_list: list, batch_size: int = 50) -
     total_metadata = len(metadata_list)
     loaded_count = 0
     failed_count = 0
+    
+    target_schema = schema or DB_SCHEMA
+    table_name = f"{target_schema}.test_metadata" if schema else "test_metadata"
     
     print_section(f"Loading {total_metadata} metadata records in batches of {batch_size}...")
     
@@ -131,8 +142,8 @@ def load_metadata_to_database(conn, metadata_list: list, batch_size: int = 50) -
                 # Use execute_values for efficient batch insert
                 execute_values(
                     cursor,
-                    """
-                    INSERT INTO test_metadata 
+                    f"""
+                    INSERT INTO {table_name} 
                     (test_id, description, markers, is_async, is_parameterized, pattern, line_number)
                     VALUES %s
                     ON CONFLICT (test_id) DO UPDATE SET
@@ -161,41 +172,45 @@ def load_metadata_to_database(conn, metadata_list: list, batch_size: int = 50) -
     }
 
 
-def get_metadata_statistics(conn) -> dict:
+def get_metadata_statistics(conn, schema: Optional[str] = None) -> dict:
     """
     Get statistics about loaded metadata.
     
     Args:
         conn: Database connection
+        schema: Optional schema name (defaults to DB_SCHEMA or search_path)
     
     Returns:
         Dictionary with statistics
     """
+    target_schema = schema or DB_SCHEMA
+    table_name = f"{target_schema}.test_metadata" if schema else "test_metadata"
+    
     with conn.cursor() as cursor:
         # Total metadata records
-        cursor.execute("SELECT COUNT(*) FROM test_metadata")
+        cursor.execute(f"SELECT COUNT(*) FROM {table_name}")
         total_records = cursor.fetchone()[0]
         
         # Tests with descriptions
-        cursor.execute("SELECT COUNT(*) FROM test_metadata WHERE description IS NOT NULL AND description != ''")
+        cursor.execute(f"SELECT COUNT(*) FROM {table_name} WHERE description IS NOT NULL AND description != ''")
         with_descriptions = cursor.fetchone()[0]
         
         # Tests with markers
-        cursor.execute("SELECT COUNT(*) FROM test_metadata WHERE markers IS NOT NULL AND markers != '[]'::jsonb")
+        cursor.execute(f"SELECT COUNT(*) FROM {table_name} WHERE markers IS NOT NULL AND markers != '[]'::jsonb")
         with_markers = cursor.fetchone()[0]
         
         # Async tests
-        cursor.execute("SELECT COUNT(*) FROM test_metadata WHERE is_async = TRUE")
+        cursor.execute(f"SELECT COUNT(*) FROM {table_name} WHERE is_async = TRUE")
         async_tests = cursor.fetchone()[0]
         
         # Parameterized tests
-        cursor.execute("SELECT COUNT(*) FROM test_metadata WHERE is_parameterized = TRUE")
+        cursor.execute(f"SELECT COUNT(*) FROM {table_name} WHERE is_parameterized = TRUE")
         parameterized_tests = cursor.fetchone()[0]
         
         # Pattern distribution
-        cursor.execute("""
+        cursor.execute(f"""
             SELECT pattern, COUNT(*) as count
-            FROM test_metadata
+            FROM {table_name}
             WHERE pattern IS NOT NULL
             GROUP BY pattern
             ORDER BY count DESC
@@ -216,6 +231,13 @@ def main():
     """Main function to load test metadata."""
     print_header("Step 5: Loading Test Metadata")
     print()
+    
+    # Get schema from environment (for multi-repo support)
+    schema_name = os.getenv('TEST_REPO_SCHEMA', None)
+    target_schema = schema_name or DB_SCHEMA
+    if schema_name:
+        print_section(f"Using schema: {target_schema}")
+        print()
     
     # Step 1: Test database connection
     print_section("Testing database connection...")
@@ -248,21 +270,27 @@ def main():
     
     # Step 4: Load into database
     try:
-        with get_connection() as conn:
+        # Use schema-specific connection if schema_name is provided
+        if schema_name:
+            conn_context = get_connection_with_schema(schema_name)
+        else:
+            conn_context = get_connection()
+        
+        with conn_context as conn:
             # Check current count
-            initial_count = count_table_records(conn, "test_metadata")
+            initial_count = count_table_records(conn, "test_metadata", schema=schema_name)
             print_item("Metadata records in database (before):", initial_count)
             print()
             
             # Load metadata
-            stats = load_metadata_to_database(conn, metadata_list)
+            stats = load_metadata_to_database(conn, metadata_list, schema=schema_name)
             print()
             
             # Check final count
-            final_count = count_table_records(conn, "test_metadata")
+            final_count = count_table_records(conn, "test_metadata", schema=schema_name)
             
             # Step 5: Get statistics
-            meta_stats = get_metadata_statistics(conn)
+            meta_stats = get_metadata_statistics(conn, schema=schema_name)
             print()
             
             # Step 6: Display summary

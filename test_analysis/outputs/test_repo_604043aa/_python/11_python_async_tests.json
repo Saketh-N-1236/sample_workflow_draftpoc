@@ -1,0 +1,538 @@
+{
+  "generated_at": "2026-03-10T17:08:22.844738",
+  "data": {
+    "total_async_tests": 106,
+    "async_tests": [
+      {
+        "test_id": "test_0001",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0002",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0003",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0004",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0005",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0006",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0007",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0008",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0009",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0010",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0011",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0012",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0034",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0035",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0039",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0040",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0043",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0044",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0046",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0047",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0048",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0049",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0057",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0058",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0059",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0060",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0061",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0062",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0063",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0064",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0065",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0066",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0067",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0068",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0069",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0070",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0071",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0072",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0073",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0074",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0075",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0076",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0077",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0078",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0087",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0088",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0089",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0092",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0093",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0094",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0095",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0096",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0097",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0098",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0114",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0115",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0116",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0117",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0119",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0120",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0121",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0122",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0123",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0124",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0125",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0126",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0127",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0128",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0129",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0130",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0131",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0132",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0133",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0134",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0135",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0136",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0142",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0143",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0163",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0164",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0165",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0166",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0167",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0187",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0188",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0189",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0190",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0191",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0192",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0193",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0194",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0195",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0196",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0197",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0198",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0199",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0200",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0201",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0236",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0237",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0238",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0239",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0240",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0243",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0244",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      },
+      {
+        "test_id": "test_0245",
+        "is_async": true,
+        "async_pattern": "pytest-asyncio"
+      }
+    ]
+  }
+}

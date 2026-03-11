@@ -26,17 +26,10 @@ const Dashboard = () => {
   const fetchDiff = async (repoId) => {
     try {
       const response = await api.getDiff(repoId);
-      console.log('Diff response:', {
-        hasDiff: !!response.data.diff,
-        diffLength: response.data.diff?.length || 0,
-        changedFiles: response.data.changedFiles?.length || 0,
-        stats: response.data.stats
-      });
       setDiffContent(response.data.diff || '');
       setChangedFiles(response.data.changedFiles || []);
     } catch (error) {
       console.error('Failed to fetch diff:', error);
-      console.error('Error details:', error.response?.data);
     }
   };
 

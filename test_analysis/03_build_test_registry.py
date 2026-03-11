@@ -31,11 +31,15 @@ from utils.output_formatter import (
     print_header, print_section, print_item, print_list,
     save_json, print_progress, print_summary
 )
-from utils.config import get_test_repo_path
+from utils.config import get_test_repo_path, get_output_dir
+from utils.universal_parser import get_parser, detect_language
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Configuration
 TEST_REPO_PATH = get_test_repo_path()
-OUTPUT_DIR = Path(__file__).parent / "outputs"
+OUTPUT_DIR = get_output_dir()
 STEP1_OUTPUT = OUTPUT_DIR / "01_test_files.json"
 OUTPUT_FILE = OUTPUT_DIR / "03_test_registry.json"
 
@@ -47,17 +51,32 @@ def load_step1_output() -> list:
     Returns:
         List of file paths from Step 1, or empty list if not found
     """
-    if STEP1_OUTPUT.exists():
-        try:
-            with open(STEP1_OUTPUT, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                # Extract file paths from Step 1 output
-                files_data = data.get('data', {}).get('files', [])
-                return [Path(f['path']) for f in files_data]
-        except Exception as e:
-            print(f"Warning: Could not load Step 1 output: {e}")
+    if not STEP1_OUTPUT.exists():
+        return []
     
-    return []
+    try:
+        with open(STEP1_OUTPUT, 'r', encoding='utf-8') as f:
+            raw = json.load(f)
+        
+        # Handle both wrapped and unwrapped formats
+        data = raw.get('data', raw)
+        files_data = data.get('files', [])
+        
+        # If files_data is empty, try alternative keys
+        if not files_data:
+            files_data = data.get('test_files', [])
+        
+        paths = []
+        for f in files_data:
+            # Handle both 'path' and 'file_path' keys
+            p = f.get('path') or f.get('file_path')
+            if p:
+                paths.append(Path(p))
+        
+        return paths
+    except Exception as e:
+        print(f"Warning: Could not load Step 1 output: {e}")
+        return []
 
 
 def extract_test_type_enhanced(filepath: Path) -> str:
@@ -84,7 +103,8 @@ def extract_test_type_enhanced(filepath: Path) -> str:
 
 def extract_tests_from_file(filepath: Path, test_id_counter: int) -> tuple:
     """
-    Extract all tests from a single test file.
+    Extract all tests from a file using the universal parser.
+    This is the NEW unified approach that works for all languages.
     
     Args:
         filepath: Path to the test file
@@ -95,64 +115,38 @@ def extract_tests_from_file(filepath: Path, test_id_counter: int) -> tuple:
     """
     tests = []
     
-    # Parse the file
-    tree = parse_file(filepath)
-    if not tree:
+    # Use universal parser — handles Python, Java, JS, TS, etc.
+    parser = get_parser()
+    parsed = parser.parse_file(filepath)
+
+    if parsed['error']:
+        logger.warning(f"Skipping {filepath.name}: {parsed['error']}")
         return tests, test_id_counter
-    
-    # Get file metadata
-    file_metadata = get_file_metadata(filepath)
-    # Use enhanced test type detection
+
+    language = parsed['language']
     test_type = extract_test_type_enhanced(filepath)
-    
-    # Extract test classes (language-agnostic)
-    test_classes = extract_test_classes(tree, filepath)
-    
-    # Extract standalone test methods (language-agnostic)
-    all_test_methods = extract_test_methods(tree, filepath)
-    
-    # Track which standalone methods we've already added (to avoid duplicates)
-    added_standalone_methods = set()
-    
-    # If there are test classes, extract methods from classes
-    if test_classes:
-        for test_class in test_classes:
-            class_name = test_class['name']
-            
-            # Get methods for this class
-            class_methods = test_class.get('methods', [])
-            for method_name in class_methods:
-                if method_name.startswith('test_'):
-                    test_id = f"test_{test_id_counter:04d}"
-                    test_id_counter += 1
-                    
-                    tests.append({
-                        "test_id": test_id,
-                        "file_path": str(filepath),
-                        "class_name": class_name,
-                        "method_name": method_name,
-                        "test_type": test_type,
-                        "line_number": None  # Could be extracted if needed
-                    })
-                    added_standalone_methods.add(method_name)
-    
-    # Add standalone test functions (not in classes)
-    for test_method in all_test_methods:
-        method_name = test_method.get('name', '')
-        # Only add if not already added from a class
-        if method_name and method_name not in added_standalone_methods:
-            test_id = f"test_{test_id_counter:04d}"
-            test_id_counter += 1
-            
-            tests.append({
-                "test_id": test_id,
-                "file_path": str(filepath),
-                "class_name": None,  # Standalone function
-                "method_name": method_name,
-                "test_type": test_type,
-                "line_number": test_method.get('line_number')
-            })
-    
+
+    # Build test entries from extracted methods
+    for method_info in parsed['test_methods']:
+        test_id = f"test_{test_id_counter:04d}"
+        test_id_counter += 1
+        tests.append({
+            "test_id":     test_id,
+            "file_path":   str(filepath),
+            "class_name":  method_info.get('class_name'),
+            "method_name": method_info['name'],
+            "test_type":   test_type,
+            "language":    language,
+            "line_number": method_info.get('line_number'),
+            "framework":   parsed['framework'],
+            "parse_method": parsed['parse_method'],
+        })
+
+    # If no methods but there are classes, still register the class
+    if not parsed['test_methods'] and parsed['test_classes']:
+        logger.info(f"Found test classes but no test methods in {filepath.name} "
+                    f"(classes: {parsed['test_classes']}). Check if parser needs updating.")
+
     return tests, test_id_counter
 
 
