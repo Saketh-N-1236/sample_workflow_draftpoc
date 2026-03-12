@@ -11,6 +11,7 @@ from collections import defaultdict
 import json
 import re
 import logging
+import ast
 from datetime import datetime
 
 from .base_analyzer import BaseAnalyzer, AnalyzerResult
@@ -377,15 +378,112 @@ class PythonAnalyzer(BaseAnalyzer):
         
         return function_calls
     
+    def _extract_test_content(self, filepath: Path, method_name: str, line_number: Optional[int]) -> str:
+        """
+        Extract test function body content from source file.
+        
+        Returns full function body including:
+        - Setup code
+        - Function calls
+        - Assertions
+        - Teardown code
+        """
+        if not filepath.exists() or not line_number:
+            return ''
+        
+        try:
+            content = filepath.read_text(encoding='utf-8', errors='replace')
+            lines = content.split('\n')
+            
+            # Try using AST to find the function
+            try:
+                tree = ast.parse(content, filename=str(filepath))
+                for node in ast.walk(tree):
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        if node.name == method_name and node.lineno == line_number:
+                            # Found the function, extract its body
+                            # Get the source lines for this function
+                            start_line = node.lineno - 1  # 0-indexed
+                            # Find the end line by looking at the last statement
+                            end_line = start_line
+                            for stmt in ast.walk(node):
+                                if hasattr(stmt, 'lineno') and stmt.lineno:
+                                    end_line = max(end_line, stmt.lineno - 1)
+                            
+                            # Extract function body (from def to end)
+                            # We need to find where the function actually ends
+                            # Use indentation to determine function end
+                            if start_line < len(lines):
+                                func_start = lines[start_line]
+                                # Find base indentation (spaces before 'def')
+                                base_indent = len(func_start) - len(func_start.lstrip())
+                                
+                                # Find the end of the function by looking for next line with same or less indentation
+                                end_line = start_line + 1
+                                while end_line < len(lines):
+                                    line = lines[end_line]
+                                    if line.strip():  # Non-empty line
+                                        line_indent = len(line) - len(line.lstrip())
+                                        if line_indent <= base_indent and not line.strip().startswith('@'):
+                                            # Found end of function
+                                            break
+                                    end_line += 1
+                                
+                                # Extract function body (including decorators and def line)
+                                func_lines = lines[start_line:end_line]
+                                return '\n'.join(func_lines)
+            except (SyntaxError, ValueError) as e:
+                logger.debug(f"AST parsing failed for {filepath}:{line_number}, using regex fallback: {e}")
+            
+            # Fallback: Use regex to find function
+            # Pattern to match function definition
+            func_pattern = re.compile(
+                r'^(?:async\s+)?def\s+' + re.escape(method_name) + r'\s*\([^)]*\)\s*:',
+                re.MULTILINE
+            )
+            
+            match = func_pattern.search(content)
+            if match:
+                start_pos = match.start()
+                start_line_num = content[:start_pos].count('\n')
+                
+                # Find the function's indentation level
+                func_line = content[start_pos:content.find('\n', start_pos)]
+                base_indent = len(func_line) - len(func_line.lstrip())
+                
+                # Find the end of the function
+                lines = content.split('\n')
+                end_line_num = start_line_num + 1
+                
+                while end_line_num < len(lines):
+                    line = lines[end_line_num]
+                    if line.strip():  # Non-empty line
+                        line_indent = len(line) - len(line.lstrip())
+                        if line_indent <= base_indent and not line.strip().startswith('@'):
+                            break
+                    end_line_num += 1
+                
+                # Extract function body
+                func_lines = lines[start_line_num:end_line_num]
+                return '\n'.join(func_lines)
+            
+        except Exception as e:
+            logger.warning(f"Failed to extract test content from {filepath}:{line_number}: {e}")
+        
+        return ''
+    
     def _extract_metadata(
         self, tests: List[Dict], test_files: List[Path], repo_path: Path
     ) -> List[Dict]:
         """Extract test metadata."""
         metadata = []
+        content_extracted = 0
+        content_failed = 0
         
         for test in tests:
             # Try to extract docstring/description
             description = ''
+            test_content = ''
             try:
                 filepath = Path(test['file_path'])
                 if filepath.exists():
@@ -397,8 +495,34 @@ class PythonAnalyzer(BaseAnalyzer):
                     )
                     if docstring_match:
                         description = docstring_match.group(1).strip()
-            except:
-                pass
+                    
+                    # Extract full test content (function body)
+                    test_content = self._extract_test_content(
+                        filepath,
+                        test['method_name'],
+                        test.get('line_number')
+                    )
+                    if test_content:
+                        content_extracted += 1
+                    else:
+                        content_failed += 1
+                else:
+                    logger.warning(f"Test file does not exist: {test['file_path']}")
+                    content_failed += 1
+            except Exception as e:
+                logger.warning(f"Error extracting metadata for {test.get('test_id')}: {e}", exc_info=True)
+                content_failed += 1
+            
+            # Combine docstring and test content
+            # If we have test content, use it; otherwise use just description
+            if test_content:
+                # Prepend docstring if exists, then add test content
+                if description:
+                    full_description = f"{description}\n\n--- Test Code ---\n{test_content}"
+                else:
+                    full_description = test_content
+            else:
+                full_description = description
             
             # Extract markers (pytest markers)
             markers = []
@@ -417,7 +541,7 @@ class PythonAnalyzer(BaseAnalyzer):
                 'class_name': test.get('class_name', ''),
                 'method_name': test['method_name'],
                 'name': test['method_name'],
-                'description': description,
+                'description': full_description,  # Now contains test content
                 'markers': markers,
                 'annotations': [],
                 'is_async': 'async' in test.get('method_name', '') or 'async def' in str(test),
@@ -427,6 +551,7 @@ class PythonAnalyzer(BaseAnalyzer):
                 'line_number': test.get('line_number'),
             })
         
+        self._log_progress(f"Test content extraction: {content_extracted} succeeded, {content_failed} failed out of {len(tests)} tests")
         return metadata
     
     def _extract_fixtures(

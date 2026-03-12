@@ -308,13 +308,19 @@ class PineconeBackend(VectorBackend):
                 # Get test_repo_id for unique vector ID generation
                 test_repo_id = test.get('test_repo_id', '')
                 
+                # Use test_content_summary if available (from build_embedding_text), otherwise use description
+                # Truncate to PINECONE_DESCRIPTION_MAX_CHARS (1000) for Pinecone metadata
+                from semantic_retrieval.config import PINECONE_DESCRIPTION_MAX_CHARS
+                description_for_metadata = test.get('test_content_summary') or test.get('description', '')
+                description_for_metadata = str(description_for_metadata)[:PINECONE_DESCRIPTION_MAX_CHARS]
+                
                 metadata = {
                     'test_id': str(test_id),  # Include test_id in metadata for easy lookup
                     'method_name': str(test.get('method_name', '')),
                     'class_name': str(test.get('class_name', '') or ''),
                     'test_file_path': str(test.get('file_path', '')),
                     'test_type': str(test.get('test_type', 'unknown')),
-                    'description': str(test.get('description', ''))[:500],  # Limit description length
+                    'description': description_for_metadata,  # Test content summary or description (first 1000 chars)
                     'line_number': str(test.get('line_number', '')) if test.get('line_number') else '',
                     'language': str(test.get('language', 'python')),
                     'is_async': 'true' if test.get('is_async', False) else 'false',

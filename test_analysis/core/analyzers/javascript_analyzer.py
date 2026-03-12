@@ -191,9 +191,21 @@ class JavaScriptAnalyzer(BaseAnalyzer):
                     before = content[:match.start()]
                     line_num = before.count('\n') + 1
                     
-                    # Try to extract test name (handle both single and double quotes)
-                    test_name_match = re.search(r"(?:describe|it|test)\s*\(['\"]([^'\"]+)['\"]", content[max(0, match.start()-100):match.start()])
-                    test_name = test_name_match.group(1) if test_name_match else f"test_{test_id_counter}"
+                    # FIXED: Extract test name from the match area, not just backwards
+                    # Look for the test name in the content around the match
+                    test_name_pattern = re.compile(r"(?:describe|it|test)\s*\(\s*['\"]([^'\"]+)['\"]")
+                    # Search from match.start() backwards up to 200 chars, or forwards from match.start()
+                    search_start = max(0, match.start() - 200)
+                    search_end = min(len(content), match.start() + 200)
+                    search_area = content[search_start:search_end]
+                    
+                    test_name_match = test_name_pattern.search(search_area)
+                    if test_name_match:
+                        test_name = test_name_match.group(1)
+                    else:
+                        # Fallback: try to extract from quotes near the match
+                        quote_match = re.search(r"['\"]([^'\"]+)['\"]", content[max(0, match.start()-50):match.end()+50])
+                        test_name = quote_match.group(1) if quote_match else f"test_{test_id_counter}"
                     
                     test_id_str = f"test_{test_id_counter:04d}"
                     test_id_counter += 1
@@ -302,19 +314,234 @@ class JavaScriptAnalyzer(BaseAnalyzer):
         
         return function_calls
     
+    def _extract_test_content(self, filepath: Path, method_name: str, line_number: Optional[int]) -> str:
+        """
+        Extract test function body content from JavaScript/TypeScript source file.
+        
+        Returns full test function body including:
+        - Setup code
+        - Function calls
+        - Assertions
+        - Teardown code
+        """
+        if not filepath.exists():
+            return ''
+        
+        try:
+            content = filepath.read_text(encoding='utf-8', errors='replace')
+            lines = content.split('\n')
+            
+            # If we have a line number, try line-based extraction first (more reliable)
+            if line_number and line_number > 0 and line_number <= len(lines):
+                # Get the line content at the specified line number
+                line_content = lines[line_number - 1]
+                # Check if this line contains test/it
+                if 'test(' in line_content.lower() or 'it(' in line_content.lower():
+                    # Extract test name from this line
+                    test_name_match = re.search(r"(?:test|it)\s*\(\s*['\"`]([^'\"`]+)['\"`]", line_content)
+                    if test_name_match:
+                        extracted_name = test_name_match.group(1)
+                        # If extracted name matches method_name (or is close), use line-based extraction
+                        if extracted_name == method_name or method_name in extracted_name or extracted_name in method_name:
+                            # Use line-based extraction
+                            start_line_idx = line_number - 1
+                            # Find the opening brace or arrow function starting from this line
+                            start_pos = len('\n'.join(lines[:start_line_idx]))
+                            if start_line_idx > 0:
+                                start_pos += 1
+                            
+                            # Find the function body start
+                            brace_count = 0
+                            found_start = False
+                            end_pos = start_pos
+                            
+                            for i in range(start_line_idx, min(start_line_idx + 30, len(lines))):
+                                line_text = lines[i]
+                                for char in line_text:
+                                    if char == '{':
+                                        if not found_start:
+                                            found_start = True
+                                        brace_count += 1
+                                    elif char == '}':
+                                        brace_count -= 1
+                                        if found_start and brace_count == 0:
+                                            end_pos = len('\n'.join(lines[:i+1]))
+                                            if i > 0:
+                                                end_pos += 1
+                                            test_content = content[start_pos:end_pos]
+                                            logger.debug(f"[javascript] Extracted {len(test_content)} chars using line-based extraction for '{method_name}'")
+                                            return test_content
+                            
+                            # If we found start but not end, extract to end of file (shouldn't happen, but fallback)
+                            if found_start:
+                                test_content = content[start_pos:]
+                                logger.debug(f"[javascript] Extracted {len(test_content)} chars (to EOF) using line-based extraction for '{method_name}'")
+                                return test_content
+            
+            # Fallback to pattern-based search
+            # If we have a line number, use it to narrow the search
+            search_start = 0
+            search_end = len(content)
+            if line_number:
+                # Search around the line number (±50 lines)
+                start_line = max(0, line_number - 50)
+                end_line = min(len(lines), line_number + 50)
+                search_start = len('\n'.join(lines[:start_line]))
+                if start_line > 0:
+                    search_start += 1  # Account for newline
+                search_end = len('\n'.join(lines[:end_line]))
+                if end_line > 0:
+                    search_end += 1  # Account for newline
+                search_content = content[search_start:search_end]
+            else:
+                search_content = content
+            
+            # Escape method_name for regex, but handle special characters
+            # The method_name might contain spaces, parentheses, etc.
+            escaped_name = re.escape(method_name)
+            
+            # Pattern to match test functions: test('name', ...) or it('name', ...)
+            # Handle both single and double quotes, and allow for spaces/special chars in name
+            # Also handle template literals: test(`name`, ...)
+            test_patterns = [
+                # Exact match: test('method_name', ...) or it('method_name', ...)
+                rf"(?:test|it)\s*\(\s*['\"]{escaped_name}['\"]",
+                # Template literal: test(`method_name`, ...)
+                rf"(?:test|it)\s*\(\s*`{escaped_name}`",
+                # Partial match: test('...method_name...', ...) - in case name has extra context
+                rf"(?:test|it)\s*\(\s*['\"][^'\"]*{escaped_name}[^'\"]*['\"]",
+                # Template literal partial: test(`...method_name...`, ...)
+                rf"(?:test|it)\s*\(\s*`[^`]*{escaped_name}[^`]*`",
+            ]
+            
+            for pattern in test_patterns:
+                match = re.search(pattern, search_content, re.MULTILINE | re.IGNORECASE | re.DOTALL)
+                if match:
+                    # Adjust match position if we're searching in a subset
+                    actual_start = search_start + match.start()
+                    actual_end = search_start + match.end()
+                    
+                    # Find the function body start (after the arrow or opening brace)
+                    # Look for arrow function: => { or => (
+                    arrow_match = re.search(r'=>\s*[{(]', content[actual_end:actual_end+200])
+                    if arrow_match:
+                        body_start = actual_end + arrow_match.end()
+                        # Determine if it's a brace or parenthesis
+                        if content[body_start - 1] == '{':
+                            # Find matching closing brace
+                            brace_count = 1
+                            pos = body_start
+                            while pos < len(content) and brace_count > 0:
+                                if content[pos] == '{':
+                                    brace_count += 1
+                                elif content[pos] == '}':
+                                    brace_count -= 1
+                                pos += 1
+                            
+                            if brace_count == 0:
+                                test_content = content[actual_start:pos]
+                                logger.debug(f"Extracted {len(test_content)} chars of test content for '{method_name}'")
+                                return test_content
+                        else:
+                            # Parenthesis - find matching closing parenthesis
+                            paren_count = 1
+                            pos = body_start
+                            while pos < len(content) and paren_count > 0:
+                                if content[pos] == '(':
+                                    paren_count += 1
+                                elif content[pos] == ')':
+                                    paren_count -= 1
+                                pos += 1
+                            
+                            if paren_count == 0:
+                                test_content = content[actual_start:pos]
+                                logger.debug(f"Extracted {len(test_content)} chars of test content for '{method_name}'")
+                                return test_content
+                    else:
+                        # Regular function: function() { ... } or callback function
+                        func_match = re.search(r'function\s*\([^)]*\)\s*{|\([^)]*\)\s*{', content[actual_end:actual_end+200])
+                        if func_match:
+                            body_start = actual_end + func_match.end()
+                            brace_count = 1
+                            pos = body_start
+                            while pos < len(content) and brace_count > 0:
+                                if content[pos] == '{':
+                                    brace_count += 1
+                                elif content[pos] == '}':
+                                    brace_count -= 1
+                                pos += 1
+                            
+                            if brace_count == 0:
+                                test_content = content[actual_start:pos]
+                                logger.debug(f"[javascript] Extracted {len(test_content)} chars of test content for '{method_name}'")
+                                return test_content
+            
+            logger.warning(f"[javascript] Could not find test content for '{method_name}' in {filepath.name} (line {line_number})")
+            
+        except Exception as e:
+            logger.warning(f"[javascript] Failed to extract test content from {filepath}:{line_number}: {e}", exc_info=True)
+        
+        return ''
+    
     def _extract_metadata(
         self, tests: List[Dict], test_files: List[Path], repo_path: Path
     ) -> List[Dict]:
         """Extract test metadata."""
         metadata = []
+        content_extracted = 0
+        content_failed = 0
+        
+        # DEBUG: Log first few tests to verify method_name format
+        self._log_progress(f"Extracting metadata for {len(tests)} tests")
+        if tests:
+            sample_test = tests[0]
+            logger.info(f"[javascript] Sample test: method_name='{sample_test.get('method_name')}', line_number={sample_test.get('line_number')}, file={Path(sample_test.get('file_path', '')).name}")
+        
         for test in tests:
+            # Extract test content (function body)
+            test_content = ''
+            try:
+                filepath = Path(test['file_path'])
+                
+                # Try to resolve file path if it doesn't exist
+                if not filepath.exists():
+                    # Try relative to repo_path
+                    if repo_path:
+                        filepath = repo_path / filepath
+                        if not filepath.exists():
+                            # Try as absolute path
+                            filepath = Path(test['file_path']).resolve()
+                
+                if filepath.exists():
+                    test_content = self._extract_test_content(
+                        filepath,
+                        test['method_name'],
+                        test.get('line_number')
+                    )
+                    if test_content:
+                        content_extracted += 1
+                    else:
+                        content_failed += 1
+                        # Log first few failures for debugging
+                        if content_failed <= 3:
+                            logger.debug(f"[javascript] Failed to extract content for test '{test.get('method_name')}' in {filepath.name} (line {test.get('line_number')})")
+                else:
+                    logger.warning(f"[javascript] Test file does not exist: {test['file_path']} (resolved: {filepath})")
+                    content_failed += 1
+            except Exception as e:
+                logger.warning(f"[javascript] Error extracting content for {test.get('test_id')}: {e}", exc_info=True)
+                content_failed += 1
+            
+            # Use test content as description
+            full_description = test_content if test_content else ''
+            
             metadata.append({
                 'test_id': test['test_id'],
                 'file_path': test['file_path'],
                 'class_name': test.get('class_name', ''),
                 'method_name': test['method_name'],
                 'name': test['method_name'],
-                'description': '',
+                'description': full_description,  # Now contains test content
                 'markers': [],
                 'annotations': [],
                 'is_async': False,
@@ -323,6 +550,8 @@ class JavaScriptAnalyzer(BaseAnalyzer):
                 'pattern': 'annotation_based',
                 'line_number': test.get('line_number'),
             })
+        
+        self._log_progress(f"Test content extraction: {content_extracted} succeeded, {content_failed} failed out of {len(tests)} tests")
         return metadata
     
     def _extract_mocks(

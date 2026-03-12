@@ -53,6 +53,7 @@ except ImportError as e:
 from deterministic.db_connection import get_connection
 from semantic_retrieval.backends import get_backend
 from semantic_retrieval.config import BATCH_SIZE, VECTOR_BACKEND
+from semantic_retrieval.utils.content_summarizer import summarize_test_content, PINECONE_DESCRIPTION_MAX_CHARS
 from test_analysis.utils.output_formatter import print_header, print_section, print_item
 from test_analysis.utils.config import get_output_dir
 
@@ -158,10 +159,10 @@ def load_test_data() -> list:
     return merged
 
 
-def build_embedding_text(test: dict) -> str:
+def build_embedding_text(test: dict, provider: str = 'openai') -> str:
     """
     Build rich plain-text description of a test.
-    Enhanced with function-level context for better semantic matching.
+    Enhanced with function-level context and test content for better semantic matching.
     """
     parts = []
 
@@ -173,8 +174,19 @@ def build_embedding_text(test: dict) -> str:
         readable_class = test['class_name'].replace('Test', '').replace('_', ' ')
         parts.append(f"Component: {readable_class}")
 
-    if test.get('description'):
-        parts.append(f"Purpose: {test['description']}")
+    # Check if description contains test content (vs just docstring)
+    description = test.get('description', '')
+    if description:
+        # Check if description contains test content (has "--- Test Code ---" marker or is long)
+        if '--- Test Code ---' in description or len(description) > 200:
+            # Likely contains test content (not just docstring)
+            # Generate smart summary
+            content_summary = summarize_test_content(description, provider=provider)
+            if content_summary:
+                parts.append(f"Test code: {content_summary}")
+        else:
+            # Just docstring
+            parts.append(f"Purpose: {description}")
 
     if test.get('module'):
         parts.append(f"Module under test: {test['module']}")
@@ -203,7 +215,16 @@ def build_embedding_text(test: dict) -> str:
     if test.get('is_async'):
         parts.append("Async test")
 
-    return '\n'.join(parts).strip()
+    embedding_text = '\n'.join(parts).strip()
+    
+    # Store the content summary for Pinecone metadata
+    if description and ('--- Test Code ---' in description or len(description) > 200):
+        test['test_content_summary'] = summarize_test_content(description, provider=provider)
+        # Truncate for Pinecone metadata (first 1000 chars)
+        if test['test_content_summary']:
+            test['test_content_summary'] = test['test_content_summary'][:PINECONE_DESCRIPTION_MAX_CHARS]
+    
+    return embedding_text
 
 
 async def store_embeddings(tests: list, conn=None) -> tuple:
@@ -238,6 +259,9 @@ async def store_embeddings(tests: list, conn=None) -> tuple:
     # Get provider name and model name dynamically
     provider_name = llm.provider_name
     embedding_model = llm.embedding_model if hasattr(llm, 'embedding_model') else "unknown"
+    
+    # Store provider name for use in build_embedding_text
+    embedding_provider = provider_name.lower()
 
     # Check Pinecone index dimension if using Pinecone and recreate if needed
     if VECTOR_BACKEND.lower() == "pinecone" and hasattr(backend, 'index'):
@@ -309,7 +333,8 @@ async def store_embeddings(tests: list, conn=None) -> tuple:
 
         for test in batch:
             try:
-                text     = build_embedding_text(test)
+                # Use embedding provider for content summarization
+                text     = build_embedding_text(test, provider=embedding_provider)
                 request  = EmbeddingRequest(texts=[text])
                 response = await llm.get_embeddings(request)
 

@@ -23,6 +23,7 @@ import sys
 import json
 import re
 import ast
+from typing import Optional
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent))
 
@@ -38,6 +39,85 @@ from utils.config import get_output_dir
 OUTPUT_DIR = get_output_dir()
 STEP3_OUTPUT = OUTPUT_DIR / "03_test_registry.json"
 OUTPUT_FILE = OUTPUT_DIR / "05_test_metadata.json"
+
+
+def extract_test_content(filepath: Path, method_name: str, line_number: Optional[int]) -> str:
+    """
+    Extract test function body content from source file.
+    
+    Returns full function body including:
+    - Setup code
+    - Function calls
+    - Assertions
+    - Teardown code
+    """
+    if not filepath.exists() or not line_number:
+        return ''
+    
+    try:
+        content = filepath.read_text(encoding='utf-8', errors='replace')
+        
+        if filepath.suffix == '.py':
+            # Python: Use AST to find function
+            try:
+                tree = ast.parse(content, filename=str(filepath))
+                for node in ast.walk(tree):
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        if node.name == method_name and node.lineno == line_number:
+                            # Found the function, extract its body
+                            lines = content.split('\n')
+                            start_line = node.lineno - 1  # 0-indexed
+                            
+                            # Find base indentation
+                            if start_line < len(lines):
+                                func_start = lines[start_line]
+                                base_indent = len(func_start) - len(func_start.lstrip())
+                                
+                                # Find the end of the function
+                                end_line = start_line + 1
+                                while end_line < len(lines):
+                                    line = lines[end_line]
+                                    if line.strip():
+                                        line_indent = len(line) - len(line.lstrip())
+                                        if line_indent <= base_indent and not line.strip().startswith('@'):
+                                            break
+                                    end_line += 1
+                                
+                                func_lines = lines[start_line:end_line]
+                                return '\n'.join(func_lines)
+            except (SyntaxError, ValueError):
+                pass
+            
+            # Fallback: Use regex
+            func_pattern = re.compile(
+                r'^(?:async\s+)?def\s+' + re.escape(method_name) + r'\s*\([^)]*\)\s*:',
+                re.MULTILINE
+            )
+            match = func_pattern.search(content)
+            if match:
+                start_pos = match.start()
+                lines = content.split('\n')
+                start_line_num = content[:start_pos].count('\n')
+                
+                func_line = content[start_pos:content.find('\n', start_pos)]
+                base_indent = len(func_line) - len(func_line.lstrip())
+                
+                end_line_num = start_line_num + 1
+                while end_line_num < len(lines):
+                    line = lines[end_line_num]
+                    if line.strip():
+                        line_indent = len(line) - len(line.lstrip())
+                        if line_indent <= base_indent and not line.strip().startswith('@'):
+                            break
+                    end_line_num += 1
+                
+                func_lines = lines[start_line_num:end_line_num]
+                return '\n'.join(func_lines)
+        
+    except Exception:
+        pass
+    
+    return ''
 
 
 def extract_test_metadata_from_file(filepath: Path, test_methods: list) -> dict:
@@ -91,6 +171,18 @@ def extract_test_metadata_from_file(filepath: Path, test_methods: list) -> dict:
                 # Get docstring
                 description = docstrings.get('functions', {}).get(func_name, '')
                 
+                # Extract test content (function body)
+                test_content = extract_test_content(filepath, func_name, func.get('line_number'))
+                
+                # Combine docstring and test content
+                if test_content:
+                    if description:
+                        full_description = f"{description}\n\n--- Test Code ---\n{test_content}"
+                    else:
+                        full_description = test_content
+                else:
+                    full_description = description
+                
                 # Identify test pattern from name
                 pattern = _identify_test_pattern(func_name)
                 
@@ -102,7 +194,7 @@ def extract_test_metadata_from_file(filepath: Path, test_methods: list) -> dict:
                 
                 metadata[func_name] = {
                     "name": func_name,
-                    "description": description,
+                    "description": full_description,  # Now contains test content
                     "markers": markers,
                     "is_async": is_async,
                     "is_parameterized": is_parameterized,

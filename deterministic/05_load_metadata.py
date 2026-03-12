@@ -109,10 +109,17 @@ def load_metadata_to_database(conn, metadata_list: list, schema: Optional[str] =
     loaded_count = 0
     failed_count = 0
     
+    # Count how many have test content (description length > 200 or contains "--- Test Code ---")
+    content_count = sum(1 for m in metadata_list if m.get('description') and (len(m.get('description', '')) > 200 or '--- Test Code ---' in m.get('description', '')))
+    
     target_schema = schema or DB_SCHEMA
     table_name = f"{target_schema}.test_metadata" if schema else "test_metadata"
     
     print_section(f"Loading {total_metadata} metadata records in batches of {batch_size}...")
+    if content_count > 0:
+        print_item("Tests with content", f"{content_count}/{total_metadata} ({content_count/total_metadata*100:.1f}%)")
+    else:
+        print_item("Tests with content", "0 (none found - check extraction logs)")
     
     # Process in batches
     for i in range(0, total_metadata, batch_size):

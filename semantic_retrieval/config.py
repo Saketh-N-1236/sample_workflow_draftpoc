@@ -45,3 +45,13 @@ DEFAULT_NUM_QUERY_VARIATIONS = 3
 # Quality threshold for Advanced RAG filtering (0.0-1.0)
 # Only tests with rerank_score >= this threshold will be returned
 DEFAULT_QUALITY_THRESHOLD = 0.4  # 40% minimum relevance
+
+# Test content token limits per provider (approximate chars per token: ~4)
+TEST_CONTENT_MAX_TOKENS = {
+    'openai': 2000,   # ~8000 chars
+    'ollama': 400,    # ~1600 chars
+    'gemini': 1500    # ~6000 chars
+}
+
+# Pinecone metadata description max length
+PINECONE_DESCRIPTION_MAX_CHARS = 1000

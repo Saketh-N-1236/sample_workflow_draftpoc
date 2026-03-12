@@ -580,20 +580,100 @@ class JavaAnalyzer(BaseAnalyzer):
         
         return annotations
     
+    def _extract_test_content(self, filepath: Path, method_name: str, line_number: Optional[int]) -> str:
+        """
+        Extract test method body content from Java source file.
+        
+        Returns full method body including:
+        - Setup code
+        - Function calls
+        - Assertions
+        - Teardown code
+        """
+        if not filepath.exists() or not line_number:
+            return ''
+        
+        try:
+            content = filepath.read_text(encoding='utf-8', errors='replace')
+            lines = content.split('\n')
+            
+            # Find method by name and line number
+            # Pattern: @Test ... public void methodName(...) { ... }
+            method_pattern = re.compile(
+                rf'@(?:Test|ParameterizedTest|RepeatedTest)\b[^\n]*\n\s*(?:public\s+)?(?:void\s+|[\w<>]+\s+)?{re.escape(method_name)}\s*\([^)]*\)\s*{{',
+                re.MULTILINE
+            )
+            
+            match = method_pattern.search(content)
+            if match:
+                start_pos = match.start()
+                start_line_num = content[:start_pos].count('\n')
+                
+                # Find the method's opening brace
+                brace_start = content.find('{', match.end())
+                if brace_start == -1:
+                    return ''
+                
+                # Find matching closing brace
+                brace_count = 1
+                pos = brace_start + 1
+                while pos < len(content) and brace_count > 0:
+                    if content[pos] == '{':
+                        brace_count += 1
+                    elif content[pos] == '}':
+                        brace_count -= 1
+                    pos += 1
+                
+                if brace_count == 0:
+                    # Extract method body (including method signature and body)
+                    method_content = content[match.start():pos]
+                    return method_content
+            
+        except Exception as e:
+            logger.warning(f"Failed to extract test content from {filepath}:{line_number}: {e}")
+        
+        return ''
+    
     def _extract_metadata(
         self, tests: List[Dict], test_files: List[Path], repo_path: Path
     ) -> List[Dict]:
         """Extract test metadata."""
         metadata = []
+        content_extracted = 0
+        content_failed = 0
         
         for test in tests:
+            # Extract test content (method body)
+            test_content = ''
+            try:
+                filepath = Path(test['file_path'])
+                if filepath.exists():
+                    test_content = self._extract_test_content(
+                        filepath,
+                        test['method_name'],
+                        test.get('line_number')
+                    )
+                    if test_content:
+                        content_extracted += 1
+                    else:
+                        content_failed += 1
+                else:
+                    logger.warning(f"Test file does not exist: {test['file_path']}")
+                    content_failed += 1
+            except Exception as e:
+                logger.warning(f"Error extracting content for {test.get('test_id')}: {e}", exc_info=True)
+                content_failed += 1
+            
+            # Use test content as description
+            full_description = test_content if test_content else ''
+            
             metadata.append({
                 'test_id': test['test_id'],
                 'file_path': test['file_path'],
                 'class_name': test.get('class_name', ''),
                 'method_name': test['method_name'],
                 'name': test['method_name'],
-                'description': '',
+                'description': full_description,  # Now contains test content
                 'markers': [],
                 'annotations': [],
                 'is_async': False,
@@ -603,6 +683,7 @@ class JavaAnalyzer(BaseAnalyzer):
                 'line_number': test.get('line_number'),
             })
         
+        self._log_progress(f"Test content extraction: {content_extracted} succeeded, {content_failed} failed out of {len(tests)} tests")
         return metadata
     
     def _build_reverse_index(
