@@ -31,9 +31,13 @@ class LLMReasoningService:
         self.settings = get_settings()
         try:
             self.llm_provider = LLMFactory.create_provider(self.settings)
-            logger.info(f"LLM provider initialized: {self.llm_provider.provider_name}")
+            logger.info(
+                f"LLM Reasoning Service initialized | "
+                f"Provider: {self.llm_provider.provider_name.upper()} | "
+                f"Model: {self.llm_provider.model_name}"
+            )
         except Exception as e:
-            logger.warning(f"Failed to initialize LLM provider: {e}. LLM reasoning will be disabled.")
+            logger.error(f"LLM Reasoning Service initialization failed: {e}")
             self.llm_provider = None
     
     async def assess_test_relevance(

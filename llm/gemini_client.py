@@ -3,7 +3,7 @@
 import httpx
 import asyncio
 import re
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from llm.base import LLMProvider
 from llm.models import LLMRequest, LLMResponse, EmbeddingRequest, EmbeddingResponse
 
@@ -39,9 +39,19 @@ class GeminiClient(LLMProvider):
         return self._model
     
     @property
+    def embedding_model(self) -> str:
+        """Return embedding model name."""
+        return "embedding-001"  # Gemini uses a fixed embedding model
+    
+    @property
     def supports_streaming(self) -> bool:
         """Gemini supports streaming."""
         return True
+    
+    def get_embedding_dimensions(self) -> Optional[int]:
+        """Return the expected embedding dimensions for Gemini models."""
+        # Gemini embedding models typically produce 768-dimensional vectors
+        return 768
     
     async def chat_completion(self, request: LLMRequest) -> LLMResponse:
         """Generate chat completion using Gemini.
@@ -105,8 +115,7 @@ class GeminiClient(LLMProvider):
                     result = response.json()
                     break  # Success, exit retry loop
                 except httpx.HTTPStatusError as e:
-                    # Retry on both 429 (rate limit) and 503 (service unavailable)
-                    if e.response.status_code in [429, 503]:
+                    if e.response.status_code == 429:  # Rate limit error
                         if attempt < max_retries - 1:
                             # Try to extract retry-after time from error message
                             retry_after = None
@@ -122,20 +131,13 @@ class GeminiClient(LLMProvider):
                                     pass
                             
                             # Use extracted retry_after or exponential backoff
-                            # For 503, use longer initial delay (5 seconds) since it's service overload
-                            if e.response.status_code == 503:
-                                base_delay = 5.0
-                            else:
-                                base_delay = retry_delay
-                            
-                            wait_time = retry_after if retry_after else (base_delay * (2 ** attempt))
+                            wait_time = retry_after if retry_after else (retry_delay * (2 ** attempt))
                             wait_time = min(wait_time, 60)  # Cap at 60 seconds
                             
                             import logging
                             logger = logging.getLogger(__name__)
-                            error_type = "rate limit (429)" if e.response.status_code == 429 else "service unavailable (503)"
                             logger.warning(
-                                f"Gemini API {error_type} on attempt {attempt + 1}/{max_retries}. "
+                                f"Gemini API rate limit (429) on attempt {attempt + 1}/{max_retries}. "
                                 f"Retrying in {wait_time:.1f}s..."
                             )
                             await asyncio.sleep(wait_time)
@@ -144,7 +146,7 @@ class GeminiClient(LLMProvider):
                             # All retries exhausted, raise the error
                             raise
                     else:
-                        # Not a retryable error, raise immediately
+                        # Not a rate limit error, raise immediately
                         raise
             
             # Extract response
@@ -210,14 +212,12 @@ class GeminiClient(LLMProvider):
                     error_detail = error_data.get('error', {}).get('message', 'Unknown error')
                     error_msg += f" - {error_detail}"
                     
-                    # For 429 and 503 errors, include retry information
-                    if e.response.status_code in [429, 503]:
+                    # For 429 errors, include retry information
+                    if e.response.status_code == 429:
                         retry_match = re.search(r'retry in ([\d.]+)s', error_detail, re.IGNORECASE)
                         if retry_match:
                             retry_seconds = float(retry_match.group(1))
                             error_msg += f"\n* Please wait {retry_seconds:.1f} seconds before retrying."
-                        elif e.response.status_code == 503:
-                            error_msg += f"\n* Service is temporarily unavailable. Please retry in a few seconds."
                 except:
                     error_msg += f" - {e.response.text[:200]}"
             raise Exception(error_msg) from e

@@ -1,0 +1,29 @@
+{
+  "generated_at": "2026-03-12T16:32:30.899803",
+  "data": {
+    "total_tests": 2,
+    "tests_with_dependencies": 0,
+    "total_references": 0,
+    "average_references_per_test": 0.0,
+    "test_dependencies": [
+      {
+        "test_id": "test_0028",
+        "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\22b33079\\tests\\auth\\auth.validation.test.js",
+        "class_name": null,
+        "method_name": "test_28",
+        "referenced_classes": [],
+        "reference_types": {},
+        "import_count": 0
+      },
+      {
+        "test_id": "test_0087",
+        "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\22b33079\\tests\\payment\\payment.logic.test.js",
+        "class_name": null,
+        "method_name": "test_87",
+        "referenced_classes": [],
+        "reference_types": {},
+        "import_count": 0
+      }
+    ]
+  }
+}

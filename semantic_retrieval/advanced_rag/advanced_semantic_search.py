@@ -76,28 +76,32 @@ async def find_tests_advanced_rag(
     if not changed_functions:
         return []
     
-    logger.info("Starting Advanced RAG pipeline")
+    logger.info("Advanced RAG Pipeline | Starting")
     
     # Step 1: Query Understanding
     understanding_service = QueryUnderstandingService()
     query_understanding = None
     
-    try:
-        logger.info("Step 1: Query Understanding")
-        query_understanding = await understanding_service.analyze_query_intent(
-            changed_functions,
-            file_changes,
-            diff_content
-        )
-        logger.info(f"Query understanding completed: {query_understanding.get('primary_intent', 'N/A')[:100]}")
-    except Exception as e:
-        logger.warning(f"Query understanding failed: {e}, continuing with basic query")
-        query_understanding = None
+    if use_query_rewriting:
+        try:
+            logger.info("Advanced RAG Pipeline | Step 1: Query Understanding")
+            query_understanding = await understanding_service.analyze_query_intent(
+                changed_functions,
+                file_changes,
+                diff_content
+            )
+            intent_summary = query_understanding.get('primary_intent', 'N/A')[:80]
+            logger.info(f"Advanced RAG Pipeline | Query Understanding completed | Intent: {intent_summary}...")
+        except Exception as e:
+            logger.warning(f"Advanced RAG Pipeline | Query Understanding failed: {e}")
+            query_understanding = None
+    else:
+        logger.info("Advanced RAG Pipeline | Query Understanding skipped (disabled)")
     
     # Step 2: Build original query
     original_query = build_rich_change_description(changed_functions, file_changes)
     if not original_query:
-        logger.warning("Could not build query description, returning empty results")
+        logger.warning("Advanced RAG Pipeline | Could not build query description")
         return []
     
     # Step 3: Query Rewriting (if enabled)
@@ -105,7 +109,7 @@ async def find_tests_advanced_rag(
     
     if use_query_rewriting and query_understanding:
         try:
-            logger.info("Step 2: Query Rewriting")
+            logger.info("Advanced RAG Pipeline | Step 2: Query Rewriting")
             rewriter_service = QueryRewriterService()
             rewritten_queries = await rewriter_service.rewrite_queries(
                 original_query,
@@ -114,16 +118,28 @@ async def find_tests_advanced_rag(
             )
             if rewritten_queries and len(rewritten_queries) > 1:
                 queries_to_search = rewritten_queries
-                logger.info(f"Generated {len(queries_to_search)} query variations")
+                logger.info(f"Advanced RAG Pipeline | Generated {len(queries_to_search)} query variations")
         except Exception as e:
-            logger.warning(f"Query rewriting failed: {e}, using original query")
+            logger.warning(f"Advanced RAG Pipeline | Query Rewriting failed: {e}")
             queries_to_search = [original_query]
     
     # Step 4: Multi-Query Semantic Search
-    logger.info(f"Step 3: Multi-Query Semantic Search ({len(queries_to_search)} queries)")
+    logger.info(f"Advanced RAG Pipeline | Step 3: Semantic Search | Queries: {len(queries_to_search)}")
     
     settings = get_settings()
     embedding_provider = LLMFactory.create_embedding_provider(settings)
+    
+    # Log embedding provider info
+    embedding_model = getattr(embedding_provider, 'embedding_model', None) or getattr(embedding_provider, '_embedding_model', 'default')
+    embedding_dimensions = embedding_provider.get_embedding_dimensions() if hasattr(embedding_provider, 'get_embedding_dimensions') else None
+    
+    logger.info(
+        f"Embedding Provider initialized | "
+        f"Provider: {embedding_provider.provider_name.upper()} | "
+        f"Model: {embedding_model} | "
+        f"Dimensions: {embedding_dimensions or 'unknown'}"
+    )
+    
     backend = get_backend(conn)
     
     all_results = []
@@ -143,6 +159,11 @@ async def find_tests_advanced_rag(
             )
             query_embedding = response.embeddings[0]
             
+            # Get expected dimensions from provider for validation
+            expected_dimensions = None
+            if hasattr(embedding_provider, 'get_embedding_dimensions'):
+                expected_dimensions = embedding_provider.get_embedding_dimensions()
+            
             # Search with this query
             results = await backend.search_similar(
                 query_embedding,
@@ -150,7 +171,8 @@ async def find_tests_advanced_rag(
                 query_limit,
                 test_repo_id=test_repo_id,
                 top_k=top_k,
-                top_p=top_p
+                top_p=top_p,
+                expected_dimensions=expected_dimensions
             )
             
             # Weight results based on query type
@@ -194,12 +216,12 @@ async def find_tests_advanced_rag(
         result.pop('query_weight', None)
         result.pop('weighted_similarity', None)
     
-    logger.info(f"Multi-query search completed: {len(all_results)} unique results")
+    logger.info(f"Advanced RAG Pipeline | Semantic Search completed | Results: {len(all_results)}")
     
     # Step 5: LLM Re-ranking (if enabled)
     if use_llm_reranking and len(all_results) > 0:
+        logger.info("Advanced RAG Pipeline | Step 4: LLM Re-ranking")
         try:
-            logger.info("Step 4: LLM Re-ranking")
             # Re-rank ALL candidates for quality-based filtering
             # Advanced RAG should assess all results to determine true relevance
             # Cap at 200 for performance, but prioritize quality over quantity
@@ -215,9 +237,9 @@ async def find_tests_advanced_rag(
             # Sort by rerank_score (highest first) - quality-based ranking
             all_results.sort(key=lambda x: x.get('rerank_score', 0), reverse=True)
             
-            logger.info(f"Re-ranking completed: {len(all_results)} results re-ranked and sorted by quality")
+            logger.info(f"Advanced RAG Pipeline | Re-ranking completed | Results: {len(all_results)}")
         except Exception as e:
-            logger.warning(f"Re-ranking failed: {e}, using similarity-based ranking")
+            logger.warning(f"Advanced RAG Pipeline | Re-ranking failed: {e}")
             # Fallback: sort by similarity
             all_results.sort(key=lambda x: x.get('similarity', 0), reverse=True)
     else:
@@ -249,15 +271,15 @@ async def find_tests_advanced_rag(
         all_results = filtered_results
         
         if rerank_scores_present:
-            logger.info(f"Quality filtering: {len(all_results)} tests passed quality threshold (rerank_score >= {quality_threshold})")
+            logger.info(f"Advanced RAG Pipeline | Quality filtering | Passed: {len(all_results)} | Threshold: {quality_threshold}")
         else:
-            logger.warning(f"Quality filtering: Re-ranking failed, using similarity scores. {len(all_results)} tests passed similarity threshold (>= {quality_threshold})")
+            logger.warning(f"Advanced RAG Pipeline | Quality filtering | Using similarity fallback | Passed: {len(all_results)}")
         
         # Only apply safety limit if results are excessive (e.g., > 500)
         # This prevents system overload but prioritizes quality
         safety_limit = 500
         if len(all_results) > safety_limit:
-            logger.warning(f"Results exceed safety limit ({safety_limit}), truncating to top {safety_limit} by quality")
+            logger.warning(f"Advanced RAG Pipeline | Results exceed safety limit | Truncating to {safety_limit}")
             all_results = all_results[:safety_limit]
     else:
         # Fallback: apply max_results limit if re-ranking is disabled
@@ -284,6 +306,6 @@ async def find_tests_advanced_rag(
         
         result['match_type'] = 'semantic'
     
-    logger.info(f"Advanced RAG pipeline completed: {len(all_results)} final results")
+    logger.info(f"Advanced RAG Pipeline | Completed | Final results: {len(all_results)}")
     
     return all_results

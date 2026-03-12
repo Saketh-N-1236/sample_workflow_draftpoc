@@ -32,9 +32,13 @@ class RerankerService:
         self.settings = get_settings()
         try:
             self.llm_provider = LLMFactory.create_provider(self.settings)
-            logger.info(f"Reranker Service initialized with LLM provider: {self.llm_provider.provider_name}")
+            logger.info(
+                f"Re-ranking Service initialized | "
+                f"Provider: {self.llm_provider.provider_name.upper()} | "
+                f"Model: {self.llm_provider.model_name}"
+            )
         except Exception as e:
-            logger.warning(f"Failed to initialize LLM provider: {e}. Re-ranking will be disabled.")
+            logger.error(f"Re-ranking Service initialization failed: {e}")
             self.llm_provider = None
     
     async def rerank_with_llm(
@@ -146,12 +150,11 @@ class RerankerService:
             prompt = self._build_reranking_prompt(batch, diff_content, query_understanding)
             
             # Calculate max_tokens dynamically based on number of candidates
-            # Estimate: ~150 tokens per test (test_id, score, reasoning with longer explanations)
-            # Add 3000 tokens for prompt overhead (diff content, instructions, etc.)
-            # Increased from 120+2000 to handle longer reasoning explanations
-            estimated_tokens = len(batch) * 150 + 3000
-            # Cap at 32000 (most models' limit) and ensure minimum of 6000
-            max_tokens = min(max(estimated_tokens, 6000), 32000)
+            # Estimate: ~120 tokens per test (test_id, score, reasoning)
+            # Add 2000 tokens for prompt overhead
+            estimated_tokens = len(batch) * 120 + 2000
+            # Cap at 32000 (most models' limit) and ensure minimum of 4000
+            max_tokens = min(max(estimated_tokens, 4000), 32000)
             
             # Call LLM
             request = LLMRequest(

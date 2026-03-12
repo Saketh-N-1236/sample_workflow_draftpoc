@@ -216,6 +216,13 @@ async def store_embeddings(tests: list, conn=None) -> tuple:
     llm      = LLMFactory.create_embedding_provider(settings)
     # llm is OllamaClient when EMBEDDING_PROVIDER=ollama
 
+    # Get actual embedding dimensions from the provider
+    embedding_dimensions = llm.get_embedding_dimensions()
+    if embedding_dimensions is None:
+        # Fallback to default if provider doesn't specify
+        embedding_dimensions = 768
+        print(f"Warning: Embedding provider did not specify dimensions, defaulting to {embedding_dimensions}")
+
     # Get test_repo_id from environment if available
     test_repo_id = os.getenv('TEST_REPO_ID', None)
     if test_repo_id:
@@ -224,12 +231,68 @@ async def store_embeddings(tests: list, conn=None) -> tuple:
             test['test_repo_id'] = test_repo_id
 
     # Get the appropriate backend
+    # Note: Backend initialization will use default EMBEDDING_DIMENSIONS (768)
+    # We'll check and recreate with correct dimension below if needed
     backend = get_backend(conn)
 
+    # Get provider name and model name dynamically
+    provider_name = llm.provider_name
+    embedding_model = llm.embedding_model if hasattr(llm, 'embedding_model') else "unknown"
+
+    # Check Pinecone index dimension if using Pinecone and recreate if needed
+    if VECTOR_BACKEND.lower() == "pinecone" and hasattr(backend, 'index'):
+        try:
+            index_stats = backend.index.describe_index_stats()
+            index_dimension = index_stats.get('dimension')
+            if index_dimension is not None and index_dimension != embedding_dimensions:
+                print()
+                print("=" * 80)
+                print("DIMENSION MISMATCH DETECTED - Auto-Fixing...")
+                print("=" * 80)
+                print(f"  Pinecone Index Dimension: {index_dimension}")
+                print(f"  Embedding Provider Dimension: {embedding_dimensions}")
+                print()
+                print(f"  The Pinecone index was created with dimension {index_dimension}, but")
+                print(f"  the current embedding provider ({provider_name}) produces {embedding_dimensions}-dimensional vectors.")
+                print()
+                print("  Automatically recreating index with correct dimension...")
+                print("  WARNING: This will delete all existing vectors in the index!")
+                print("=" * 80)
+                print()
+                
+                # Recreate the index with the correct dimension
+                try:
+                    backend._recreate_index_with_dimension(embedding_dimensions)
+                    # Reinitialize the index connection
+                    backend.index = backend.pc.Index(backend.index_name)
+                    print()
+                    print("=" * 80)
+                    print("SUCCESS: Index recreated with correct dimension!")
+                    print("=" * 80)
+                    print(f"  New index dimension: {embedding_dimensions}")
+                    print("  You can now proceed with embedding generation.")
+                    print("=" * 80)
+                    print()
+                except Exception as recreate_error:
+                    print()
+                    print("=" * 80)
+                    print("ERROR: Failed to recreate index!")
+                    print("=" * 80)
+                    print(f"  Error: {recreate_error}")
+                    print()
+                    print("  Manual steps required:")
+                    print(f"  1. Delete the Pinecone index '{backend.index_name}' manually")
+                    print(f"  2. Or recreate it with dimension {embedding_dimensions}")
+                    print("=" * 80)
+                    print()
+                    raise
+        except Exception as e:
+            print(f"Warning: Could not check Pinecone index dimension: {e}")
+
     print_section(f"Generating embeddings for {len(tests)} tests...")
-    print_item("Provider",   "Ollama")
-    print_item("Model",      settings.ollama_embedding_model)
-    print_item("Dimensions", "768")
+    print_item("Provider",   provider_name)
+    print_item("Model",      embedding_model)
+    print_item("Dimensions", str(embedding_dimensions))
     print_item("Batch size", str(BATCH_SIZE))
     print_item("Backend",    VECTOR_BACKEND)
     print()
@@ -283,12 +346,51 @@ async def store_embeddings(tests: list, conn=None) -> tuple:
     
     # Store embeddings using backend
     print(f"  Storing {len(valid_embeddings)} embeddings via {VECTOR_BACKEND} backend...")
-    stored, failed_storage = await backend.store_embeddings(valid_tests, valid_embeddings)
-    
-    total_failed = failed_generation + failed_storage
-    
-    print()
-    return stored, total_failed
+    try:
+        # When regenerating embeddings, delete existing ones for this repository first
+        # This ensures we don't have stale embeddings if tests were removed
+        delete_existing = bool(test_repo_id)  # Only delete if we have a test_repo_id
+        stored, failed_storage = await backend.store_embeddings(valid_tests, valid_embeddings, delete_existing=delete_existing)
+        
+        total_failed = failed_generation + failed_storage
+        
+        if stored == 0 and len(valid_embeddings) > 0:
+            print()
+            print("=" * 80)
+            print("WARNING: No embeddings were stored!")
+            print("=" * 80)
+            print(f"  Generated: {len(valid_embeddings)} embeddings")
+            print(f"  Stored: {stored}")
+            print(f"  Failed: {failed_storage}")
+            print()
+            print("  Possible causes:")
+            print("  1. Dimension mismatch between embedding provider and Pinecone index")
+            print(f"     - Embedding dimension: {embedding_dimensions}")
+            print("     - Check Pinecone index dimension in console logs above")
+            print("  2. Pinecone API errors (check logs for details)")
+            print("  3. Network connectivity issues")
+            print()
+            print("  Solutions:")
+            print(f"  1. Recreate Pinecone index with dimension {embedding_dimensions}")
+            print(f"  2. Or switch to embedding provider that matches index dimension")
+            print("=" * 80)
+            print()
+        
+        print()
+        return stored, total_failed
+    except Exception as e:
+        print()
+        print("=" * 80)
+        print("ERROR: Failed to store embeddings!")
+        print("=" * 80)
+        print(f"  Error: {e}")
+        print()
+        print("  This is likely due to a dimension mismatch.")
+        print(f"  Embedding dimension: {embedding_dimensions}")
+        print("  Check Pinecone index dimension in the error message above.")
+        print("=" * 80)
+        print()
+        raise
 
 
 async def main():

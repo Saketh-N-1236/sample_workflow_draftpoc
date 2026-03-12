@@ -31,10 +31,12 @@ const RepositoryDetail = () => {
   const [showRiskAnalysis, setShowRiskAnalysis] = useState(false);
   const [totalTestsInDb, setTotalTestsInDb] = useState(0);
   const [selectionDisabled, setSelectionDisabled] = useState(false);
+  const [primaryTestRepoId, setPrimaryTestRepoId] = useState(null);
 
   useEffect(() => {
     if (repoId) {
       loadRepository();
+      loadBoundTestRepositories();
     }
     // Load total tests count
     loadTotalTestsCount();
@@ -46,6 +48,24 @@ const RepositoryDetail = () => {
       setTotalTestsInDb(response.data.total_tests || 0);
     } catch (error) {
       console.error('Failed to load total tests count:', error);
+    }
+  };
+
+  const loadBoundTestRepositories = async () => {
+    try {
+      const response = await api.getBoundTestRepositories(repoId);
+      const boundRepos = response.data || [];
+      
+      // Find primary test repository, or use first one if no primary
+      const primaryRepo = boundRepos.find(repo => repo.is_primary) || boundRepos[0];
+      if (primaryRepo) {
+        setPrimaryTestRepoId(primaryRepo.id);
+      } else {
+        setPrimaryTestRepoId(null);
+      }
+    } catch (error) {
+      console.error('Failed to load bound test repositories:', error);
+      setPrimaryTestRepoId(null);
     }
   };
 
@@ -201,7 +221,7 @@ const RepositoryDetail = () => {
 
       {/* Embedding Status - Show before test selection */}
       <div style={{ marginBottom: '20px', flexShrink: 0 }}>
-        <EmbeddingStatus />
+        <EmbeddingStatus testRepoId={primaryTestRepoId} />
       </div>
 
       <div className="actions-section" style={{ marginBottom: '20px', flexShrink: 0 }}>
@@ -318,8 +338,9 @@ const RepositoryDetail = () => {
         <TestRepositoryBinding 
           repositoryId={repository.id}
           onUpdate={() => {
-            // Reload repository data if needed
+            // Reload repository data and bound test repositories
             loadRepository();
+            loadBoundTestRepositories();
           }}
         />
       </div>

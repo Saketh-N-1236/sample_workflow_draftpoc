@@ -1,0 +1,17 @@
+diff --git a/src/reducer/paymentReducer.js b/src/reducer/paymentReducer.js
+index 1234567..abcdef0 100644
+--- a/src/reducer/paymentReducer.js
++++ b/src/reducer/paymentReducer.js
+@@ -3,3 +3,4 @@
+ export const paymentActions = {
+   UPDATEALLCARDDETAILS: 'UPDATE_STORED_USER_ALL_CARD_DETAILS',
+   UPDATEPAYMENTPLANDETAILS: 'UPDATE_PAYMENT_PLAN_DETAILS',
++  CLEARCARDS: 'CLEAR_USER_CARDS',
+ }
+@@ -25,2 +26,4 @@
+     default:
+       return state
++    case paymentActions.CLEARCARDS:
++      return { ...state, userCards: [], cardsFetched: false }
+   }
+ }

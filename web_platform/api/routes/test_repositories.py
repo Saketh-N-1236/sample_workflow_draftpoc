@@ -543,7 +543,15 @@ async def get_test_repository_analysis(test_repo_id: str):
             if test_files_path and test_files_path.exists():
                 with open(test_files_path, 'r', encoding='utf-8') as f:
                     test_files_data = json.load(f)
-                    results['test_files'] = test_files_data.get('data', test_files_data)
+                    test_files_content = test_files_data.get('data', test_files_data)
+                    
+                    # Transform line_count to lines for frontend compatibility
+                    if 'files' in test_files_content and isinstance(test_files_content['files'], list):
+                        for file_entry in test_files_content['files']:
+                            if 'line_count' in file_entry and 'lines' not in file_entry:
+                                file_entry['lines'] = file_entry['line_count']
+                    
+                    results['test_files'] = test_files_content
         except Exception as e:
             logger.warning(f"Failed to load test_files from file: {e}")
         
@@ -727,6 +735,107 @@ async def analyze_test_repository(test_repo_id: str):
     except Exception as e:
         logger.error(f"Failed to analyze test repository: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to analyze test repository: {str(e)}")
+
+
+@router.post("/{test_repo_id}/regenerate-embeddings")
+async def regenerate_embeddings(test_repo_id: str):
+    """
+    Regenerate embeddings for a specific test repository.
+    
+    This will:
+    1. Load test data from the existing analysis
+    2. Generate embeddings using the configured embedding provider
+    3. Store embeddings in Pinecone
+    
+    NOTE: This does NOT run the full analysis pipeline (no table creation, data loading, etc.)
+    """
+    try:
+        # Get test repository
+        test_repo = get_test_repository(test_repo_id)
+        if not test_repo:
+            raise HTTPException(status_code=404, detail="Test repository not found")
+        
+        extracted_path = test_repo.get('extracted_path')
+        schema_name = test_repo.get('schema_name')
+        
+        if not extracted_path:
+            raise HTTPException(status_code=400, detail="Test repository has no extracted path")
+        
+        if not Path(extracted_path).exists():
+            raise HTTPException(status_code=400, detail=f"Extracted path does not exist: {extracted_path}")
+        
+        if not schema_name:
+            raise HTTPException(status_code=400, detail="Test repository has no schema. Please run analysis first.")
+        
+        # Check if analysis output files exist (required for embedding generation)
+        project_root = Path(__file__).parent.parent.parent.parent
+        output_dir = project_root / "test_analysis" / "outputs" / schema_name
+        registry_json = output_dir / "03_test_registry.json"
+        metadata_json = output_dir / "05_test_metadata.json"
+        
+        if not registry_json.exists() or not metadata_json.exists():
+            raise HTTPException(
+                status_code=400,
+                detail="Analysis output files not found. Please run analysis first before regenerating embeddings."
+            )
+        
+        # Set environment variables for embedding generation
+        import os
+        env = os.environ.copy()
+        env['TEST_REPO_ID'] = test_repo_id
+        env['TEST_REPO_SCHEMA'] = schema_name
+        
+        # Run only embedding generation (not full analysis)
+        embedding_script = project_root / "semantic_retrieval" / "embedding_generator.py"
+        if not embedding_script.exists():
+            raise HTTPException(status_code=500, detail="Embedding generator script not found")
+        
+        import subprocess
+        import sys
+        
+        logger.info(f"Regenerating embeddings for test repository: {test_repo_id}")
+        
+        result = subprocess.run(
+            [sys.executable, str(embedding_script)],
+            cwd=str(embedding_script.parent.parent),
+            capture_output=True,
+            text=True,
+            timeout=1800,  # 30 minutes timeout
+            env=env
+        )
+        
+        if result.returncode == 0:
+            # Check output for warnings about no embeddings stored
+            output_text = result.stdout + result.stderr
+            if "No embeddings were stored" in output_text or "WARNING: No embeddings were stored" in output_text:
+                logger.warning("Embedding generation completed but no embeddings were stored")
+                return {
+                    "status": "completed_with_warnings",
+                    "message": "Embedding generation completed but no embeddings were stored. Check logs for details.",
+                    "output": output_text
+                }
+            else:
+                logger.info("Embedding generation completed successfully")
+                return {
+                    "status": "completed",
+                    "message": "Embeddings regenerated successfully"
+                }
+        else:
+            error_msg = f"Embedding generation failed (exit code {result.returncode})"
+            logger.error(f"{error_msg}: {result.stderr}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"{error_msg}. Check server logs for details."
+            )
+            
+    except subprocess.TimeoutExpired:
+        logger.error("Embedding generation timed out")
+        raise HTTPException(status_code=500, detail="Embedding generation timed out after 30 minutes")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to regenerate embeddings: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to regenerate embeddings: {str(e)}")
 
 
 @router.post("/repositories/{repo_id}/bind-test-repo")

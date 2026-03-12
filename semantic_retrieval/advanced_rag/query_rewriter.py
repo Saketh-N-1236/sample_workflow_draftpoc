@@ -32,9 +32,13 @@ class QueryRewriterService:
         self.settings = get_settings()
         try:
             self.llm_provider = LLMFactory.create_provider(self.settings)
-            logger.info(f"Query Rewriter Service initialized with LLM provider: {self.llm_provider.provider_name}")
+            logger.info(
+                f"Query Rewriter Service initialized | "
+                f"Provider: {self.llm_provider.provider_name.upper()} | "
+                f"Model: {self.llm_provider.model_name}"
+            )
         except Exception as e:
-            logger.warning(f"Failed to initialize LLM provider: {e}. Query rewriting will be disabled.")
+            logger.error(f"Query Rewriter Service initialization failed: {e}")
             self.llm_provider = None
     
     async def rewrite_queries(

@@ -148,6 +148,7 @@ class GitHubService:
     async def list_branches(self, repo_url: str) -> List[Dict]:
         """
         List all branches in the repository.
+        Handles pagination to fetch all branches.
         
         Args:
             repo_url: GitHub repository URL
@@ -164,22 +165,46 @@ class GitHubService:
             owner = repo_info['owner']
             repo = repo_info['repo']
             
+            # Get default branch from repo info first
+            repo_info_data = await self.get_repository_info(repo_url)
+            default_branch = repo_info_data.get('default_branch', 'main') if repo_info_data else 'main'
+            
+            all_branches = []
+            page = 1
+            per_page = 100
+            
             async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(
-                    f"{self.default_api_url}/repos/{owner}/{repo}/branches",
-                    headers=self.headers,
-                    params={'per_page': 100}  # Get up to 100 branches
-                )
-                response.raise_for_status()
-                branches = response.json()
+                while True:
+                    response = await client.get(
+                        f"{self.default_api_url}/repos/{owner}/{repo}/branches",
+                        headers=self.headers,
+                        params={'per_page': per_page, 'page': page}
+                    )
+                    response.raise_for_status()
+                    branches = response.json()
+                    
+                    if not branches:
+                        break
+                    
+                    all_branches.extend(branches)
+                    
+                    # Check Link header for pagination (GitHub uses Link headers)
+                    link_header = response.headers.get('Link', '')
+                    if 'rel="next"' not in link_header:
+                        break
+                    
+                    page += 1
+                    
+                    # Safety limit: prevent infinite loops
+                    if page > 1000:
+                        logger.warning(f"Reached pagination limit (1000 pages) for branches. Total branches fetched: {len(all_branches)}")
+                        break
                 
-                # Get default branch from repo info
-                repo_info_data = await self.get_repository_info(repo_url)
-                default_branch = repo_info_data.get('default_branch', 'main') if repo_info_data else 'main'
+                logger.info(f"Fetched {len(all_branches)} branches from GitHub repository")
                 
                 # Format branch information
                 formatted_branches = []
-                for branch in branches:
+                for branch in all_branches:
                     formatted_branches.append({
                         'name': branch.get('name', ''),
                         'default': branch.get('name') == default_branch,

@@ -55,7 +55,7 @@ const TestRepositoryAnalysis = () => {
     setProgressMessages([]);
     
     try {
-      // Start analysis
+      // Start FULL analysis pipeline (includes table creation, data loading, embedding generation)
       const response = await api.analyzeTestRepository(testRepoId);
       
       // Show progress messages
@@ -69,6 +69,39 @@ const TestRepositoryAnalysis = () => {
     } catch (err) {
       console.error('Failed to refresh analysis:', err);
       setError('Failed to refresh analysis. Please try again.');
+      setProgressMessages([]);
+      setIsRefreshing(false);
+    }
+  };
+
+  const handleRegenerateEmbeddings = async () => {
+    setIsRefreshing(true);
+    setError(null);
+    setProgressMessages([]);
+    
+    try {
+      // Only regenerate embeddings (no table creation, no data loading)
+      setProgressMessages(['Regenerating embeddings...', 'This will only regenerate embeddings, not re-run analysis.']);
+      
+      const response = await api.regenerateEmbeddings(testRepoId);
+      
+      if (response.data.status === 'completed_with_warnings') {
+        setProgressMessages([
+          'Embedding generation completed with warnings.',
+          'Check server logs for details.'
+        ]);
+      } else {
+        setProgressMessages(['Embeddings regenerated successfully!']);
+      }
+      
+      // Wait a bit then reload results
+      setTimeout(async () => {
+        await loadAnalysisResults();
+        setIsRefreshing(false);
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to regenerate embeddings:', err);
+      setError('Failed to regenerate embeddings. Please try again.');
       setProgressMessages([]);
       setIsRefreshing(false);
     }
@@ -685,7 +718,7 @@ const TestRepositoryAnalysis = () => {
       )}
 
       {/* Embedding Status */}
-      <EmbeddingStatus testRepoId={testRepoId} onRegenerate={handleRefresh} />
+      <EmbeddingStatus testRepoId={testRepoId} onRegenerate={handleRegenerateEmbeddings} />
 
       {/* Analysis Stats - Always show, using fallback if summary not available */}
       <div style={{ marginBottom: '24px' }}>

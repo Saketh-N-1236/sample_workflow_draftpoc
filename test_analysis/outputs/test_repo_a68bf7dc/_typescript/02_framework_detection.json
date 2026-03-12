@@ -1,0 +1,11 @@
+{
+  "generated_at": "2026-03-12T15:49:38.882969",
+  "data": {
+    "primary_framework": "jest",
+    "framework": "jest",
+    "confidence": "low",
+    "evidence": [
+      "jest detected"
+    ]
+  }
+}

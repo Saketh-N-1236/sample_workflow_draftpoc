@@ -241,12 +241,22 @@ async def get_embedding_status(test_repo_id: Optional[str] = Query(None)):
     try:
         import os
         from datetime import datetime
-        from semantic_retrieval.config import VECTOR_BACKEND, EMBEDDING_DIMENSIONS
+        from semantic_retrieval.config import VECTOR_BACKEND
         from semantic_retrieval.backends import get_backend
         from deterministic.db_connection import get_connection
+        from config.settings import get_settings
+        from llm.factory import LLMFactory
         
         backend_name = VECTOR_BACKEND.lower()
         index_name = os.getenv('PINECONE_INDEX_NAME', 'test-embeddings')
+        
+        # Get actual embedding dimensions from the configured provider
+        settings = get_settings()
+        embedding_provider = LLMFactory.create_embedding_provider(settings)
+        embedding_dimensions = embedding_provider.get_embedding_dimensions()
+        if embedding_dimensions is None:
+            # Fallback to default if provider doesn't specify
+            embedding_dimensions = 768
         
         # Try to get backend and check status
         try:
@@ -263,30 +273,159 @@ async def get_embedding_status(test_repo_id: Optional[str] = Query(None)):
                             # Filter by test_repo_id using Pinecone metadata filter
                             # We need to query with a filter to count vectors for this test_repo_id
                             # Use a dummy query vector (all zeros) with filter
-                            dummy_vector = [0.0] * EMBEDDING_DIMENSIONS
-                            
-                            # Query with metadata filter to count vectors
-                            # Note: Pinecone doesn't have a direct count API with filters,
-                            # so we query with a very high top_k and count results
-                            filter_dict = {"test_repo_id": {"$eq": str(test_repo_id)}}
-                            
+                            # Get actual index dimension from Pinecone
                             try:
-                                # Query with filter to get count
-                                # Use top_k=10000 (max) to get all matching vectors
+                                index_stats = backend.index.describe_index_stats()
+                                index_dimension = index_stats.get('dimension', embedding_dimensions)
+                                # Use the actual index dimension for the dummy vector
+                                dummy_vector = [0.0] * index_dimension
+                            except Exception:
+                                # Fallback to embedding_dimensions if we can't get index stats
+                                dummy_vector = [0.0] * embedding_dimensions
+                            
+                            # Query vectors and count by checking both metadata and vector ID format
+                            # Vectors are stored with format: {test_repo_id}_{test_id}
+                            # We check both to handle old and new formats
+                            try:
+                                import logging
+                                logger = logging.getLogger(__name__)
+                                
+                                # Try querying with metadata filter first
+                                filter_dict = {"test_repo_id": {"$eq": str(test_repo_id)}}
                                 query_result = backend.index.query(
                                     vector=dummy_vector,
                                     top_k=10000,
                                     filter=filter_dict,
-                                    include_metadata=False
+                                    include_metadata=True
                                 )
-                                total_embeddings = len(query_result.matches)
+                                
+                                # Count vectors that match test_repo_id in metadata OR vector ID format
+                                matching_count = 0
+                                metadata_matches = 0
+                                vector_id_matches = 0
+                                
+                                for match in query_result.matches:
+                                    metadata = match.metadata or {}
+                                    metadata_repo_id = metadata.get('test_repo_id', '')
+                                    vector_id = match.id
+                                    
+                                    # Check metadata match
+                                    if metadata_repo_id and metadata_repo_id == str(test_repo_id):
+                                        metadata_matches += 1
+                                    
+                                    # Check vector ID prefix match (new format: {test_repo_id}_{test_id})
+                                    if vector_id.startswith(f"{test_repo_id}_"):
+                                        vector_id_matches += 1
+                                    
+                                    # Count if either matches
+                                    if (metadata_repo_id and metadata_repo_id == str(test_repo_id)) or vector_id.startswith(f"{test_repo_id}_"):
+                                        matching_count += 1
+                                
+                                # If no matches found with filter, try querying without filter to check vector IDs
+                                # This handles cases where metadata filter doesn't work but vector ID format is correct
+                                if matching_count == 0:
+                                    logger.info(f"No matches found with metadata filter for test_repo_id '{test_repo_id}'. Checking vector ID format...")
+                                    
+                                    # Get total vector count to determine query size
+                                    try:
+                                        stats = backend.index.describe_index_stats()
+                                        total_vectors = stats.get('total_vector_count', 0)
+                                        
+                                        # Query without filter to check vector IDs
+                                        # Limit to reasonable size to avoid performance issues
+                                        query_size = min(10000, total_vectors) if total_vectors > 0 else 10000
+                                        
+                                        query_result_no_filter = backend.index.query(
+                                            vector=dummy_vector,
+                                            top_k=query_size,
+                                            include_metadata=True
+                                        )
+                                        
+                                        for match in query_result_no_filter.matches:
+                                            vector_id = match.id
+                                            if vector_id.startswith(f"{test_repo_id}_"):
+                                                matching_count += 1
+                                        
+                                        if matching_count > 0:
+                                            logger.info(
+                                                f"Found {matching_count} vectors by vector ID prefix for test_repo_id '{test_repo_id}' "
+                                                f"(queried {query_size} vectors from {total_vectors} total)"
+                                            )
+                                        else:
+                                            logger.warning(
+                                                f"No vectors found with test_repo_id '{test_repo_id}' prefix in vector IDs. "
+                                                f"Queried {query_size} vectors from {total_vectors} total."
+                                            )
+                                    except Exception as sample_error:
+                                        logger.warning(f"Failed to query vectors without filter: {sample_error}")
+                                
+                                total_embeddings = matching_count
+                                
+                                # Log matching details for debugging
+                                if total_embeddings > 0:
+                                    logger.debug(
+                                        f"Found {total_embeddings} embeddings for test_repo_id '{test_repo_id}': "
+                                        f"{metadata_matches} by metadata, {vector_id_matches} by vector ID"
+                                    )
+                                
+                                # Log if filter returned results but none matched (might indicate filter issue)
+                                if len(query_result.matches) > 0 and matching_count == 0:
+                                    import logging
+                                    logger = logging.getLogger(__name__)
+                                    logger.warning(
+                                        f"Pinecone filter returned {len(query_result.matches)} vectors, "
+                                        f"but none matched test_repo_id '{test_repo_id}'. "
+                                        f"This might indicate a filter issue or metadata mismatch."
+                                    )
+                                
+                                # Log if no embeddings found but index has vectors
+                                if total_embeddings == 0:
+                                    try:
+                                        stats = backend.index.describe_index_stats()
+                                        total_in_index = stats.get('total_vector_count', 0)
+                                        if total_in_index > 0:
+                                            import logging
+                                            logger = logging.getLogger(__name__)
+                                            
+                                            # Check if there are embeddings without test_repo_id metadata
+                                            sample_query = backend.index.query(
+                                                vector=dummy_vector,
+                                                top_k=min(10, total_in_index),
+                                                include_metadata=True
+                                            )
+                                            has_repo_id_metadata = False
+                                            missing_repo_id_count = 0
+                                            for match in sample_query.matches:
+                                                metadata = match.metadata or {}
+                                                if 'test_repo_id' in metadata and metadata.get('test_repo_id'):
+                                                    has_repo_id_metadata = True
+                                                else:
+                                                    missing_repo_id_count += 1
+                                            
+                                            if missing_repo_id_count > 0:
+                                                logger.warning(
+                                                    f"Index has {total_in_index} total vectors but 0 for test_repo_id '{test_repo_id}'. "
+                                                    f"Some embeddings may be missing test_repo_id metadata (old embeddings). "
+                                                    f"Please regenerate embeddings for this repository."
+                                                )
+                                            else:
+                                                logger.info(
+                                                    f"Index has {total_in_index} total vectors but 0 for test_repo_id '{test_repo_id}'. "
+                                                    f"This repository has no embeddings yet. Please generate embeddings."
+                                                )
+                                    except Exception:
+                                        pass
                             except Exception as filter_error:
                                 import logging
                                 logger = logging.getLogger(__name__)
                                 logger.warning(f"Failed to filter embeddings by test_repo_id: {filter_error}")
-                                # Fallback: get total count without filter
-                                stats = backend.index.describe_index_stats()
-                                total_embeddings = stats.get('total_vector_count', 0)
+                                # Don't fallback to total count - if filter fails, return 0
+                                # This ensures we don't show embeddings from other repositories
+                                total_embeddings = 0
+                                logger.info(
+                                    f"Filter query failed for test_repo_id '{test_repo_id}'. "
+                                    f"Returning 0 to avoid showing embeddings from other repositories."
+                                )
                         else:
                             # Get total index stats (no filter)
                             stats = backend.index.describe_index_stats()
@@ -312,11 +451,20 @@ async def get_embedding_status(test_repo_id: Optional[str] = Query(None)):
                 except Exception:
                     pass
                 
+                # Get actual index dimension from Pinecone if available
+                actual_index_dimension = embedding_dimensions
+                if backend_name == "pinecone" and hasattr(backend, 'index'):
+                    try:
+                        index_stats = backend.index.describe_index_stats()
+                        actual_index_dimension = index_stats.get('dimension', embedding_dimensions)
+                    except Exception:
+                        pass
+                
                 return {
                     "total_embeddings": total_embeddings,
                     "last_generated": last_generated,
                     "index_health": index_health,
-                    "embedding_dimensions": EMBEDDING_DIMENSIONS,
+                    "embedding_dimensions": actual_index_dimension,  # Use actual index dimension
                     "backend": backend_name,
                     "index_name": index_name if backend_name == "pinecone" else None,
                     "test_repo_id": test_repo_id  # Include test_repo_id in response
@@ -329,7 +477,7 @@ async def get_embedding_status(test_repo_id: Optional[str] = Query(None)):
                 "total_embeddings": 0,
                 "last_generated": None,
                 "index_health": "unknown",
-                "embedding_dimensions": EMBEDDING_DIMENSIONS,
+                "embedding_dimensions": embedding_dimensions,  # Use provider dimensions
                 "backend": backend_name,
                 "index_name": index_name if backend_name == "pinecone" else None,
                 "test_repo_id": test_repo_id,

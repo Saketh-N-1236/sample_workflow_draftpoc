@@ -182,13 +182,18 @@ async def find_tests_semantic(
     if not change_description:
         return []
 
-    # Get query embedding via Ollama
+    # Get query embedding
     settings = get_settings()
     llm = LLMFactory.create_embedding_provider(settings)
     response = await llm.get_embeddings(
         EmbeddingRequest(texts=[change_description])
     )
     query_embedding = response.embeddings[0]
+    
+    # Get expected dimensions from provider for validation
+    expected_dimensions = None
+    if hasattr(llm, 'get_embedding_dimensions'):
+        expected_dimensions = llm.get_embedding_dimensions()
 
     # Get the appropriate backend
     backend = get_backend(conn)
@@ -206,7 +211,8 @@ async def find_tests_semantic(
             SEMANTIC_THRESHOLD_STRICT,
             query_limit,
             top_k=top_k,
-            top_p=top_p
+            top_p=top_p,
+            expected_dimensions=expected_dimensions
         )
         
         # If not enough results, try moderate
@@ -217,7 +223,8 @@ async def find_tests_semantic(
                 query_limit,
                 test_repo_id=test_repo_id,
                 top_k=top_k,
-                top_p=top_p
+                top_p=top_p,
+                expected_dimensions=expected_dimensions
             )
             # Combine and deduplicate (prefer higher similarity)
             seen_ids = {r.get('test_id') for r in results}
@@ -233,7 +240,8 @@ async def find_tests_semantic(
                 query_limit,
                 test_repo_id=test_repo_id,
                 top_k=top_k,
-                top_p=top_p
+                top_p=top_p,
+                expected_dimensions=expected_dimensions
             )
             # Combine and deduplicate
             seen_ids = {r.get('test_id') for r in results}
@@ -248,7 +256,9 @@ async def find_tests_semantic(
             threshold,
             query_limit,
             top_k=top_k,
-            top_p=top_p
+            top_p=top_p,
+            test_repo_id=test_repo_id,
+            expected_dimensions=expected_dimensions
         )
     
     # Sort by similarity (descending) to ensure best matches first
@@ -310,7 +320,8 @@ async def find_tests_semantic_multi_query(
             max_results,
             top_k=None,
             top_p=None,
-            test_repo_id=test_repo_id
+            test_repo_id=test_repo_id,
+            expected_dimensions=expected_dimensions
         )
         # Weight function queries higher
         for r in func_results:
@@ -331,7 +342,8 @@ async def find_tests_semantic_multi_query(
             max_results,
             top_k=None,
             top_p=None,
-            test_repo_id=test_repo_id
+            test_repo_id=test_repo_id,
+            expected_dimensions=expected_dimensions
         )
         # Weight module queries lower
         for r in module_results:
@@ -351,7 +363,8 @@ async def find_tests_semantic_multi_query(
             max_results,
             test_repo_id=test_repo_id,
             top_k=None,
-            top_p=None
+            top_p=None,
+            expected_dimensions=expected_dimensions
         )
         # Weight rich queries highest
         for r in rich_results:

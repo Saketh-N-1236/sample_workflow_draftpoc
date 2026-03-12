@@ -1,0 +1,24 @@
+{
+  "generated_at": "2026-03-12T15:49:38.882969",
+  "data": {
+    "total_tests": 1,
+    "tests_with_dependencies": 1,
+    "total_references": 1,
+    "average_references_per_test": 1.0,
+    "test_dependencies": [
+      {
+        "test_id": "test_0001",
+        "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\a68bf7dc\\Test_repository_fe-app\\App-test.tsx",
+        "class_name": null,
+        "method_name": "test_1",
+        "referenced_classes": [
+          "react-native"
+        ],
+        "reference_types": {
+          "react-native": "direct_import"
+        },
+        "import_count": 1
+      }
+    ]
+  }
+}

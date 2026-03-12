@@ -1,7 +1,7 @@
 """Abstract base class for LLM providers."""
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from llm.models import LLMRequest, LLMResponse, EmbeddingRequest, EmbeddingResponse
 
 
@@ -65,6 +65,15 @@ class LLMProvider(ABC):
     def supports_streaming(self) -> bool:
         """Return whether this provider supports streaming responses."""
         pass
+    
+    def get_embedding_dimensions(self) -> Optional[int]:
+        """Return the expected embedding dimensions for this provider.
+        
+        Returns:
+            Number of dimensions, or None if unknown
+        """
+        # Default implementation - subclasses should override
+        return None
     
     def __repr__(self) -> str:
         """String representation."""

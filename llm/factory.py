@@ -25,7 +25,16 @@ class LLMFactory:
         Raises:
             ValueError: If provider is not supported or not configured
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         provider = settings.llm_provider.lower()
+        
+        # Use model_name override if provided, otherwise use provider-specific default
+        if settings.model_name:
+            model = settings.model_name
+        else:
+            model = None  # Will use provider default
         
         if provider == "gemini":
             from llm.gemini_client import GeminiClient
@@ -33,7 +42,7 @@ class LLMFactory:
                 raise ValueError("Gemini API key is required but not set")
             return GeminiClient(
                 api_key=settings.gemini_api_key,
-                model=settings.gemini_model
+                model=model or settings.gemini_model
             )
         
         elif provider == "openai":
@@ -42,7 +51,7 @@ class LLMFactory:
                 raise ValueError("OpenAI API key is required but not set")
             return OpenAIClient(
                 api_key=settings.openai_api_key,
-                model=settings.openai_model
+                model=model or settings.openai_model
             )
         
         elif provider == "anthropic":
@@ -51,14 +60,14 @@ class LLMFactory:
                 raise ValueError("Anthropic API key is required but not set")
             return AnthropicClient(
                 api_key=settings.anthropic_api_key,
-                model=settings.anthropic_model
+                model=model or settings.anthropic_model
             )
         
         elif provider == "ollama":
             from llm.ollama_client import OllamaClient
             return OllamaClient(
                 base_url=settings.ollama_base_url,
-                chat_model=settings.ollama_chat_model,
+                chat_model=model or settings.ollama_chat_model,
                 embedding_model=settings.ollama_embedding_model
             )
         
@@ -78,6 +87,15 @@ class LLMFactory:
         return ["gemini", "openai", "anthropic", "ollama"]
     
     @staticmethod
+    def get_available_embedding_providers() -> List[str]:
+        """Get list of available embedding provider names.
+        
+        Returns:
+            List of embedding provider names
+        """
+        return ["gemini", "ollama", "openai"]
+    
+    @staticmethod
     def create_embedding_provider(settings: Settings) -> LLMProvider:
         """Create an embedding provider (can be different from LLM provider).
         
@@ -92,13 +110,27 @@ class LLMFactory:
         """
         provider = settings.embedding_provider.lower()
         
+        # Use embedding_model_name override if provided
+        embedding_model = settings.embedding_model_name
+        
         if provider == "gemini":
             from llm.gemini_client import GeminiClient
             if not settings.gemini_api_key:
                 raise ValueError("Gemini API key is required but not set")
+            # Gemini uses a fixed embedding model, but we still need to initialize the client
             return GeminiClient(
                 api_key=settings.gemini_api_key,
-                model=settings.gemini_model
+                model=settings.gemini_model  # Model name doesn't affect embeddings for Gemini
+            )
+        
+        elif provider == "openai":
+            from llm.openai_client import OpenAIClient
+            if not settings.openai_api_key:
+                raise ValueError("OpenAI API key is required but not set")
+            return OpenAIClient(
+                api_key=settings.openai_api_key,
+                model=settings.openai_model,  # Chat model (not used for embeddings)
+                embedding_model=embedding_model or settings.openai_embedding_model
             )
         
         elif provider == "ollama":
@@ -106,11 +138,11 @@ class LLMFactory:
             return OllamaClient(
                 base_url=settings.ollama_base_url,
                 chat_model=settings.ollama_chat_model,
-                embedding_model=settings.ollama_embedding_model
+                embedding_model=embedding_model or settings.ollama_embedding_model
             )
         
         else:
             raise ValueError(
                 f"Unsupported embedding provider: {provider}. "
-                f"Supported providers: gemini, ollama"
+                f"Supported providers: gemini, ollama, openai"
             )

@@ -1,7 +1,7 @@
 """Ollama LLM provider implementation."""
 
 import httpx
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from llm.base import LLMProvider
 from llm.models import LLMRequest, LLMResponse, EmbeddingRequest, EmbeddingResponse
 
@@ -39,9 +39,23 @@ class OllamaClient(LLMProvider):
         return self._chat_model
     
     @property
+    def embedding_model(self) -> str:
+        """Return embedding model name."""
+        return self._embedding_model
+    
+    @property
     def supports_streaming(self) -> bool:
         """Ollama supports streaming."""
         return True
+    
+    def get_embedding_dimensions(self) -> Optional[int]:
+        """Return the expected embedding dimensions for Ollama models."""
+        # Ollama embedding model dimensions
+        model_dimensions = {
+            "nomic-embed-text": 768,
+            "all-minilm": 384,
+        }
+        return model_dimensions.get(self._embedding_model, 768)  # Default to 768
     
     async def chat_completion(self, request: LLMRequest) -> LLMResponse:
         """Generate chat completion using Ollama.

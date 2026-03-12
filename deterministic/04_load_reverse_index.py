@@ -192,7 +192,7 @@ def main():
     target_schema = schema_name or DB_SCHEMA
     if schema_name:
         print_section(f"Using schema: {target_schema}")
-        print()
+    print()
     
     # Step 1: Test database connection
     print_section("Testing database connection...")

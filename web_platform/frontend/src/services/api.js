@@ -147,4 +147,8 @@ export default {
   getTestRepositoryAnalysis: (testRepoId) => {
     return api.get(`/test-repositories/${testRepoId}/analysis`);
   },
+
+  regenerateEmbeddings: (testRepoId) => {
+    return api.post(`/test-repositories/${testRepoId}/regenerate-embeddings`);
+  },
 };

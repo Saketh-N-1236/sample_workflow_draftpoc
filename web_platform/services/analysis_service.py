@@ -381,14 +381,25 @@ class AnalysisService:
                 )
                 
                 if result.returncode == 0:
-                    if progress_callback:
-                        await progress_callback("  → Embeddings stored to Pinecone")
-                    logger.info("Embedding generation completed")
+                    # Check output for warnings about no embeddings stored
+                    output_text = result.stdout + result.stderr
+                    if "No embeddings were stored" in output_text or "WARNING: No embeddings were stored" in output_text:
+                        error_msg = "  ❌ Embedding generation completed but no embeddings were stored (likely dimension mismatch)"
+                        if progress_callback:
+                            await progress_callback(error_msg)
+                        logger.error("Embedding generation completed but no embeddings were stored")
+                        logger.error(f"Output: {output_text}")
+                    else:
+                        if progress_callback:
+                            await progress_callback("  → Embeddings stored to Pinecone")
+                        logger.info("Embedding generation completed")
                 else:
                     error_msg = "  ❌ Embedding generation failed"
                     if progress_callback:
                         await progress_callback(error_msg)
-                    logger.error(f"Embedding generation failed: {result.stderr}")
+                    logger.error(f"Embedding generation failed (exit code {result.returncode})")
+                    logger.error(f"STDOUT: {result.stdout}")
+                    logger.error(f"STDERR: {result.stderr}")
             except subprocess.TimeoutExpired:
                 error_msg = "  ❌ Embedding generation timed out"
                 if progress_callback:

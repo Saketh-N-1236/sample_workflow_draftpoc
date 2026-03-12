@@ -1,0 +1,19 @@
+diff --git a/src/services/api/common/ApiEndPoints.js b/src/services/api/common/ApiEndPoints.js
+index 2345678..bcdef01 100644
+--- a/src/services/api/common/ApiEndPoints.js
++++ b/src/services/api/common/ApiEndPoints.js
+@@ -64,6 +64,6 @@
+   payment: {
+-    addCard: '/api/v2/payments/me?',
+-    deleteCard: '/api/v2/payments/me?cardId=',
+-    preAuth: '/api/v2/payments/me/preauth-verify?',
+-    getAllCards: '/api/v2/payments/me',
+-    updateCard: '/api/v2/payments/me?',
+-    paymentsCheckout: '/api/v2/payments/checkout'
++    addCard: '/api/v3/payments/me?',
++    deleteCard: '/api/v3/payments/me?cardId=',
++    preAuth: '/api/v3/payments/me/preauth-verify?',
++    getAllCards: '/api/v3/payments/me',
++    updateCard: '/api/v3/payments/me?',
++    paymentsCheckout: '/api/v3/payments/checkout'
+   },
