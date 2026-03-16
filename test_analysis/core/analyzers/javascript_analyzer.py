@@ -180,40 +180,79 @@ class JavaScriptAnalyzer(BaseAnalyzer):
                 content = filepath.read_text(encoding='utf-8', errors='replace')
                 test_type = self._get_test_type(filepath)
                 
-                # Extract test functions (describe, it, test)
+                # Extract individual test cases only (it/test).
+                # 'describe' is a GROUP container, not a test — excluded intentionally.
+                #
+                # Pattern explanation:
+                #   (?<!\w)          — word-boundary: prevents matching .test() inside class names
+                #   (?:it|test)      — only real Jest test blocks (NOT describe)
+                #   \s*\(            — opening paren (optional whitespace)
+                #   (?:QUOTE_EXPR)   — the test-name argument as a proper quoted string literal
+                #                      (single / double / backtick).
+                #                      We use [^QUOTE\n\\]* instead of [^,]* so the pattern
+                #                      CANNOT span newlines into a later it()/describe() line.
+                #   \s*,\s*          — comma separating name from callback
+                #   (?:async\s*)?    — optional async keyword
+                #   (?:\([^)]*\)\s*)?=> — arrow function signature: () => or (args) =>
                 test_pattern = re.compile(
-                    r'(?:describe|it|test)\s*\([^,]*,\s*(?:async\s*)?(?:\([^)]*\)\s*)?=>',
+                    r"""(?<!\w)(?:it|test)\s*\(\s*(?:'[^'\n\\]*'|"[^"\n\\]*"|`[^`\n\\]*`)\s*,\s*(?:async\s*)?(?:\([^)]*\)\s*)?=>""",
                     re.MULTILINE
                 )
-                
+
+                # ── Pre-scan: build sorted list of (char_position, describe_name) ──
+                # We use this to look up the closest enclosing describe() for each it().
+                # Format: "describe_name > it_name"  makes every test uniquely identifiable
+                # and is also the key that maps test_id → production symbol in AST matching.
+                _desc_pattern = re.compile(
+                    r"""(?<!\w)describe\s*\(\s*(?:'([^'\n\\]*)'|"([^"\n\\]*)"|`([^`\n\\]*)`)\s*,""",
+                    re.MULTILINE
+                )
+                describe_positions = []   # [(start_pos, describe_name), ...]
+                for dm in _desc_pattern.finditer(content):
+                    desc_name = dm.group(1) or dm.group(2) or dm.group(3) or ''
+                    describe_positions.append((dm.start(), desc_name))
+                # Sort by position (should already be, but be safe)
+                describe_positions.sort(key=lambda x: x[0])
+
+                _name_re = re.compile(r"""(?:it|test)\s*\(\s*['"`]([^'"`\n]+)['"`]""")
+
                 for match in test_pattern.finditer(content):
-                    # Extract test name from describe/it/test call
                     before = content[:match.start()]
                     line_num = before.count('\n') + 1
-                    
-                    # FIXED: Extract test name from the match area, not just backwards
-                    # Look for the test name in the content around the match
-                    test_name_pattern = re.compile(r"(?:describe|it|test)\s*\(\s*['\"]([^'\"]+)['\"]")
-                    # Search from match.start() backwards up to 200 chars, or forwards from match.start()
-                    search_start = max(0, match.start() - 200)
-                    search_end = min(len(content), match.start() + 200)
-                    search_area = content[search_start:search_end]
-                    
-                    test_name_match = test_name_pattern.search(search_area)
-                    if test_name_match:
-                        test_name = test_name_match.group(1)
+
+                    # ── Extract name ONLY from the current it()/test() call ──────────
+                    matched_text = match.group(0)
+                    name_match = _name_re.search(matched_text)
+                    if name_match:
+                        it_name = name_match.group(1)
                     else:
-                        # Fallback: try to extract from quotes near the match
-                        quote_match = re.search(r"['\"]([^'\"]+)['\"]", content[max(0, match.start()-50):match.end()+50])
-                        test_name = quote_match.group(1) if quote_match else f"test_{test_id_counter}"
-                    
+                        forward_text = content[match.start():min(len(content), match.start() + 300)]
+                        fwd_match = _name_re.search(forward_text)
+                        it_name = fwd_match.group(1) if fwd_match else f"test_{test_id_counter}"
+
+                    # ── Attach enclosing describe() label ──────────────────────────
+                    # Walk the sorted describe_positions in reverse; the LAST describe
+                    # whose start position is before this it() start is the closest one.
+                    enclosing_describe = ''
+                    for dpos, dname in reversed(describe_positions):
+                        if dpos < match.start():
+                            enclosing_describe = dname
+                            break
+
+                    # Final test name: "describe_name > it_name" (or just it_name if no describe)
+                    if enclosing_describe:
+                        test_name = f"{enclosing_describe} > {it_name}"
+                    else:
+                        test_name = it_name
+                    # ────────────────────────────────────────────────────────────────
+
                     test_id_str = f"test_{test_id_counter:04d}"
                     test_id_counter += 1
-                    
+
                     tests.append({
                         'test_id': test_id_str,
                         'file_path': str(filepath),
-                        'class_name': None,
+                        'class_name': enclosing_describe or None,   # describe block = class
                         'method_name': test_name,
                         'test_type': test_type,
                         'language': 'javascript',
@@ -238,13 +277,22 @@ class JavaScriptAnalyzer(BaseAnalyzer):
     def _extract_dependencies(
         self, test_files: List[Path], tests: List[Dict], repo_path: Path
     ) -> List[Dict]:
-        """Extract dependencies."""
+        """Extract dependencies.
+        
+        FIX: A file can contain many tests.  The old code used a file→single-test
+        dict which silently discarded every test except the last one per file.
+        We now build file→[all tests] so that import dependencies are associated
+        with every test that lives in that file.
+        """
         dependencies = []
-        test_by_file = {t['file_path']: t for t in tests}
+        # Build file → list-of-tests mapping (one file can have many tests)
+        tests_by_file: Dict[str, List[Dict]] = {}
+        for t in tests:
+            tests_by_file.setdefault(t['file_path'], []).append(t)
         
         for filepath in test_files:
-            test = test_by_file.get(str(filepath))
-            if not test:
+            file_tests = tests_by_file.get(str(filepath))
+            if not file_tests:
                 continue
             
             try:
@@ -263,15 +311,18 @@ class JavaScriptAnalyzer(BaseAnalyzer):
                     if not any(fw in imp.lower() for fw in ['jest', 'mocha', 'jasmine', 'vitest', 'chai', 'sinon']):
                         imports.append(imp)
                 
-                dependencies.append({
-                    'test_id': test['test_id'],
-                    'file_path': str(filepath),
-                    'class_name': test.get('class_name', ''),
-                    'method_name': test['method_name'],
-                    'referenced_classes': sorted(set(imports)),
-                    'reference_types': {imp: 'direct_import' for imp in imports},
-                    'import_count': len(imports),
-                })
+                unique_imports = sorted(set(imports))
+                # Create one dependency entry per test in this file
+                for test in file_tests:
+                    dependencies.append({
+                        'test_id': test['test_id'],
+                        'file_path': str(filepath),
+                        'class_name': test.get('class_name', ''),
+                        'method_name': test['method_name'],
+                        'referenced_classes': unique_imports,
+                        'reference_types': {imp: 'direct_import' for imp in unique_imports},
+                        'import_count': len(unique_imports),
+                    })
             except Exception as e:
                 logger.warning(f"Error extracting dependencies from {filepath}: {e}")
         
@@ -280,38 +331,82 @@ class JavaScriptAnalyzer(BaseAnalyzer):
     def _extract_function_calls(
         self, test_files: List[Path], tests: List[Dict], repo_path: Path
     ) -> List[Dict]:
-        """Extract function calls."""
-        function_calls = []
-        test_by_file = {t['file_path']: t for t in tests}
+        """Extract function calls per individual test.
         
+        FIX: The old code used file→single-test dict so every method call in the
+        file got attributed to only ONE test (the last one stored in the dict).
+        
+        New approach:
+          1. Build a sorted list of (line_number, test) pairs per file.
+          2. For each method-call match, determine which test body it belongs to
+             by finding the nearest test that starts at or before that line.
+          3. Emit one function_calls entry per (symbol, test) pair — deduplicated
+             so the same symbol doesn't appear twice for the same test.
+        """
+        function_calls = []
+        # Build file → sorted list of tests (by line_number ascending)
+        tests_by_file: Dict[str, List[Dict]] = {}
+        for t in tests:
+            tests_by_file.setdefault(t['file_path'], []).append(t)
+        # Sort each file's tests by line number
+        for fp in tests_by_file:
+            tests_by_file[fp].sort(key=lambda t: t.get('line_number') or 0)
+
+        SKIP_OBJECTS = {'expect', 'describe', 'it', 'test', 'jest', 'mock',
+                        'beforeeach', 'aftereach', 'beforeall', 'afterall',
+                        'console', 'math', 'json', 'object', 'array', 'promise'}
+
         for filepath in test_files:
-            test = test_by_file.get(str(filepath))
-            if not test:
+            file_tests = tests_by_file.get(str(filepath))
+            if not file_tests:
                 continue
-            
+
             try:
                 content = filepath.read_text(encoding='utf-8', errors='replace')
-                # Simple pattern for method calls
+                lines = content.split('\n')
+                total_lines = len(lines)
                 pattern = re.compile(r'(\w+)\.(\w+)\s*\(', re.MULTILINE)
+
+                # seen set: avoid duplicate (test_id, module_name) rows
+                seen: set = set()
+
                 for match in pattern.finditer(content):
-                    obj = match.group(1)
+                    obj  = match.group(1)
                     func = match.group(2)
-                    if obj.lower() not in ['expect', 'describe', 'it', 'test', 'jest', 'mock']:
-                        function_calls.append({
-                            'test_id': test['test_id'],
-                            'file_path': str(filepath),
-                            'class_name': test.get('class_name', ''),
-                            'method_name': test['method_name'],
-                            'module_name': obj,
-                            'function_name': func,
-                            'object_name': obj,
-                            'call_type': 'method',
-                            'source': 'method_call',
-                            'line_number': content[:match.start()].count('\n') + 1,
-                        })
+                    if obj.lower() in SKIP_OBJECTS:
+                        continue
+
+                    call_line = content[:match.start()].count('\n') + 1
+
+                    # Find which test owns this line (last test whose line_number ≤ call_line)
+                    owner_test = file_tests[0]  # fallback: first test
+                    for t in file_tests:
+                        t_line = t.get('line_number') or 0
+                        if t_line <= call_line:
+                            owner_test = t
+                        else:
+                            break  # list is sorted ascending; no need to continue
+
+                    key = (owner_test['test_id'], obj)
+                    if key in seen:
+                        continue
+                    seen.add(key)
+
+                    function_calls.append({
+                        'test_id':      owner_test['test_id'],
+                        'file_path':    str(filepath),
+                        'class_name':   owner_test.get('class_name', ''),
+                        'method_name':  owner_test['method_name'],
+                        'module_name':  obj,
+                        'function_name': func,
+                        'object_name':  obj,
+                        'call_type':    'method',
+                        'source':       'method_call',
+                        'line_number':  call_line,
+                    })
             except Exception as e:
                 logger.warning(f"Error extracting function calls from {filepath}: {e}")
-        
+
         return function_calls
     
     def _extract_test_content(self, filepath: Path, method_name: str, line_number: Optional[int]) -> str:
@@ -668,10 +763,30 @@ class JavaScriptAnalyzer(BaseAnalyzer):
         
         return async_tests
     
+    # ── Regex used to split compound describe labels ──────────────────────────
+    # "capitalizeFirstLetter with checkWhiteSpace" → "capitalizeFirstLetter"
+    # "toastReducer > TOAST action"               → "toastReducer"
+    # "validateEmailOrUsername uses EMAIL_REGEX"  → "validateEmailOrUsername"
+    _DESCRIBE_SPLIT_RE = re.compile(
+        r'\s+(?:with|uses|from|for|in|that|>|→|:)\s+', re.IGNORECASE
+    )
+
     def _build_reverse_index(
         self, dependencies: List[Dict], function_calls: List[Dict]
     ) -> Dict[str, List[Dict]]:
-        """Build reverse index."""
+        """Build reverse index.
+
+        Three sources are merged:
+        1. File-level imports (dependencies.referenced_classes) — e.g. '../helpers/utilities'
+        2. Method calls (function_calls.module_name) — e.g. 'localStorage'
+        3. NEW: describe-label extraction from class_name — e.g. 'capitalizeFirstLetter'
+
+        Source 3 is the most important for JS/TS tests because production functions
+        are usually called without dot-notation (capitalizeFirstLetter(s)) so they
+        are invisible to the obj.method() regex used for source 2.
+        The Jest describe() block name IS the production symbol under test, so we
+        extract it and index each test under that symbol.
+        """
         reverse_index = defaultdict(list)
         
         for dep in dependencies:
@@ -693,6 +808,44 @@ class JavaScriptAnalyzer(BaseAnalyzer):
                     'method_name': call['method_name'],
                     'reference_type': call.get('source', 'method_call'),
                 })
+        
+        # ── Source 3: describe-label → production symbol ──────────────────────
+        # Deduplicate (symbol, test_id) pairs so we don't insert duplicates.
+        seen_label: set = set()
+        for dep in dependencies:
+            class_name = (dep.get('class_name') or '').strip()
+            if not class_name:
+                continue
+            # Extract primary symbol: split on connector words, take first part.
+            primary = self._DESCRIBE_SPLIT_RE.split(class_name, maxsplit=1)[0].strip()
+            # Also strip any trailing " > something" (nested describe)
+            primary = primary.split(' > ')[0].strip()
+            if not primary:
+                continue
+            key = (primary, dep['test_id'])
+            if key in seen_label:
+                continue
+            seen_label.add(key)
+            reverse_index[primary].append({
+                'test_id': dep['test_id'],
+                'file_path': dep['file_path'],
+                'class_name': class_name,
+                'method_name': dep.get('method_name', ''),
+                'reference_type': 'describe_label',
+            })
+            # If the primary symbol differs from class_name, also add the full class_name
+            if primary != class_name:
+                full_key = (class_name, dep['test_id'])
+                if full_key not in seen_label:
+                    seen_label.add(full_key)
+                    reverse_index[class_name].append({
+                        'test_id': dep['test_id'],
+                        'file_path': dep['file_path'],
+                        'class_name': class_name,
+                        'method_name': dep.get('method_name', ''),
+                        'reference_type': 'describe_label',
+                    })
+        # ──────────────────────────────────────────────────────────────────────
         
         return dict(reverse_index)
     

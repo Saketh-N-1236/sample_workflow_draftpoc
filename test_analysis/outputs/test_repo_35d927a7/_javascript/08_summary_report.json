@@ -1,0 +1,45 @@
+{
+  "generated_at": "2026-03-13T15:33:30.624656",
+  "data": {
+    "test_repository_overview": {
+      "total_test_files": 7,
+      "total_lines_of_code": 1110,
+      "test_framework": "jest",
+      "framework_confidence": "high",
+      "language": "javascript"
+    },
+    "test_inventory": {
+      "total_tests": 105,
+      "total_test_classes": 0,
+      "tests_by_type": {
+        "unit": 105
+      }
+    },
+    "dependencies": {
+      "total_production_classes_referenced": 29,
+      "total_dependency_mappings": 0,
+      "average_tests_per_class": 3.62,
+      "tests_with_dependencies": 0
+    },
+    "metadata": {
+      "tests_with_descriptions": 0,
+      "tests_with_markers": 0,
+      "async_tests": 0,
+      "parameterized_tests": 0,
+      "disabled_tests": 0
+    },
+    "summary_for_db": {
+      "files_analyzed": 7,
+      "functions_extracted": 0,
+      "modules_identified": 0,
+      "test_files": 7,
+      "total_tests": 105,
+      "total_test_classes": 0,
+      "total_test_methods": 105,
+      "total_dependencies": 0,
+      "total_production_classes": 29,
+      "tests_with_descriptions": 0,
+      "framework": "jest"
+    }
+  }
+}

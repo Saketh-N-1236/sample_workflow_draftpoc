@@ -1,0 +1,23 @@
+{
+  "generated_at": "2026-03-13T18:57:41.938164",
+  "data": {
+    "test_repository_overview": {
+      "total_test_files": 7,
+      "total_lines_of_code": 1110,
+      "test_framework": "jest",
+      "framework_confidence": "high"
+    },
+    "test_inventory": {
+      "total_tests": 77,
+      "total_test_classes": 28,
+      "tests_by_type": {
+        "unit": 77
+      }
+    },
+    "summary_for_db": {
+      "files_analyzed": 7,
+      "total_tests": 77,
+      "framework": "jest"
+    }
+  }
+}

@@ -105,23 +105,6 @@ const RepositoryList = () => {
                 <div className="repository-card-title">
                   <span className="repository-name">{repo.url.split('/').pop()}</span>
                 </div>
-                <div className="repository-card-actions">
-                  <button
-                    className="icon-button"
-                    onClick={(e) => handleRefresh(repo.id, e)}
-                    title="Refresh"
-                  >
-                    ↻
-                  </button>
-                  <button
-                    className="icon-button"
-                    onClick={(e) => handleDelete(repo.id, e)}
-                    title="Delete"
-                    style={{ color: '#d32f2f' }}
-                  >
-                    ×
-                  </button>
-                </div>
               </div>
               <div className="repository-card-body">
                 <div className="repository-info">

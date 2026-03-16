@@ -73,14 +73,6 @@ export default {
     return api.get('/analysis/embedding-status', params);
   },
 
-  configureSemanticSearch: (repoId, config) => {
-    return api.post(`/repositories/${repoId}/configure-semantic`, config);
-  },
-
-  getSemanticConfig: (repoId) => {
-    return api.get(`/repositories/${repoId}/semantic-config`);
-  },
-
   getTotalTestsCount: () => {
     return api.get('/analysis/total-tests');
   },

@@ -36,7 +36,6 @@ graph TB
     subgraph Backend ["Backend (FastAPI - Python)"]
         MAIN[main.py<br/>FastAPI App + CORS]
         REPO_ROUTES[routes/repositories.py<br/>REST API Endpoints]
-        GIT_SVC[services/git_service.py<br/>GitPython local ops]
         GL_SVC[services/gitlab_service.py<br/>GitLab REST API]
         GH_SVC[services/github_service.py<br/>GitHub REST API]
         REPO_DB[services/repository_db.py<br/>PostgreSQL CRUD]
@@ -55,7 +54,6 @@ graph TB
     BS -->|GET /api/repositories/:id/branches| API_JS
     DV -->|GET /api/repositories/:id/diff| API_JS
     API_JS -->|HTTP| REPO_ROUTES
-    REPO_ROUTES --> GIT_SVC
     REPO_ROUTES --> GL_SVC
     REPO_ROUTES --> GH_SVC
     REPO_ROUTES --> REPO_DB
@@ -73,7 +71,6 @@ graph TB
 | Frontend | React 18, Vite | UI framework and build tool |
 | HTTP Client | Axios | REST API calls from browser |
 | Backend Framework | FastAPI (Python) | Async REST API server |
-| Git Operations (Local) | GitPython | Local repository operations (clone, diff) |
 | GitHub Integration | httpx (async) | GitHub REST API v3 calls |
 | GitLab Integration | httpx (async) | GitLab REST API v4 calls |
 | Database | PostgreSQL (psycopg2) | Repository metadata persistence |
@@ -95,7 +92,6 @@ sequenceDiagram
     participant RC as RepositoryConnector.jsx
     participant API_JS as api.js (Axios)
     participant Routes as routes/repositories.py
-    participant GitSvc as git_service.py
     participant GHSvc as github_service.py
     participant GLSvc as gitlab_service.py
     participant RepoDB as repository_db.py
@@ -107,7 +103,7 @@ sequenceDiagram
     API_JS->>Routes: POST /api/repositories/connect<br/>Body: { url, provider }
 
     Routes->>Routes: Validate URL format
-    Routes->>Routes: Auto-detect provider if null<br/>GitService.is_gitlab_url() or GitHubService.is_github_url()
+    Routes->>Routes: Auto-detect provider if null<br/>GitLabService.is_gitlab_url() or GitHubService.is_github_url()
 
     alt provider == 'gitlab'
         Routes->>GLSvc: GitLabService()
@@ -157,7 +153,7 @@ else  -> provider = 'auto' (send null to backend)
 
 **Level 2 - Backend (`routes/repositories.py`):**
 ```python
-# GitService.is_gitlab_url() -> checks urlparse(url).hostname for 'gitlab'
+# GitLabService.is_gitlab_url() -> checks urlparse(url).hostname for 'gitlab'
 # GitHubService.is_github_url() -> checks urlparse(url).hostname for 'github.com'
 ```
 
@@ -545,7 +541,6 @@ When fetching diffs, the system has a multi-level fallback:
 | `web_platform/api/main.py` | FastAPI application entry point, router registration, startup events |
 | `web_platform/api/routes/repositories.py` | All repository API endpoints: connect, list, branch, diff, update, refresh |
 | `web_platform/api/models/repository.py` | Pydantic request/response models |
-| `web_platform/services/git_service.py` | GitPython-based local git operations (clone, local branch/diff) |
 | `web_platform/services/gitlab_service.py` | GitLab REST API v4 client (branches, commits, diffs, access validation) |
 | `web_platform/services/github_service.py` | GitHub REST API v3 client (branches, commits, diffs, access validation) |
 | `web_platform/services/repository_db.py` | PostgreSQL CRUD for `planon1.repositories` table |

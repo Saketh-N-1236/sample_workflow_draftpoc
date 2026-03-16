@@ -125,6 +125,9 @@ class SelectionService:
                 os.environ['TEST_REPO_ID'] = test_repo_id
             
             # Get semantic config from repository if available
+            # NOTE: quality_threshold / num_query_variations are further adjusted
+            # adaptively inside process_diff_and_select_tests → build_adaptive_semantic_config()
+            # based on diff complexity and AST results. No manual clamping needed here.
             semantic_config = None
             if repository_id:
                 from services.repository_db import get_repository_by_id

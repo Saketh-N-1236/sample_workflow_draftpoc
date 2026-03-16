@@ -7,7 +7,6 @@ import DiffModal from '../components/DiffModal';
 import ActionButtons from '../components/ActionButtons';
 import ResultsDisplay from '../components/ResultsDisplay';
 import EmbeddingStatus from '../components/EmbeddingStatus';
-import SemanticConfigPanel from '../components/SemanticConfigPanel';
 import TestSummaryModal from '../components/TestSummaryModal';
 import RiskAnalysisPanel from '../components/RiskAnalysisPanel';
 import TestRepositoryBinding from '../components/TestRepositoryBinding';
@@ -26,7 +25,6 @@ const RepositoryDetail = () => {
   const [activeTab, setActiveTab] = useState('diff'); // 'diff', 'selection'
   const [diffStats, setDiffStats] = useState(null);
   const [isDiffModalOpen, setIsDiffModalOpen] = useState(false);
-  const [showSemanticConfig, setShowSemanticConfig] = useState(false);
   const [showTestSummary, setShowTestSummary] = useState(false);
   const [showRiskAnalysis, setShowRiskAnalysis] = useState(false);
   const [totalTestsInDb, setTotalTestsInDb] = useState(0);
@@ -263,20 +261,6 @@ const RepositoryDetail = () => {
             >
               {showRiskAnalysis ? 'Hide' : 'Configure'} Risk Analysis
             </button>
-            <button
-              onClick={() => setShowSemanticConfig(!showSemanticConfig)}
-              style={{
-                padding: '8px 16px',
-                background: showSemanticConfig ? '#1976d2' : 'transparent',
-                color: showSemanticConfig ? 'white' : '#1976d2',
-                border: '1px solid #1976d2',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                fontSize: '14px'
-              }}
-            >
-              {showSemanticConfig ? 'Hide' : 'Configure'} Semantic Search
-            </button>
           </div>
         </div>
         {showRiskAnalysis && (
@@ -294,17 +278,6 @@ const RepositoryDetail = () => {
                 setShowRiskAnalysis(false);
               }}
               onCancel={() => setShowRiskAnalysis(false)}
-            />
-          </div>
-        )}
-        {showSemanticConfig && (
-          <div style={{ marginTop: '16px' }}>
-            <SemanticConfigPanel 
-              repoId={repository.id}
-              onSave={(config) => {
-                setShowSemanticConfig(false);
-              }}
-              onCancel={() => setShowSemanticConfig(false)}
             />
           </div>
         )}

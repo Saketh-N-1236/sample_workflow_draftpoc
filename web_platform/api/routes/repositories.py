@@ -19,7 +19,6 @@ from api.models.repository import (
     BranchesResponse,
     BranchResponse
 )
-from services.git_service import GitService
 from services.gitlab_service import GitLabService
 from services.github_service import GitHubService
 from services.repository_db import (
@@ -36,8 +35,6 @@ router = APIRouter(prefix="/repositories", tags=["repositories"])
 # Initialize logger at module level
 import logging
 logger = logging.getLogger(__name__)
-
-git_service = GitService()
 
 # Initialize database table on module load
 try:
@@ -84,7 +81,7 @@ async def connect_repository(repo_data: RepositoryCreate):
         # Auto-detect provider if not provided
         provider = repo_data.provider
         if not provider:
-            if git_service.is_gitlab_url(repo_data.url):
+            if GitLabService.is_gitlab_url(repo_data.url):
                 provider = 'gitlab'
             elif GitHubService.is_github_url(repo_data.url):
                 provider = 'github'
@@ -178,7 +175,7 @@ async def connect_repository(repo_data: RepositoryCreate):
             default_branch=default_branch
         )
         
-        logger.info(f"Repository connected (no clone): {repository_data['id']} - {repo_data.url} ({provider})")
+        logger.info(f"Repository connected : {repository_data['id']} - {repo_data.url} ({provider})")
         
         return RepositoryResponse(**repository_data)
     except HTTPException:
@@ -205,7 +202,7 @@ async def list_branches(repo_id: str):
         
         # Determine provider
         if not provider:
-            if git_service.is_gitlab_url(repo_url):
+            if GitLabService.is_gitlab_url(repo_url):
                 provider = 'gitlab'
             elif GitHubService.is_github_url(repo_url):
                 provider = 'github'
@@ -291,7 +288,7 @@ async def get_diff(repo_id: str, branch: str = None):
         
         # Determine provider
         if not provider:
-            if git_service.is_gitlab_url(repo_url):
+            if GitLabService.is_gitlab_url(repo_url):
                 provider = 'gitlab'
             elif GitHubService.is_github_url(repo_url):
                 provider = 'github'
@@ -458,7 +455,7 @@ async def refresh_repository(repo_id: str):
         
         # Determine provider if not stored
         if not provider:
-            if git_service.is_gitlab_url(repo_url):
+            if GitLabService.is_gitlab_url(repo_url):
                 provider = 'gitlab'
             elif GitHubService.is_github_url(repo_url):
                 provider = 'github'

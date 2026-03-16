@@ -27,9 +27,92 @@ from typing import Optional
 # Add current directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
+import re as _re
 from db_connection import get_connection, get_connection_with_schema, test_connection, DB_SCHEMA
 import os
 from utils.db_helpers import batch_insert_reverse_index, count_table_records
+
+# Regex to extract the primary symbol from a Jest describe label.
+# "capitalizeFirstLetter with checkWhiteSpace" → "capitalizeFirstLetter"
+# "toastReducer > TOAST action stores…"        → "toastReducer"
+# "validateEmailOrUsername uses EMAIL_REGEX"   → "validateEmailOrUsername"
+_DESCRIBE_SPLIT_RE = _re.compile(
+    r'\s+(?:with|uses|from|for|in|that|>|→|:)\s+', _re.IGNORECASE
+)
+
+
+def enrich_reverse_index_from_class_names(conn, schema: str) -> int:
+    """
+    Post-processing step: read test_registry.class_name and add reverse_index
+    entries based on the Jest describe-block label.
+
+    This is needed because the JS analyzer's _extract_function_calls only captures
+    obj.method() patterns, missing plain function calls like capitalizeFirstLetter().
+    The describe() label IS the production symbol, so we use it directly.
+
+    Safe to run multiple times — uses ON CONFLICT DO NOTHING.
+    Returns the number of new entries inserted.
+    """
+    inserted = 0
+    try:
+        with conn.cursor() as cur:
+            # Read all tests that have a class_name
+            cur.execute(
+                f"SELECT test_id, class_name, file_path FROM {schema}.test_registry "
+                f"WHERE class_name IS NOT NULL AND class_name <> '' "
+                f"ORDER BY test_id"
+            )
+            rows = cur.fetchall()
+
+        entries = []
+        seen: set = set()
+        for test_id, class_name, file_path in rows:
+            class_name = (class_name or '').strip()
+            if not class_name:
+                continue
+            # Derive the primary production symbol
+            primary = _DESCRIBE_SPLIT_RE.split(class_name, maxsplit=1)[0].strip()
+            primary = primary.split(' > ')[0].strip()
+            for symbol in {primary, class_name}:
+                if not symbol:
+                    continue
+                key = (symbol, test_id)
+                if key in seen:
+                    continue
+                seen.add(key)
+                entries.append({
+                    'production_class': symbol,
+                    'test_id': test_id,
+                    'test_file_path': file_path,
+                    'reference_type': 'describe_label',
+                })
+
+        # Insert using ON CONFLICT DO NOTHING to be idempotent
+        if entries:
+            with conn.cursor() as cur:
+                from psycopg2.extras import execute_values
+                target_schema = schema or DB_SCHEMA
+                values = [
+                    (e['production_class'], e['test_id'],
+                     e.get('test_file_path'), e['reference_type'])
+                    for e in entries
+                ]
+                execute_values(
+                    cur,
+                    f"""
+                    INSERT INTO {target_schema}.reverse_index
+                    (production_class, test_id, test_file_path, reference_type)
+                    VALUES %s
+                    ON CONFLICT DO NOTHING
+                    """,
+                    values
+                )
+                conn.commit()
+                inserted = len(entries)
+    except Exception as exc:
+        conn.rollback()
+        print(f"  WARNING: enrich_reverse_index_from_class_names failed: {exc}")
+    return inserted
 from utils.output_formatter import print_header, print_section, print_item
 
 # Path to reverse index JSON file
@@ -245,6 +328,12 @@ def main():
             # Check final count
             final_count = count_table_records(conn, "reverse_index", schema=schema_name)
             
+            # Step 4b: Enrich reverse_index with describe-label entries
+            print_section("Enriching reverse index from test class names...")
+            enriched = enrich_reverse_index_from_class_names(conn, target_schema)
+            print_item("Describe-label entries added:", enriched)
+            print()
+
             # Step 5: Get statistics
             rev_stats = get_reverse_index_statistics(conn, schema=schema_name)
             print()

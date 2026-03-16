@@ -18,7 +18,7 @@ class SemanticConfig(BaseModel):
     use_llm_reranking: bool = True  # Enable LLM re-ranking
     rerank_top_k: int = 50  # Number of candidates to re-rank
     num_query_variations: int = 3  # Number of query variations to generate
-    quality_threshold: float = 0.4  # Quality threshold for filtering (0.0-1.0, only tests with rerank_score >= this are returned)
+    quality_threshold: float = 0.3  # Quality threshold for filtering (0.0-1.0, only tests with rerank_score >= this are returned)
 
 
 class EmbeddingStatus(BaseModel):

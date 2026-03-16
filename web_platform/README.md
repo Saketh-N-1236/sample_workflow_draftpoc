@@ -70,7 +70,6 @@ web_platform/
 │   │   └── services/     # API client
 │   └── package.json
 ├── services/              # Business logic
-│   ├── git_service.py    # Git operations
 │   ├── github_service.py # GitHub API
 │   ├── gitlab_service.py # GitLab API
 │   ├── analysis_service.py

@@ -1,0 +1,495 @@
+{
+  "generated_at": "2026-03-13T15:33:30.889122",
+  "data": {
+    "total_production_classes": 29,
+    "total_mappings": 61,
+    "average_tests_per_class": 2.1,
+    "reverse_index": {
+      "signInFormHook": [
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        }
+      ],
+      "constants": [
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0036",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\payment-state.cross.test.js",
+          "class_name": null,
+          "method_name": "4111 1111 1111 1111",
+          "reference_type": "method_call"
+        }
+      ],
+      "storage": [
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0036",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\payment-state.cross.test.js",
+          "class_name": null,
+          "method_name": "4111 1111 1111 1111",
+          "reference_type": "method_call"
+        }
+      ],
+      "utilities": [
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        }
+      ],
+      "value": [
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        }
+      ],
+      "EMAIL_REGEX": [
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0090",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\regex.constants.test.js",
+          "class_name": null,
+          "method_name": "CARD_NUMBER_REGEX",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0090",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\regex.constants.test.js",
+          "class_name": null,
+          "method_name": "CARD_NUMBER_REGEX",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0090",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\regex.constants.test.js",
+          "class_name": null,
+          "method_name": "CARD_NUMBER_REGEX",
+          "reference_type": "method_call"
+        }
+      ],
+      "localStorage": [
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        }
+      ],
+      "JSON": [
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        }
+      ],
+      "appStorage": [
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        }
+      ],
+      "first": [
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        }
+      ],
+      "fullNumber": [
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        }
+      ],
+      "string": [
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        }
+      ],
+      "w": [
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0019",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\auth-storage.cross.test.js",
+          "class_name": null,
+          "method_name": "capitalizes a single word correctly without whitespace branch",
+          "reference_type": "method_call"
+        }
+      ],
+      "paymentReducer": [
+        {
+          "test_id": "test_0036",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\payment-state.cross.test.js",
+          "class_name": null,
+          "method_name": "4111 1111 1111 1111",
+          "reference_type": "method_call"
+        }
+      ],
+      "actions": [
+        {
+          "test_id": "test_0036",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\payment-state.cross.test.js",
+          "class_name": null,
+          "method_name": "4111 1111 1111 1111",
+          "reference_type": "method_call"
+        }
+      ],
+      "CARD_NUMBER_REGEX": [
+        {
+          "test_id": "test_0036",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\payment-state.cross.test.js",
+          "class_name": null,
+          "method_name": "4111 1111 1111 1111",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0036",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\payment-state.cross.test.js",
+          "class_name": null,
+          "method_name": "4111 1111 1111 1111",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0036",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\cross-dependent\\payment-state.cross.test.js",
+          "class_name": null,
+          "method_name": "4111 1111 1111 1111",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0090",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\regex.constants.test.js",
+          "class_name": null,
+          "method_name": "CARD_NUMBER_REGEX",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0090",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\regex.constants.test.js",
+          "class_name": null,
+          "method_name": "CARD_NUMBER_REGEX",
+          "reference_type": "method_call"
+        }
+      ],
+      "ApiEndPoints": [
+        {
+          "test_id": "test_0046",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\feature\\api-navigation.feature.test.js",
+          "class_name": null,
+          "method_name": "ApiConstants",
+          "reference_type": "method_call"
+        }
+      ],
+      "ApiConstants": [
+        {
+          "test_id": "test_0046",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\feature\\api-navigation.feature.test.js",
+          "class_name": null,
+          "method_name": "ApiConstants",
+          "reference_type": "method_call"
+        }
+      ],
+      "endpoints": [
+        {
+          "test_id": "test_0046",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\feature\\api-navigation.feature.test.js",
+          "class_name": null,
+          "method_name": "ApiConstants",
+          "reference_type": "method_call"
+        }
+      ],
+      "favouritesReducer": [
+        {
+          "test_id": "test_0056",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\feature\\favourites-watchlist.feature.test.js",
+          "class_name": null,
+          "method_name": "returns unchanged state for an unknown action",
+          "reference_type": "method_call"
+        }
+      ],
+      "toastReducer": [
+        {
+          "test_id": "test_0056",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\feature\\favourites-watchlist.feature.test.js",
+          "class_name": null,
+          "method_name": "returns unchanged state for an unknown action",
+          "reference_type": "method_call"
+        }
+      ],
+      "actiotypes": [
+        {
+          "test_id": "test_0056",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\feature\\favourites-watchlist.feature.test.js",
+          "class_name": null,
+          "method_name": "returns unchanged state for an unknown action",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0068",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\feature\\user-profile.feature.test.js",
+          "class_name": null,
+          "method_name": "returns current state unchanged for an unrecognised action",
+          "reference_type": "method_call"
+        }
+      ],
+      "userDetailsReducer": [
+        {
+          "test_id": "test_0068",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\feature\\user-profile.feature.test.js",
+          "class_name": null,
+          "method_name": "returns current state unchanged for an unrecognised action",
+          "reference_type": "method_call"
+        }
+      ],
+      "profileReducer": [
+        {
+          "test_id": "test_0068",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\feature\\user-profile.feature.test.js",
+          "class_name": null,
+          "method_name": "returns current state unchanged for an unrecognised action",
+          "reference_type": "method_call"
+        }
+      ],
+      "PASSWORD_REGEX_CHANGE_PASSWORD": [
+        {
+          "test_id": "test_0090",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\regex.constants.test.js",
+          "class_name": null,
+          "method_name": "CARD_NUMBER_REGEX",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0090",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\regex.constants.test.js",
+          "class_name": null,
+          "method_name": "CARD_NUMBER_REGEX",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0090",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\regex.constants.test.js",
+          "class_name": null,
+          "method_name": "CARD_NUMBER_REGEX",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0090",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\regex.constants.test.js",
+          "class_name": null,
+          "method_name": "CARD_NUMBER_REGEX",
+          "reference_type": "method_call"
+        }
+      ],
+      "CARD_REGEX": [
+        {
+          "test_id": "test_0090",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\regex.constants.test.js",
+          "class_name": null,
+          "method_name": "CARD_NUMBER_REGEX",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0090",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\regex.constants.test.js",
+          "class_name": null,
+          "method_name": "CARD_NUMBER_REGEX",
+          "reference_type": "method_call"
+        }
+      ],
+      "PHONE_REGEX": [
+        {
+          "test_id": "test_0090",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\regex.constants.test.js",
+          "class_name": null,
+          "method_name": "CARD_NUMBER_REGEX",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0090",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\regex.constants.test.js",
+          "class_name": null,
+          "method_name": "CARD_NUMBER_REGEX",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0090",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\regex.constants.test.js",
+          "class_name": null,
+          "method_name": "CARD_NUMBER_REGEX",
+          "reference_type": "method_call"
+        }
+      ],
+      "UNIQUE_USERNAME_REGEX": [
+        {
+          "test_id": "test_0090",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\regex.constants.test.js",
+          "class_name": null,
+          "method_name": "CARD_NUMBER_REGEX",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0090",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\regex.constants.test.js",
+          "class_name": null,
+          "method_name": "CARD_NUMBER_REGEX",
+          "reference_type": "method_call"
+        }
+      ],
+      "Math": [
+        {
+          "test_id": "test_0105",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\utilities.pure.test.js",
+          "class_name": null,
+          "method_name": "getProgressWidth",
+          "reference_type": "method_call"
+        },
+        {
+          "test_id": "test_0105",
+          "file_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository\\standalone\\utilities.pure.test.js",
+          "class_name": null,
+          "method_name": "getProgressWidth",
+          "reference_type": "method_call"
+        }
+      ]
+    }
+  }
+}

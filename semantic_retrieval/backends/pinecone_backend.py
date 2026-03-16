@@ -475,7 +475,11 @@ class PineconeBackend(VectorBackend):
                             continue  # Skip this result if test_repo_id doesn't match
                     
                     test_result = {
-                        'test_id': match.id,
+                        # Prefer the clean test_id stored in metadata (e.g. "test_0007").
+                        # The Pinecone vector ID is "{test_repo_id}_{test_id}" which is
+                        # intentionally long for uniqueness, but we must NOT expose that
+                        # hash-prefix to the UI — it's unreadable and doesn't match the DB.
+                        'test_id': metadata.get('test_id') or match.id,
                         'method_name': metadata.get('method_name', ''),
                         'class_name': metadata.get('class_name', ''),
                         'test_file_path': metadata.get('test_file_path', ''),

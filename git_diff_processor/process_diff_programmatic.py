@@ -62,6 +62,119 @@ find_tests_ast_only = processor_module.find_tests_ast_only
 find_tests_semantic_only = processor_module.find_tests_semantic_only
 
 
+def build_adaptive_semantic_config(
+    search_queries: Dict,
+    ast_results: Dict,
+    base_config: Optional[Dict] = None,
+    num_changed_files: int = 0,
+) -> Dict:
+    """
+    Build semantic search configuration dynamically based on:
+      - What the diff contains (functions vs symbols vs file-only changes)
+      - What AST already found (if AST is strong, semantic supplements;
+        if AST found nothing, semantic must do all the work)
+      - Number of changed files (complexity indicator)
+
+    This makes the system accurate for ANY test repository structure —
+    it does NOT rely on naming conventions like "standalone" or "cross-dependent".
+
+    Priority rules (higher rule wins when multiple apply):
+      1. AST found 0 tests        → lenient (semantic is the only signal)
+      2. Function-level changes   → moderate (AST is strong, semantic supplements)
+      3. Specific symbol changes  → moderate-lenient (symbol lookup precise, but
+                                    semantic catches description-level matches too)
+      4. Module-only changes      → lenient (broad AST match, semantic refines)
+      5. Complex diff (>3 files)  → add extra query variations
+
+    User-stored values are always respected UNLESS they exceed 0.4
+    (values > 0.4 cause false negatives and are silently clamped).
+    """
+    import logging
+    _logger = logging.getLogger(__name__)
+
+    config = dict(base_config or {})
+
+    ast_count = ast_results.get('total_tests', 0)
+    has_functions  = bool(search_queries.get('changed_functions'))
+    has_exact      = bool(search_queries.get('exact_matches'))   # specific symbols
+    has_module     = bool(search_queries.get('module_matches'))
+
+    # ── Determine adaptive defaults ────────────────────────────────────────────
+    if ast_count == 0:
+        # Semantic is the ONLY signal — must be very lenient and thorough
+        adaptive_quality   = 0.2
+        adaptive_variations = 5
+        adaptive_top_k     = 100
+        reason = "AST found 0 tests — semantic working alone"
+
+    elif has_functions:
+        # Function-level changes: AST via function_mapping is very precise.
+        # Semantic supplements but quality bar can be moderate.
+        # Use similarity_threshold=0.4 and quality_threshold=0.35 to filter low-quality noise.
+        adaptive_quality   = 0.35
+        adaptive_variations = 3
+        adaptive_top_k     = 50
+        config.setdefault('similarity_threshold', 0.4)
+        reason = "function-level changes — AST strong, semantic supplements"
+
+    elif has_exact:
+        # Specific symbols (constants, enums, types) detected.
+        # AST handles these via reverse_index; semantic catches description matches.
+        # Use similarity_threshold=0.45 to avoid pulling in loosely-related regex tests
+        # from the same repo (e.g. EMAIL_REGEX tests when PHONE_REGEX changed).
+        adaptive_quality   = 0.35
+        adaptive_variations = 3
+        adaptive_top_k     = 75
+        config.setdefault('similarity_threshold', 0.45)
+        reason = "specific symbol changes — moderate quality threshold"
+
+    elif has_module:
+        # Only generic module matches (whole-file changes, no symbols/functions).
+        # AST is coarse here; semantic needs more room to find relevant tests.
+        adaptive_quality   = 0.2
+        adaptive_variations = 4
+        adaptive_top_k     = 75
+        reason = "module-only changes — lenient for broad coverage"
+
+    else:
+        # Fallback: diff content but nothing parseable → semantic does it all
+        adaptive_quality   = 0.2
+        adaptive_variations = 4
+        adaptive_top_k     = 75
+        reason = "no structured matches — semantic fallback"
+
+    # More changed files = more complex diff = more query variations
+    if num_changed_files > 3:
+        adaptive_variations = min(adaptive_variations + 1, 6)
+
+    # ── Apply: respect user-stored values but clamp anything > 0.4 ────────────
+    stored_quality = config.get('quality_threshold')
+    if stored_quality is None:
+        config['quality_threshold'] = adaptive_quality
+    elif stored_quality > 0.4:
+        # A threshold above 0.4 reliably causes false negatives — clamp it.
+        _logger.info(
+            f"Adaptive config: clamped quality_threshold "
+            f"{stored_quality} → {adaptive_quality} ({reason})"
+        )
+        config['quality_threshold'] = adaptive_quality
+    # else: stored value is already within safe range — keep it
+
+    # Only fill in variations/top_k if not explicitly set by user
+    if config.get('num_query_variations') is None:
+        config['num_query_variations'] = adaptive_variations
+    if config.get('rerank_top_k') is None:
+        config['rerank_top_k'] = adaptive_top_k
+
+    _logger.info(
+        f"Adaptive semantic config | quality={config['quality_threshold']} "
+        f"| variations={config['num_query_variations']} "
+        f"| top_k={config['rerank_top_k']} "
+        f"| reason={reason}"
+    )
+    return config
+
+
 async def process_diff_and_select_tests(
     diff_content: str,
     project_root: Optional[Path] = None,
@@ -187,6 +300,17 @@ async def process_diff_and_select_tests(
             if search_queries.get('test_file_candidates'):
                 logger.warning(f"  Test files searched: {search_queries['test_file_candidates'][:5]}")
         
+        # ── Build adaptive semantic config AFTER AST results are known ──────────
+        # This makes quality_threshold/num_variations dynamic — no test-category
+        # naming convention required.  Works for any test repository structure.
+        semantic_config = build_adaptive_semantic_config(
+            search_queries=search_queries,
+            ast_results=ast_results,
+            base_config=semantic_config,
+            num_changed_files=len(parsed_diff.get('changed_files', [])),
+        )
+        # ────────────────────────────────────────────────────────────────────────
+
         # Get semantic results if enabled
         semantic_results = {'total_tests': 0, 'tests': []}
         if use_semantic:
@@ -194,9 +318,28 @@ async def process_diff_and_select_tests(
                 logger.info("Running semantic search...")
                 # Use async version since we're in an async context
                 from git_diff_processor.git_diff_processor import find_tests_semantic_only_async
-                # Get test_repo_id from environment if available
+                # Resolve test_repo_id:
+                # 1. From environment variable
+                # 2. From database lookup using schema_name prefix
+                # 3. Fall back to None (all repos, less precise)
                 import os
                 test_repo_id = os.getenv('TEST_REPO_ID')
+                if not test_repo_id and schema_name:
+                    # schema_name is like "test_repo_261b672a" → look up by ID prefix
+                    schema_suffix = schema_name.replace('test_repo_', '')
+                    try:
+                        with conn.cursor() as _c:
+                            _c.execute("""
+                                SELECT id FROM planon1.test_repositories
+                                WHERE id LIKE %s
+                                LIMIT 1
+                            """, (f"{schema_suffix}%",))
+                            _row = _c.fetchone()
+                            if _row:
+                                test_repo_id = _row[0]
+                                logger.info(f"Resolved test_repo_id from schema: {test_repo_id[:16]}...")
+                    except Exception as _lookup_err:
+                        logger.debug(f"Could not resolve test_repo_id from schema: {_lookup_err}")
                 semantic_results = await find_tests_semantic_only_async(
                     conn, 
                     search_queries, 
@@ -211,19 +354,18 @@ async def process_diff_and_select_tests(
                 logger.warning(f"Semantic search failed: {e}")
                 semantic_results = {'total_tests': 0, 'tests': [], 'error': str(e)}
         
-        # Combine results (use find_affected_tests which combines both AST and semantic)
-        # This is the main function that uses all strategies
-        logger.info("Combining AST and semantic results...")
-        combined_results = find_affected_tests(
-            conn, 
-            search_queries, 
-            parsed_diff.get('file_changes', []),
-            prefer_function_level=True,
-            schema=target_schema,
-            semantic_config=semantic_config,  # Pass semantic config to find_affected_tests
-            diff_content=diff_content  # Pass diff content for Advanced RAG
-        )
-        logger.info(f"Combined results: {combined_results.get('total_tests', 0)} tests")
+        # Use ast_results (from find_tests_ast_only) as the base for combined_results.
+        # find_tests_ast_only already runs all AST strategies (0-4a), including the
+        # new Strategy 4 (file stem-based sibling test lookup), so it produces a
+        # richer result set than find_affected_tests (which lacks Strategy 4).
+        # Reusing ast_results avoids a redundant second DB round-trip.
+        logger.info("Using AST results as base for combining with semantic results...")
+        # IMPORTANT: Save the AST count BEFORE combined_results gets mutated by semantic merge.
+        # Since combined_results = ast_results (same dict reference), merging semantic into
+        # combined_results would also update ast_results['total_tests'].
+        ast_count_snapshot = ast_results.get('total_tests', 0)
+        combined_results = ast_results
+        logger.info(f"AST base results: {ast_count_snapshot} tests")
         
         # IMPORTANT: Preserve AST match information from match_details BEFORE any filtering
         # Store which tests came from AST (from match_details) so we can mark them correctly later
@@ -676,7 +818,7 @@ async def process_diff_and_select_tests(
         
         return {
             'total_tests': len(all_tests),
-            'ast_matches': ast_results.get('total_tests', 0),
+            'ast_matches': ast_count_snapshot,  # Saved before semantic merge mutated combined_results
             'semantic_matches': semantic_results.get('total_tests', 0),
             'tests': all_tests,
             'semantic_results': semantic_results,  # Include semantic results for enhancement

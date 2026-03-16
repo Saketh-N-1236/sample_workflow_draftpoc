@@ -58,16 +58,6 @@ const AddRepository = () => {
             )}
           </div>
         </div>
-
-        <div className="info-section" style={{ marginTop: '40px' }}>
-          <h3>How it works:</h3>
-          <ul className="info-list">
-            <li>Enter your repository URL (GitHub or GitLab)</li>
-            <li>System will validate access and fetch repository information</li>
-            <li>Select a branch to analyze</li>
-            <li>View git diff and run test analysis/selection</li>
-          </ul>
-        </div>
       </div>
     </div>
   );

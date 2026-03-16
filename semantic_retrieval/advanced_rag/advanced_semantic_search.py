@@ -73,7 +73,14 @@ async def find_tests_advanced_rag(
     Returns:
         List of test dicts with confidence scores and match details
     """
-    if not changed_functions:
+    # NOTE: Do NOT exit early when changed_functions is empty.
+    # Constants, config, and data files (e.g. constants.ts, ApiEndPoints.js)
+    # have no function definitions, so changed_functions is always [].
+    # build_rich_change_description() has a file-name fallback that kicks in
+    # when changed_functions is empty, but only if we let execution continue.
+    # The query_understanding step can also work from file_changes + diff_content.
+    # Only skip if we truly have nothing at all.
+    if not changed_functions and not file_changes and not diff_content:
         return []
     
     logger.info("Advanced RAG Pipeline | Starting")
@@ -99,7 +106,7 @@ async def find_tests_advanced_rag(
         logger.info("Advanced RAG Pipeline | Query Understanding skipped (disabled)")
     
     # Step 2: Build original query
-    original_query = build_rich_change_description(changed_functions, file_changes)
+    original_query = build_rich_change_description(changed_functions, file_changes, diff_content)
     if not original_query:
         logger.warning("Advanced RAG Pipeline | Could not build query description")
         return []

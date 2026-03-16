@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-03-12T15:15:20.686662",
+  "generated_at": "2026-03-13T14:32:36.841581",
   "data": {
     "test_repository_overview": {
       "total_test_files": 100,
@@ -23,7 +23,7 @@
       "tests_with_dependencies": 0
     },
     "metadata": {
-      "tests_with_descriptions": 0,
+      "tests_with_descriptions": 286,
       "tests_with_markers": 0,
       "async_tests": 0,
       "parameterized_tests": 0,
@@ -39,7 +39,7 @@
       "total_test_methods": 386,
       "total_dependencies": 0,
       "total_production_classes": 902,
-      "tests_with_descriptions": 0,
+      "tests_with_descriptions": 286,
       "framework": "junit5"
     }
   }

@@ -2,8 +2,6 @@ import React, { useState, useEffect } from 'react';
 import '../styles/App.css';
 import api from '../services/api';
 import AnalysisStats from '../components/AnalysisStats';
-import EmbeddingStatus from '../components/EmbeddingStatus';
-
 const AnalysisResults = () => {
   const [analysisData, setAnalysisData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -468,8 +466,6 @@ const AnalysisResults = () => {
         </div>
       )}
 
-      {/* Embedding Status */}
-      <EmbeddingStatus onRegenerate={handleRefresh} />
 
       {summaryData && (
         <div style={{ marginBottom: '24px' }}>

@@ -156,6 +156,22 @@ def parse_git_diff(diff_content: str, file_list: Optional[List[str]] = None) -> 
                             changed_classes.add(class_name)
                             if class_name not in file_info['changed_classes']:
                                 file_info['changed_classes'].append(class_name)
+                        # Extract TypeScript/JavaScript exported constants/enums/types.
+                        # e.g. "export const PHONE_REGEX = ..." → adds PHONE_REGEX to
+                        # changed_classes so the reverse_index is queried by symbol name
+                        # instead of the generic file/module name.
+                        # Only on CHANGED (+) lines — NOT context lines — to prevent
+                        # neighbouring constants in the same hunk from being included.
+                        ts_export_match = re.search(
+                            r'\b(?:export\s+)?(?:const|let|var|enum|type|interface)\s+([A-Z_][A-Za-z0-9_]*)\b',
+                            clean_line
+                        )
+                        if ts_export_match:
+                            symbol_name = ts_export_match.group(1)
+                            if symbol_name[0].isupper():  # UPPER_CASE or PascalCase only
+                                changed_classes.add(symbol_name)
+                                if symbol_name not in file_info['changed_classes']:
+                                    file_info['changed_classes'].append(symbol_name)
                         # Extract method
                         method_match = None
                         if re.search(r'\bdef\s+(\w+)', clean_line):
@@ -179,6 +195,19 @@ def parse_git_diff(diff_content: str, file_list: Optional[List[str]] = None) -> 
                                     file_info['changed_methods'].append(method_name)
                     elif line.startswith('-') and not line.startswith('---'):
                         file_info['deletions'] += 1
+                        # Also extract symbols from deleted lines so we recognise
+                        # both sides of a rename/rewrite (e.g. old PHONE_REGEX value).
+                        clean_del = line.lstrip('+- ')
+                        ts_del_match = re.search(
+                            r'\b(?:export\s+)?(?:const|let|var|enum|type|interface)\s+([A-Z_][A-Za-z0-9_]*)\b',
+                            clean_del
+                        )
+                        if ts_del_match:
+                            symbol_name = ts_del_match.group(1)
+                            if symbol_name[0].isupper():
+                                changed_classes.add(symbol_name)
+                                if symbol_name not in file_info['changed_classes']:
+                                    file_info['changed_classes'].append(symbol_name)
             
             file_changes.append(file_info)
         
@@ -235,7 +264,28 @@ def parse_git_diff(diff_content: str, file_list: Optional[List[str]] = None) -> 
                     # Remove a/ or b/ prefix if present
                     old_path = old_path.lstrip('a/')
                     new_path = new_path.lstrip('b/')
-                    current_file = new_path if new_path != '/dev/null' else old_path
+                    resolved_file = new_path if new_path != '/dev/null' else old_path
+                    
+                    # --- Deduplication guard ---
+                    # Standard git diffs emit BOTH a "diff --git a/x b/x" header AND
+                    # a "--- a/x" / "+++ b/x" pair for the same file.  The `diff --git`
+                    # handler (below) already created current_file_info for this file.
+                    # If we blindly create a second entry here we end up with two dicts
+                    # for the same file: the first (empty) from `diff --git` and the
+                    # second (populated) from this `---`/`+++` block.
+                    # When build_search_queries iterates over both, the first entry adds
+                    # generic module names (e.g. "constants") to exact_matches as if no
+                    # specific symbols were found, defeating the symbol-precision logic.
+                    #
+                    # Fix: if current_file_info already tracks this exact file, just
+                    # reset the hunk state and keep using the SAME dict – no duplicate.
+                    if current_file_info and current_file_info.get('file') == resolved_file:
+                        # Same file already open – skip creating a duplicate entry.
+                        in_hunk = False
+                        i += 2  # Skip both --- and +++ lines
+                        continue
+                    
+                    current_file = resolved_file
                     changed_files.append(current_file)
                     
                     # Save previous file if exists
@@ -309,13 +359,41 @@ def parse_git_diff(diff_content: str, file_list: Optional[List[str]] = None) -> 
                     if class_name not in current_file_info['changed_classes']:
                         current_file_info['changed_classes'].append(class_name)
                 
-                # Check for method/function definition in context
-                method_match = re.search(r'def\s+(\w+)', hunk_context)
-                if method_match:
-                    method_name = method_match.group(1)
-                    changed_methods.add(method_name)
-                    if method_name not in current_file_info['changed_methods']:
-                        current_file_info['changed_methods'].append(method_name)
+                # Extract function name from hunk context line (supports Python, JS/TS, Java).
+                # Git puts the enclosing function name after the last @@ in the hunk header.
+                # e.g. "@@ -176,23 +176,17 @@ export function capitalizeFirstLetter(string) {"
+                _hunk_method = None
+                # Python: def funcName
+                _m = re.search(r'\bdef\s+(\w+)', hunk_context)
+                if _m:
+                    _hunk_method = _m.group(1)
+                # JS/TS regular function: function funcName / async function funcName
+                if not _hunk_method:
+                    _m = re.search(r'(?:async\s+)?function\s+(\w+)', hunk_context)
+                    if _m:
+                        _hunk_method = _m.group(1)
+                # JS/TS arrow: export const funcName = (...) => / const funcName = async (...) =>
+                if not _hunk_method:
+                    _m = re.search(
+                        r'(?:export\s+)?(?:const|let|var)\s+([a-z][A-Za-z0-9_]*)\s*=\s*(?:async\s*)?\(',
+                        hunk_context
+                    )
+                    if _m and '=>' in hunk_context:
+                        _hunk_method = _m.group(1)
+                # Java: public/private/protected ... methodName(
+                if not _hunk_method:
+                    _m = re.search(
+                        r'\b(?:public|private|protected|static)\s+\S+\s+(\w+)\s*\(',
+                        hunk_context
+                    )
+                    if _m:
+                        _hunk_method = _m.group(1)
+                if _hunk_method and _hunk_method not in {
+                    'if', 'for', 'while', 'switch', 'catch', 'try', 'else', 'return'
+                }:
+                    changed_methods.add(_hunk_method)
+                    if _hunk_method not in current_file_info['changed_methods']:
+                        current_file_info['changed_methods'].append(_hunk_method)
             
             # Track line numbers in this hunk
             old_line = old_start
@@ -326,8 +404,17 @@ def parse_git_diff(diff_content: str, file_list: Optional[List[str]] = None) -> 
         # Process hunk content
         if in_hunk and current_file_info:
             # Helper function to extract class/method from any line
-            def extract_definitions(line_content: str):
-                """Extract class and method definitions from a line (multi-language)."""
+            def extract_definitions(line_content: str, is_changed_line: bool = False):
+                """Extract class and method definitions from a line (multi-language).
+                
+                Args:
+                    line_content: The raw diff line (including +/- prefix)
+                    is_changed_line: True if this is an added (+) or deleted (-) line.
+                                     False for context lines (space prefix).
+                                     TypeScript/JS constant symbols are ONLY extracted from
+                                     changed lines to prevent context constants (unchanged
+                                     lines in the same hunk) from polluting the query set.
+                """
                 # Remove diff prefix if present
                 clean_line = line_content.lstrip('+- ')
                 
@@ -339,11 +426,35 @@ def parse_git_diff(diff_content: str, file_list: Optional[List[str]] = None) -> 
                     if class_name not in current_file_info['changed_classes']:
                         current_file_info['changed_classes'].append(class_name)
                 
+                # Check for TypeScript/JavaScript: export const/let/var/enum/type/interface SYMBOL = ...
+                # These are top-level named exports (regex constants, enums, type aliases, etc.)
+                # e.g. "export const PHONE_REGEX = /.../" or "export enum Status {"
+                # We treat them as "changed classes" so the reverse_index is queried for them.
+                #
+                # IMPORTANT: Only do this for actually changed (+/-) lines, NOT context lines.
+                # A constants.ts hunk typically shows many surrounding constants as context.
+                # If we extract symbols from context lines, all those unrelated constants
+                # end up in changed_classes and pollute the reverse_index query.
+                if is_changed_line:
+                    ts_export_match = re.search(
+                        r'\b(?:export\s+)?(?:const|let|var|enum|type|interface)\s+([A-Z_][A-Za-z0-9_]*)\b',
+                        clean_line
+                    )
+                    if ts_export_match:
+                        symbol_name = ts_export_match.group(1)
+                        # Only include UPPER_CASE or PascalCase symbols (constants/types/enums)
+                        # Skip lowercase variable declarations like "let result = ..." inside functions
+                        if symbol_name[0].isupper():
+                            changed_classes.add(symbol_name)
+                            if symbol_name not in current_file_info['changed_classes']:
+                                current_file_info['changed_classes'].append(symbol_name)
+
                 # Check for method/function definition
                 # Python: def method_name(
                 # Java: public/private/protected [static] [return_type] method_name(
-                # JavaScript/TypeScript: method_name( or function method_name(
+                # JavaScript/TypeScript: function method_name( OR const funcName = (...) =>
                 method_match = None
+                extracted_method_name = None
                 
                 # Python style: def method_name
                 if re.search(r'\bdef\s+(\w+)', clean_line):
@@ -352,45 +463,67 @@ def parse_git_diff(diff_content: str, file_list: Optional[List[str]] = None) -> 
                 elif re.search(r'\b(public|private|protected|static)\s+.*?\s+(\w+)\s*\(', clean_line):
                     method_match = re.search(r'\b(public|private|protected|static)\s+.*?\s+(\w+)\s*\(', clean_line)
                     if method_match:
-                        method_name = method_match.group(2)  # Get the method name (second group)
+                        extracted_method_name = method_match.group(2)
                     else:
-                        # Try simpler: method_name( pattern
                         method_match = re.search(r'\b(\w+)\s*\([^)]*\)\s*\{', clean_line)
-                # JavaScript/TypeScript: function method_name or method_name(
-                elif re.search(r'\bfunction\s+(\w+)', clean_line):
-                    method_match = re.search(r'\bfunction\s+(\w+)', clean_line)
+                # JS/TS: function functionName or async function functionName
+                elif re.search(r'(?:async\s+)?function\s+(\w+)', clean_line):
+                    method_match = re.search(r'(?:async\s+)?function\s+(\w+)', clean_line)
                 # Generic: method_name( pattern (works for Java, JS, etc.)
                 elif re.search(r'\b(\w+)\s*\([^)]*\)\s*\{', clean_line):
                     method_match = re.search(r'\b(\w+)\s*\([^)]*\)\s*\{', clean_line)
                 
-                if method_match:
-                    method_name = method_match.group(1) if len(method_match.groups()) == 1 else method_match.group(2)
-                    # Filter out common non-method patterns
-                    if method_name not in ['if', 'for', 'while', 'switch', 'catch', 'try', 'else']:
-                        changed_methods.add(method_name)
-                        if method_name not in current_file_info['changed_methods']:
-                            current_file_info['changed_methods'].append(method_name)
+                if method_match and not extracted_method_name:
+                    extracted_method_name = (
+                        method_match.group(1) if len(method_match.groups()) == 1
+                        else method_match.group(2)
+                    )
+                _skip_kw = {'if', 'for', 'while', 'switch', 'catch', 'try', 'else', 'return'}
+                if extracted_method_name and extracted_method_name not in _skip_kw:
+                    changed_methods.add(extracted_method_name)
+                    if extracted_method_name not in current_file_info['changed_methods']:
+                        current_file_info['changed_methods'].append(extracted_method_name)
+                
+                # JS/TS arrow function: export const funcName = (...) => { OR
+                #                       const funcName = async (...) =>
+                # Also detect from context lines so we catch the enclosing function when
+                # only the body changes (signature appears as context before first +/-)
+                js_arrow = re.search(
+                    r'(?:export\s+)?(?:const|let|var)\s+([a-z][A-Za-z0-9_]*)\s*=\s*(?:async\s*)?\(',
+                    clean_line
+                )
+                if js_arrow and '=>' in clean_line:
+                    arrow_name = js_arrow.group(1)
+                    _skip_arrow = {
+                        'if', 'for', 'while', 'switch', 'catch', 'try', 'else',
+                        'let', 'const', 'var', 'return', 'result', 'value',
+                        'data', 'item', 'index', 'key', 'error', 'res', 'req'
+                    }
+                    if arrow_name not in _skip_arrow:
+                        changed_methods.add(arrow_name)
+                        if arrow_name not in current_file_info['changed_methods']:
+                            current_file_info['changed_methods'].append(arrow_name)
             
             if line.startswith('+') and not line.startswith('+++'):
-                # Added line
+                # Added line — is_changed_line=True so TS/JS constant symbols are extracted
                 current_file_info['additions'] += 1
                 new_line += 1
-                extract_definitions(line)
+                extract_definitions(line, is_changed_line=True)
                 current_file_info['changed_lines'].append(new_line)
             
             elif line.startswith('-') and not line.startswith('---'):
-                # Deleted line
+                # Deleted line — is_changed_line=True so TS/JS constant symbols are extracted
                 current_file_info['deletions'] += 1
                 old_line += 1
-                extract_definitions(line)  # Also check deleted lines for context
+                extract_definitions(line, is_changed_line=True)  # Also check deleted lines for context
                 current_file_info['changed_lines'].append(old_line)
             
             elif line.startswith(' '):
-                # Context line (unchanged) - but may contain class/method definitions
-                # that are relevant to the changes nearby
-                # Only extract if we're in a hunk with actual changes (additions/deletions)
+                # Context line (unchanged) - extract class/method definitions but NOT TS constants.
+                # is_changed_line defaults to False, so ts_export_match is skipped.
+                # This prevents unrelated neighbouring constants from polluting changed_classes.
                 if current_file_info.get('additions', 0) > 0 or current_file_info.get('deletions', 0) > 0:
-                    extract_definitions(line)
+                    extract_definitions(line, is_changed_line=False)
                 old_line += 1
                 new_line += 1
             
@@ -453,23 +586,30 @@ def is_production_file(
     if parser_registry:
         parser = parser_registry.get_parser(filepath)
         if not parser:
-            return False  # No parser available for this file type
-        
-        # Check if it's a test file using language config
-        if config:
-            try:
-                from config.config_loader import get_test_patterns, get_language_config
-                language = parser.language_name
-                lang_config = get_language_config(config, language)
-                if lang_config:
-                    test_patterns = get_test_patterns(config, language)
-                    filename = filepath.name
-                    import fnmatch
-                    for pattern in test_patterns:
-                        if fnmatch.fnmatch(filename, pattern):
-                            return False  # It's a test file
-            except Exception:
-                pass
+            # No dedicated parser for this file type (e.g. tree-sitter-typescript not installed).
+            # FALL THROUGH to the extension-based check below instead of hard-returning False.
+            # Returning False here would silently exclude ALL TypeScript / unknown-language files
+            # even when they are plainly production files (.ts, .tsx, etc.).
+            production_extensions = ['.py', '.java', '.js', '.ts', '.jsx', '.tsx', '.kt', '.go', '.rb', '.cs']
+            if not any(file_path.endswith(ext) for ext in production_extensions):
+                return False
+            # It's a known production extension — continue to the generic checks below
+        else:
+            # Check if it's a test file using language config
+            if config:
+                try:
+                    from config.config_loader import get_test_patterns, get_language_config
+                    language = parser.language_name
+                    lang_config = get_language_config(config, language)
+                    if lang_config:
+                        test_patterns = get_test_patterns(config, language)
+                        filename = filepath.name
+                        import fnmatch
+                        for pattern in test_patterns:
+                            if fnmatch.fnmatch(filename, pattern):
+                                return False  # It's a test file
+                except Exception:
+                    pass
     else:
         # Fallback: check for common production file extensions (language-agnostic)
         production_extensions = ['.py', '.java', '.js', '.ts', '.jsx', '.tsx', '.kt', '.go', '.rb', '.cs']
@@ -800,9 +940,29 @@ def build_search_queries(
         if not modules:
             continue
         
+        # Check if this file only changed TypeScript/JS constants/symbols
+        # (uppercase symbols in changed_classes, no method changes).
+        # In this case, the generic module names (e.g. "constants", "types.constants")
+        # are too broad — they map to EVERY test that imports that file, not just the
+        # tests relevant to the specific changed symbol (e.g. PHONE_REGEX).
+        # So we SKIP the generic module names from exact_matches and put them in
+        # module_matches (lower priority fallback) instead.
+        specific_symbols = [
+            c for c in file_change.get('changed_classes', [])
+            if c and c[0].isupper() and c.upper() == c  # UPPER_CASE constants only
+        ]
+        has_method_changes = bool(file_change.get('changed_methods'))
+        use_symbol_only = bool(specific_symbols) and not has_method_changes
+
         for module_name in modules:
-            # Exact match
-            exact_matches.append(module_name)
+            if use_symbol_only:
+                # Demote generic file/module names to module_matches (broad fallback).
+                # The specific symbols added below will be the primary exact_matches.
+                if module_name not in module_matches:
+                    module_matches.append(module_name)
+            else:
+                # Normal case: add module name as an exact match
+                exact_matches.append(module_name)
             
             # Module-level match (if has dots)
             if '.' in module_name:
@@ -811,6 +971,28 @@ def build_search_queries(
                 if module_pattern not in module_matches:
                     module_matches.append(module_pattern)
         
+        # Add any changed classes/symbols as exact matches.
+        # This covers TypeScript/JS `export const PHONE_REGEX = ...` which is
+        # parsed as a "changed class" by extract_definitions() in parse_git_diff().
+        # Adding them here lets the reverse_index be queried by specific symbol name
+        # (e.g. PHONE_REGEX → test_0061/62/63) instead of only by the generic
+        # file module name (e.g. constants → all tests importing that file).
+        for class_name in file_change.get('changed_classes', []):
+            if class_name and class_name not in exact_matches:
+                exact_matches.append(class_name)
+
+        # Also add changed function/method names to exact_matches.
+        # This enables the reverse_index to be queried by function name, which is
+        # used for describe_label entries. For example, if `capitalizeFirstLetter`
+        # is in changed_methods (from hunk header or +/- line), and the reverse_index
+        # has entries like (capitalizeFirstLetter, test_0012, describe_label), then
+        # the "Exact matches" strategy will find those tests.
+        # Without this, function-level matching only checks test_function_mapping
+        # (which has 0 entries for JS), missing the reverse_index describe_labels.
+        for method_name in file_change.get('changed_methods', []):
+            if method_name and method_name not in exact_matches:
+                exact_matches.append(method_name)
+
         # File pattern (for fallback searches) - language-agnostic
         filepath = Path(file_path)
         if filepath.stem:

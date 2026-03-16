@@ -11,9 +11,8 @@ web_platform_path = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(web_platform_path))
 
 from api.models.repository import SelectionResponse
-from api.models.semantic import SemanticConfig
 from services.selection_service import SelectionService
-from services.repository_db import get_repository_by_id, update_repository
+from services.repository_db import get_repository_by_id
 
 router = APIRouter(prefix="/repositories", tags=["selection"])
 selection_service = SelectionService()
@@ -258,92 +257,6 @@ async def get_results(repo_id: str):
     return {"analysis": None, "selection": None}
 
 
-@router.post("/{repo_id}/configure-semantic")
-async def configure_semantic_search(repo_id: str, config: SemanticConfig):
-    """Configure semantic search parameters for a repository."""
-    repo = get_repository_by_id(repo_id)
-    if not repo:
-        raise HTTPException(status_code=404, detail="Repository not found")
-    
-    try:
-        # Validate configuration
-        if config.similarity_threshold is not None:
-            if not (0.0 <= config.similarity_threshold <= 1.0):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Similarity threshold must be between 0.0 and 1.0"
-                )
-        
-        if config.max_results < 1:
-            raise HTTPException(
-                status_code=400,
-                detail="Max results must be at least 1"
-            )
-        
-        if config.top_k is not None and config.top_k < 1:
-            raise HTTPException(
-                status_code=400,
-                detail="Top K must be at least 1"
-            )
-        
-        if config.top_p is not None:
-            if not (0.0 <= config.top_p <= 1.0):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Top P must be between 0.0 and 1.0"
-                )
-        
-        if hasattr(config, 'quality_threshold') and config.quality_threshold is not None:
-            if not (0.0 <= config.quality_threshold <= 1.0):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Quality threshold must be between 0.0 and 1.0"
-                )
-        
-        # Store configuration in database
-        config_dict = config.dict()
-        updated_repo = update_repository(repo_id, semantic_config=config_dict)
-        
-        if not updated_repo:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to save semantic search configuration"
-            )
-        
-        # Return configuration as confirmation
-        return {
-            "status": "success",
-            "message": "Semantic search configuration updated",
-            "config": config_dict
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to configure semantic search: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to configure semantic search: {str(e)}"
-        )
-
-
-@router.get("/{repo_id}/semantic-config")
-async def get_semantic_config(repo_id: str):
-    """Get semantic search configuration for a repository."""
-    repo = get_repository_by_id(repo_id)
-    if not repo:
-        raise HTTPException(status_code=404, detail="Repository not found")
-    
-    semantic_config = repo.get("semantic_config")
-    
-    if semantic_config is None:
-        # Return default configuration if none is saved
-        return {
-            "similarity_threshold": None,
-            "max_results": 10000,
-            "use_adaptive_thresholds": True,
-            "use_multi_query": False,
-            "top_k": None,
-            "top_p": None
-        }
-    
-    return semantic_config
+# Semantic search configuration is now handled automatically by the adaptive
+# config engine (build_adaptive_semantic_config in process_diff_programmatic.py).
+# Manual configuration endpoints have been removed — no user input required.

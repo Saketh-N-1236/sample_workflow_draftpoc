@@ -1,9 +1,0 @@
-diff --git a/src/helpers/utilities.js b/src/helpers/utilities.js
-index 3456789..cdef012 100644
---- a/src/helpers/utilities.js
-+++ b/src/helpers/utilities.js
-@@ -45,3 +45,3 @@
- export function capitalizeFirstLetter(string) {
--  if (string) {
-+  if (string && typeof string === 'string') {
-     if (checkWhiteSpace(string)) {

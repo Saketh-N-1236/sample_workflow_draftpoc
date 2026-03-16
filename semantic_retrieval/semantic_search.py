@@ -22,7 +22,8 @@ from semantic_retrieval.config import (
 
 def build_rich_change_description(
     changed_functions: list,
-    file_changes: Optional[List[Dict]] = None
+    file_changes: Optional[List[Dict]] = None,
+    diff_content: Optional[str] = None
 ) -> str:
     """
     Build a rich, contextual description of code changes for semantic search.
@@ -32,17 +33,77 @@ def build_rich_change_description(
     - Related functions in the same file
     - Module-level context
     - Change type (new file, modified, etc.)
+    - Changed constant/variable names (extracted from diff when no functions)
     
     Args:
         changed_functions: List of {'module': str, 'function': str}
         file_changes: Optional list of file change dictionaries from parse_git_diff
+        diff_content: Optional raw git diff text for richer symbol extraction
     
     Returns:
         Rich description string for embedding
     """
     if not changed_functions:
+        # Fallback: build a file-level query when no functions were detected.
+        # This handles constants/config/data files (e.g. ApiEndPoints.js, config.json)
+        # that contain no function definitions, so the diff parser extracts 0 functions.
+        # Without this fallback, Pinecone would receive an empty query and return 0 results.
+        if file_changes or diff_content:
+            import re as _re
+            from pathlib import Path as _Path
+            parts = []
+
+            # ── Per-file context ───────────────────────────────────────────────
+            for fc in (file_changes or [])[:3]:
+                file_path = fc.get('file', '')
+                if not file_path:
+                    continue
+                fp = _Path(file_path)
+                file_stem   = fp.stem              # e.g. "constants"
+                parent_name = fp.parent.name       # e.g. "types"
+                parts.append(f"Changed file: {file_stem}")
+                if parent_name and parent_name not in ('.', ''):
+                    parts.append(f"In: {parent_name}")
+                # include any changed classes/methods if parser did find some
+                changed_classes = fc.get('changed_classes', [])
+                if changed_classes:
+                    parts.append(f"Classes: {', '.join(changed_classes)}")
+                changed_methods = fc.get('changed_methods', [])
+                if changed_methods:
+                    parts.append(f"Methods: {', '.join(changed_methods)}")
+
+            # ── Extract symbol names from diff +lines ──────────────────────────
+            # For constants/config files, the changed lines contain declarations
+            # like:  +export const PHONE_REGEX = /^(\+?[1-9]\d{9,13})$/;
+            # We extract the identifier names (ALL_CAPS, camelCase, PascalCase)
+            # to build a query rich enough for semantic matching.
+            if diff_content:
+                symbol_pattern = _re.compile(
+                    r'^\+(?!#|//).*?\b'          # added line, not a comment
+                    r'(?:const|let|var|export\s+const|export\s+default)\s+'
+                    r'([A-Za-z_][A-Za-z0-9_]*)',  # identifier
+                    _re.MULTILINE
+                )
+                # Also catch TypeScript enums / interface / type aliases
+                ts_pattern = _re.compile(
+                    r'^\+.*?\b(?:enum|interface|type)\s+([A-Za-z_][A-Za-z0-9_]*)',
+                    _re.MULTILINE
+                )
+                symbols = []
+                for m in symbol_pattern.finditer(diff_content):
+                    name = m.group(1)
+                    if name not in symbols:
+                        symbols.append(name)
+                for m in ts_pattern.finditer(diff_content):
+                    name = m.group(1)
+                    if name not in symbols:
+                        symbols.append(name)
+                if symbols:
+                    parts.append(f"Changed symbols: {', '.join(symbols[:10])}")
+
+            return ". ".join(parts) + "." if parts else ""
         return ""
-    
+
     # Group functions by module
     by_module = {}
     for cf in changed_functions:
@@ -135,7 +196,13 @@ async def find_tests_semantic(
     Uses Ollama nomic-embed-text (768 dims).
     Semantic scores capped at 60 so they NEVER outrank exact matches.
     """
-    if not changed_functions:
+    # NOTE: Do NOT exit early when changed_functions is empty.
+    # Constants, config, and data files (e.g. constants.ts, ApiEndPoints.js)
+    # have no function definitions, so changed_functions will always be [].
+    # build_rich_change_description() has a file-name fallback for exactly
+    # this case, but it is NEVER reached if we bail out here.
+    # Only skip semantic search when we truly have nothing to work with.
+    if not changed_functions and not file_changes and not diff_content:
         return []
 
     # Check if Advanced RAG is enabled
@@ -153,7 +220,7 @@ async def find_tests_semantic(
             use_llm_reranking = semantic_config.get('use_llm_reranking', True) if semantic_config else True
             rerank_top_k = semantic_config.get('rerank_top_k', 50) if semantic_config else 50
             num_query_variations = semantic_config.get('num_query_variations', 3) if semantic_config else 3
-            quality_threshold = semantic_config.get('quality_threshold', 0.4) if semantic_config else 0.4
+            quality_threshold = semantic_config.get('quality_threshold', 0.3) if semantic_config else 0.3
             
             logger.info("Using Advanced RAG for semantic search")
             return await find_tests_advanced_rag(
@@ -177,7 +244,7 @@ async def find_tests_semantic(
             # Fall through to basic semantic search
 
     # Build rich description of what changed
-    change_description = build_rich_change_description(changed_functions, file_changes)
+    change_description = build_rich_change_description(changed_functions, file_changes, diff_content)
     
     if not change_description:
         return []
@@ -296,7 +363,9 @@ async def find_tests_semantic_multi_query(
     Returns:
         Combined and deduplicated results, weighted by query type
     """
-    if not changed_functions:
+    # Same guard as find_tests_semantic: allow empty changed_functions when
+    # file_changes are present (constants/config files have no functions).
+    if not changed_functions and not file_changes:
         return []
     
     settings = get_settings()
@@ -353,7 +422,7 @@ async def find_tests_semantic_multi_query(
                 seen_test_ids.add(r.get('test_id'))
     
     # Query 3: Rich combined description (most important)
-    rich_query = build_rich_change_description(changed_functions, file_changes)
+    rich_query = build_rich_change_description(changed_functions, file_changes, diff_content=None)
     if rich_query:
         rich_response = await llm.get_embeddings(EmbeddingRequest(texts=[rich_query]))
         rich_embedding = rich_response.embeddings[0]

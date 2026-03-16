@@ -1191,7 +1191,19 @@ def find_tests_ast_only(conn, search_queries: Dict, file_changes: List[Dict] = N
                     })
     
     # Strategy 3: Module patterns
-    if search_queries.get('module_matches'):
+    # ── Guard: skip module_matches when specific symbols already found ─────────
+    # When exact_matches contains UPPER_CASE constant/enum symbols (e.g. PHONE_REGEX),
+    # running module_matches ('constants', 'types.*') returns ALL tests that import
+    # that file — causing false positives like EMAIL_REGEX tests when PHONE_REGEX changed.
+    #
+    # RULE: skip module_matches ONLY when UPPER_CASE constant symbols are in exact_matches.
+    # For camelCase function changes (capitalizeFirstLetter, toastReducer), module_matches
+    # ARE needed to find sibling tests in the same file (checkNull, checkArray in utilities).
+    has_constant_symbols = any(
+        c and c[0].isupper() and c.upper() == c  # UPPER_CASE only (e.g. PHONE_REGEX)
+        for c in search_queries.get('exact_matches', [])
+    )
+    if search_queries.get('module_matches') and not has_constant_symbols:
         for module_pattern in search_queries['module_matches']:
             module_tests = query_tests_module_pattern(conn, module_pattern, prefer_direct=True, schema=target_schema)
             for test in module_tests:
@@ -1205,7 +1217,137 @@ def find_tests_ast_only(conn, search_queries: Dict, file_changes: List[Dict] = N
                     'reference_type': test.get('reference_type', 'direct_import'),
                     'confidence': 'medium'
                 })
-    
+    # ──────────────────────────────────────────────────────────────────────────
+
+    # Strategy 4a: Same test-file expansion (co-located tests)
+    # When we find tests by Strategy 2 (exact match for a FUNCTION/method), also include
+    # ALL tests that live in the SAME test file. This captures:
+    #   - favouritesReducer tests (same file as toastReducer tests)
+    #   - isUserLoggedIn/updateNewTokenDetails tests (same file as capitalizeFirstLetter tests)
+    #
+    # IMPORTANT: Only expand from camelCase FUNCTION matches (e.g. capitalizeFirstLetter,
+    # toastReducer), NOT from UPPER_CASE constant matches (e.g. PHONE_REGEX, EMAIL_REGEX).
+    # When a constant changes, only tests for THAT specific constant are relevant —
+    # expanding to the whole file would include tests for unrelated constants.
+    exact_and_func_test_ids = set()
+    for test_id, matches in list(match_details.items()):
+        has_direct_match = any(
+            m.get('type') in ('exact', 'function_level') for m in matches
+        )
+        if not has_direct_match:
+            continue
+
+        # Check if this test was found ONLY via UPPER_CASE constant exact matches.
+        # If so, skip same-file expansion (only PHONE_REGEX tests → don't expand to EMAIL_REGEX etc.)
+        direct_matches = [m for m in matches if m.get('type') in ('exact', 'function_level')]
+        is_constant_only = all(
+            m.get('type') == 'exact' and
+            m.get('class', '') and
+            m['class'].upper() == m['class'] and
+            not any(c.isdigit() for c in m['class'][:2])  # not just digits
+            for m in direct_matches
+        )
+        if not is_constant_only:
+            exact_and_func_test_ids.add(test_id)
+
+    if exact_and_func_test_ids:
+        # Collect unique test file paths from directly matched tests
+        colocated_file_paths = set()
+        for tid in exact_and_func_test_ids:
+            t = all_tests.get(tid, {})
+            fp = t.get('test_file_path') or t.get('file_path', '')
+            if fp:
+                colocated_file_paths.add(fp)
+
+        with conn.cursor() as _cursor:
+            for file_path in colocated_file_paths:
+                try:
+                    _cursor.execute(f"""
+                        SELECT DISTINCT test_id, class_name, method_name, file_path, test_type
+                        FROM {target_schema}.test_registry
+                        WHERE file_path = %s
+                        ORDER BY test_id
+                    """, (file_path,))
+                    for row in _cursor.fetchall():
+                        test_id = row[0]
+                        if test_id not in all_tests:
+                            all_tests[test_id] = {
+                                'test_id': test_id,
+                                'class_name': row[1],
+                                'method_name': row[2],
+                                'test_file_path': row[3],
+                                'test_type': row[4],
+                                'match_type': 'direct_test_file'
+                            }
+                            match_details[test_id] = []
+                        # Only add co-located match if test not already matched by exact/function
+                        if test_id not in exact_and_func_test_ids:
+                            already_has_colocated = any(
+                                m.get('match_strategy') == 'colocated_in_same_file'
+                                for m in match_details.get(test_id, [])
+                            )
+                            if not already_has_colocated:
+                                match_details[test_id].append({
+                                    'type': 'direct_file',
+                                    'test_file': file_path,
+                                    'match_strategy': 'colocated_in_same_file',
+                                    'confidence': 'medium'
+                                })
+                except Exception as _e:
+                    logger.debug(f"Strategy 4a colocated lookup error: {_e}")
+
+    # Strategy 4: Source file stem-based test file lookup
+    # When the changed production file has a clear stem (e.g. "utilities", "toastReducer"),
+    # search for test files whose path contains that stem.
+    # This finds "sibling" tests: tests for other functions in the same source file.
+    # e.g. "utilities.js" → "utilities.pure.test.js" → checkNull/checkArray/etc. tests
+    if file_changes:
+        from pathlib import Path as _Path
+        _GENERIC_STEMS = {
+            'index', 'main', 'app', 'config', 'types', 'constants',
+            'utils', 'helpers', 'common', 'shared', 'base',
+        }
+        for file_change in file_changes:
+            file_path = file_change.get('file', '')
+            if not file_path:
+                continue
+            file_stem = _Path(file_path).stem.lower()  # e.g. "utilities", "toastreducer"
+            if not file_stem or file_stem in _GENERIC_STEMS:
+                continue  # Skip generic names to avoid over-broad matches
+
+            with conn.cursor() as _cursor:
+                # Search test_registry for test files whose path contains the stem
+                # and looks like a test file (contains "test" or "spec")
+                pattern_test = f'%{file_stem}%.test%'
+                pattern_spec = f'%{file_stem}%.spec%'
+                try:
+                    _cursor.execute(f"""
+                        SELECT DISTINCT test_id, class_name, method_name, file_path, test_type
+                        FROM {target_schema}.test_registry
+                        WHERE (file_path ILIKE %s OR file_path ILIKE %s)
+                        ORDER BY test_id
+                    """, (pattern_test, pattern_spec))
+                    for row in _cursor.fetchall():
+                        test_id = row[0]
+                        if test_id not in all_tests:
+                            all_tests[test_id] = {
+                                'test_id': test_id,
+                                'class_name': row[1],
+                                'method_name': row[2],
+                                'test_file_path': row[3],
+                                'test_type': row[4],
+                                'match_type': 'direct_test_file'
+                            }
+                            match_details[test_id] = []
+                        match_details[test_id].append({
+                            'type': 'direct_file',
+                            'test_file': row[3],
+                            'match_strategy': 'file_stem',
+                            'confidence': 'medium'
+                        })
+                except Exception as _e:
+                    logger.debug(f"Strategy 4 file_stem lookup error: {_e}")
+
     # Calculate scores
     for test_id, test in all_tests.items():
         matches = match_details.get(test_id, [])
@@ -1256,7 +1398,14 @@ async def find_tests_semantic_only_async(conn, search_queries: Dict, file_change
     match_details = {}
     
     changed_functions = search_queries.get('changed_functions', [])
-    if not changed_functions:
+    # NOTE: Do NOT exit early when changed_functions is empty.
+    # Constants, config, and data files (e.g. constants.ts, ApiEndPoints.js)
+    # have no function definitions, so changed_functions will always be [].
+    # build_rich_change_description() has a file-name fallback for exactly
+    # this case, but it is never reached if we bail out here.
+    # Only skip semantic search when we truly have nothing to work with
+    # (no functions AND no file_changes AND no diff_content).
+    if not changed_functions and not file_changes and not diff_content:
         return {
             'tests': [],
             'match_details': {},
@@ -1897,12 +2046,15 @@ def calculate_confidence_score(
     ast_score = max(0, min(100, score))
     
     # Calculate Vector Component (30%)
+    # No artificial cap: the similarity score already reflects true relevance.
+    # Capping at 60 previously suppressed valid semantic signals when similarity was
+    # high (e.g. 85%) and caused "Both" matches to be rated only "medium".
     vector_score = 0
     for match in match_details:
         if match.get('type') == 'semantic':
             similarity = match.get('similarity', 0)
             if similarity:
-                vector_score = max(vector_score, min(int(similarity * 100), 60))  # Cap at 60
+                vector_score = max(vector_score, int(similarity * 100))  # full range 0-100
     
     # Calculate LLM Component (20%)
     llm_component = 0
@@ -1920,17 +2072,29 @@ def calculate_confidence_score(
         (speed_component * 0.10)
     )
     
-    # IMPORTANT: For AST-only tests (no semantic match), ensure minimum score
-    # AST matches are direct/string matches and should have high confidence
-    # If no semantic match exists, boost the score to reflect direct match confidence
     has_semantic_match = vector_score > 0
+
+    # Dual-confirmation bonus: when BOTH AST (exact/function) and Semantic agree on a
+    # test, it is far more likely to be relevant than if only one method found it.
+    # Award +15 so the combined score clears the "high" threshold (≥70).
+    if has_semantic_match and has_exact_match:
+        total_score += 15
+
+    # Semantic-primary boost: when there is NO AST match but semantic similarity is
+    # high (≥70%), semantic is the only evidence and should drive the score.
+    # The standard formula gives (0×0.4 + 95×0.3 + llm×0.2 + 10×0.1) ≈ 39 → "low",
+    # which under-values a 95% cosine match. Switch to semantic-primary weighting.
+    if not has_exact_match and ast_score == 0 and vector_score >= 70:
+        semantic_primary = int(
+            vector_score * 0.70 +
+            llm_component * 0.20 +
+            speed_component * 0.10
+        )
+        total_score = max(total_score, semantic_primary)
+
+    # IMPORTANT: For AST-only tests (no semantic match), ensure minimum score
     if not has_semantic_match and ast_score > 0:
-        # For AST-only tests, ensure minimum score based on AST quality
-        # Direct matches should have at least 50% confidence
-        # This ensures AST-only tests pass the 40% threshold
         if total_score < 50:
-            # Boost to minimum 50% for direct AST matches
-            # Formula: use AST score more heavily when it's the only signal
             total_score = max(50, int(ast_score * 0.60 + speed_component * 0.10))
     
     # Ensure final score is within valid range
@@ -2068,13 +2232,14 @@ def calculate_confidence_score_with_breakdown(
     # Ensure AST score is within valid range
     ast_score = max(0, min(100, score))
     
-    # Calculate Vector Component (30%)
+    # Calculate Vector Component (30%) — no artificial cap
+    # Removing the old cap of 60 that suppressed high-similarity semantic matches.
     vector_score = 0
     for match in match_details:
         if match.get('type') == 'semantic':
             similarity = match.get('similarity', 0)
             if similarity:
-                vector_score = max(vector_score, min(int(similarity * 100), 60))
+                vector_score = max(vector_score, int(similarity * 100))  # full 0-100
     
     # Calculate LLM Component (20%)
     llm_component = 0
@@ -2083,6 +2248,8 @@ def calculate_confidence_score_with_breakdown(
     
     # Calculate Speed Component (10%) - Fixed value
     speed_component = 10
+
+    has_semantic_match = vector_score > 0
     
     # Weighted combination: 40% AST + 30% Vector + 20% LLM + 10% Speed
     total_score = (
@@ -2091,9 +2258,21 @@ def calculate_confidence_score_with_breakdown(
         (llm_component * 0.20) +
         (speed_component * 0.10)
     )
-    
+
+    # Dual-confirmation bonus: AST exact + semantic both agree → +15
+    if has_semantic_match and has_exact_match:
+        total_score += 15
+
+    # Semantic-primary boost: no AST but high semantic similarity → semantic drives score
+    if not has_exact_match and ast_score == 0 and vector_score >= 70:
+        semantic_primary = int(
+            vector_score * 0.70 +
+            llm_component * 0.20 +
+            speed_component * 0.10
+        )
+        total_score = max(total_score, semantic_primary)
+
     # For AST-only tests, ensure minimum score
-    has_semantic_match = vector_score > 0
     if not has_semantic_match and ast_score > 0:
         if total_score < 50:
             total_score = max(50, int(ast_score * 0.60 + speed_component * 0.10))
@@ -2101,7 +2280,7 @@ def calculate_confidence_score_with_breakdown(
     # Ensure final score is within valid range
     total_score = max(0, min(100, int(total_score)))
     
-    # Calculate percentage contributions (what percentage each component contributes to final score)
+    # Calculate percentage contributions
     breakdown = {
         'ast_score': ast_score,
         'vector_score': vector_score,

@@ -44,7 +44,7 @@ DEFAULT_RERANK_TOP_K = 50
 DEFAULT_NUM_QUERY_VARIATIONS = 3
 # Quality threshold for Advanced RAG filtering (0.0-1.0)
 # Only tests with rerank_score >= this threshold will be returned
-DEFAULT_QUALITY_THRESHOLD = 0.4  # 40% minimum relevance
+DEFAULT_QUALITY_THRESHOLD = 0.3  # 30% minimum relevance (lowered from 0.4 to reduce false negatives)
 
 # Test content token limits per provider (approximate chars per token: ~4)
 TEST_CONTENT_MAX_TOKENS = {

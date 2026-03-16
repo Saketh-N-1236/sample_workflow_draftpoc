@@ -1,0 +1,22 @@
+{
+  "generated_at": "2026-03-13T15:33:30.624656",
+  "data": {
+    "directory_structure": {
+      "root_path": "C:\\Users\\SakethN.IDEYALABS\\OneDrive - IdeyaLabs\\Documents\\Planon\\sample_workflow\\project_structure\\test_repo_data\\35d927a7\\test_repository",
+      "directories": {
+        "unit": {
+          "file_count": 7,
+          "test_count": 105,
+          "total_lines": 0
+        }
+      }
+    },
+    "summary": {
+      "total_directories": 1,
+      "total_files": 7,
+      "categories": [
+        "unit"
+      ]
+    }
+  }
+}
