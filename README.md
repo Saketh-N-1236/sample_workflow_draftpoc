@@ -73,14 +73,12 @@ A production-ready system for analyzing code changes and automatically selecting
 
 3. **Install backend dependencies**
    ```bash
-   pip install -r requirements.txt
-   cd web_platform
-   pip install -r requirements.txt
+   pip install -r backend/requirements.txt
    ```
 
 4. **Install frontend dependencies**
    ```bash
-   cd web_platform/frontend
+   cd frontend
    npm install
    ```
 
@@ -88,13 +86,14 @@ A production-ready system for analyzing code changes and automatically selecting
 
 1. **Start the backend**
    ```bash
-   cd web_platform
-   python -m uvicorn api.main:app --reload --port 8000
+   cd backend
+   run_backend.bat
+   # Or manually: python -m uvicorn api.main:app --reload --reload-dir . --port 8000
    ```
 
 2. **Start the frontend** (in a new terminal)
    ```bash
-   cd web_platform/frontend
+   cd frontend
    npm run dev
    ```
 
@@ -107,18 +106,26 @@ A production-ready system for analyzing code changes and automatically selecting
 
 ```
 sample_workflow/
-├── web_platform/          # Web application
-│   ├── api/               # FastAPI backend
-│   ├── frontend/          # React frontend
-│   ├── services/          # Business logic services
-│   └── requirements.txt  # Backend dependencies
-├── test_analysis/         # Test analysis pipeline
-├── git_diff_processor/   # Git diff processing
-├── semantic_retrieval/   # Semantic search engine
-├── deterministic/        # Database scripts
-├── parsers/              # Code parsers (Tree-sitter)
-├── test_repository/      # Local test repository
-└── requirements.txt      # Root dependencies
+├── frontend/              # React frontend application
+│   ├── src/               # Source code (components, pages, services)
+│   ├── package.json       # Node.js dependencies
+│   └── vite.config.js     # Vite build configuration
+├── backend/               # Python backend (FastAPI + all services)
+│   ├── api/               # FastAPI routes and models
+│   ├── services/          # Business logic (repository, analysis, selection)
+│   ├── test_analysis/     # Test analysis pipeline (8-step)
+│   ├── git_diff_processor/# Git diff parsing and AST-based test selection
+│   ├── semantic_retrieval/# Semantic search engine (Pinecone + Advanced RAG)
+│   ├── deterministic/     # Database loading scripts
+│   ├── config/            # Application configuration
+│   ├── llm/               # LLM abstraction layer (OpenAI/Gemini/Ollama)
+│   ├── parsers/           # Code parsers (Tree-sitter)
+│   ├── data/              # Extracted test repository data
+│   ├── scripts/           # Utility and diagnostic scripts
+│   └── requirements.txt   # Python dependencies
+├── docs/                  # Documentation and architecture diagrams
+├── .env                   # Environment variables (not committed)
+└── README.md              # This file
 ```
 
 ## Usage
@@ -150,7 +157,7 @@ sample_workflow/
 
 ## Configuration
 
-See [web_platform/CONFIGURATION.md](web_platform/CONFIGURATION.md) for detailed configuration options.
+See [backend/README.md](backend/README.md) for detailed configuration options.
 
 ## API Endpoints
 
@@ -167,14 +174,14 @@ See http://localhost:8000/docs for full API documentation.
 ### Backend Development
 
 ```bash
-cd web_platform
-python -m uvicorn api.main:app --reload --port 8000
+cd backend
+python -m uvicorn api.main:app --reload --reload-dir . --port 8000
 ```
 
 ### Frontend Development
 
 ```bash
-cd web_platform/frontend
+cd frontend
 npm run dev
 ```
 
@@ -184,8 +191,8 @@ See [PRODUCTION.md](PRODUCTION.md) for comprehensive production deployment guide
 
 Quick steps:
 1. Set environment variables in production environment
-2. Initialize database: `python deterministic/01_create_tables.py`
-3. Build frontend: `cd web_platform/frontend && npm run build`
+2. Initialize database: `python backend/deterministic/01_create_tables.py`
+3. Build frontend: `cd frontend && npm run build`
 4. Serve with production server (Gunicorn + Nginx)
 5. Configure CORS for production domain
 
