@@ -30,6 +30,9 @@ const RepositoryDetail = () => {
   const [totalTestsInDb, setTotalTestsInDb] = useState(0);
   const [selectionDisabled, setSelectionDisabled] = useState(false);
   const [primaryTestRepoId, setPrimaryTestRepoId] = useState(null);
+  const [diffError, setDiffError] = useState(null);
+  const [diffLoading, setDiffLoading] = useState(false);
+  const [diffEmptyHint, setDiffEmptyHint] = useState(null);
 
   useEffect(() => {
     if (repoId) {
@@ -72,7 +75,9 @@ const RepositoryDetail = () => {
     try {
       const response = await api.getRepository(repoId);
       setRepository(response.data);
-      await fetchDiff(repoId);
+      const branch =
+        response.data?.selected_branch || response.data?.default_branch || undefined;
+      await fetchDiff(repoId, branch);
     } catch (error) {
       console.error('Failed to load repository:', error);
       alert('Repository not found. Redirecting to repositories list...');
@@ -82,17 +87,43 @@ const RepositoryDetail = () => {
     }
   };
 
-  const fetchDiff = async (repoId) => {
+  const fetchDiff = async (repoId, branch) => {
+    setDiffLoading(true);
+    setDiffError(null);
+    setDiffEmptyHint(null);
     try {
-      const response = await api.getDiff(repoId);
-      setDiffContent(response.data.diff || '');
-      setChangedFiles(response.data.changedFiles || []);
-      setDiffStats(response.data.stats || null);
+      const options = branch ? { params: { branch } } : {};
+      const response = await api.getDiff(repoId, options);
+      const payload = response.data || {};
+      const diff = payload.diff ?? '';
+      const files = payload.changedFiles ?? payload.changed_files ?? [];
+      const stats = payload.stats ?? null;
+      setDiffContent(diff);
+      setChangedFiles(Array.isArray(files) ? files : []);
+      setDiffStats(stats);
+      if (!diff && (!files || files.length === 0)) {
+        setDiffEmptyHint(
+          'The API returned no patch for the latest commit on this branch. ' +
+            'Common causes: empty/no-op commit, GitLab omitted binary/large file patches, ' +
+            'or the compare API returned no diffs. Check backend logs for this repo/branch, ' +
+            'or try Refresh / another branch.'
+        );
+      }
     } catch (error) {
       console.error('Failed to fetch diff:', error);
+      const detail = error.response?.data?.detail;
+      const msg =
+        typeof detail === 'string'
+          ? detail
+          : Array.isArray(detail)
+            ? detail.map((d) => d?.msg || d).join('; ')
+            : error.message || 'Failed to load diff';
+      setDiffError(msg);
       setDiffContent('');
       setChangedFiles([]);
       setDiffStats(null);
+    } finally {
+      setDiffLoading(false);
     }
   };
 
@@ -113,7 +144,7 @@ const RepositoryDetail = () => {
     try {
       const updatedRepo = { ...repository, selected_branch: newBranch };
       setRepository(updatedRepo);
-      await fetchDiff(repoId);
+      await fetchDiff(repoId, newBranch);
     } catch (error) {
       console.error('Failed to handle branch change:', error);
     }
@@ -336,6 +367,55 @@ const RepositoryDetail = () => {
       <div className="tab-content">
         {activeTab === 'diff' && (
           <div>
+            {diffLoading && (
+              <div style={{ padding: '12px', color: '#666', fontSize: '14px' }}>
+                Loading git diff…
+              </div>
+            )}
+            {diffError && (
+              <div
+                style={{
+                  padding: '14px 16px',
+                  marginBottom: '12px',
+                  backgroundColor: '#ffebee',
+                  border: '1px solid #ffcdd2',
+                  borderRadius: '8px',
+                  color: '#b71c1c',
+                  fontSize: '14px',
+                }}
+              >
+                <strong>Could not load diff</strong>
+                <p style={{ margin: '8px 0 0 0' }}>{diffError}</p>
+                <button
+                  type="button"
+                  className="button button-secondary"
+                  style={{ marginTop: '10px' }}
+                  onClick={() =>
+                    fetchDiff(
+                      repoId,
+                      repository?.selected_branch || repository?.default_branch
+                    )
+                  }
+                >
+                  Retry
+                </button>
+              </div>
+            )}
+            {diffEmptyHint && !diffError && !diffLoading && (
+              <div
+                style={{
+                  padding: '14px 16px',
+                  marginBottom: '12px',
+                  backgroundColor: '#fff8e1',
+                  border: '1px solid #ffe082',
+                  borderRadius: '8px',
+                  color: '#5d4037',
+                  fontSize: '14px',
+                }}
+              >
+                {diffEmptyHint}
+              </div>
+            )}
             <DiffStats 
               stats={diffStats}
               changedFiles={changedFiles}
@@ -343,7 +423,8 @@ const RepositoryDetail = () => {
             />
             <DiffViewer 
               diffContent={diffContent} 
-              changedFiles={changedFiles} 
+              changedFiles={changedFiles}
+              suppressEmptyMessage={Boolean(diffError || diffEmptyHint || diffLoading)}
             />
             <DiffModal
               isOpen={isDiffModalOpen}

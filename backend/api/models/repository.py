@@ -53,6 +53,10 @@ class BranchesResponse(BaseModel):
     """Response model for list of branches."""
     branches: list[BranchResponse]
     default_branch: Optional[str] = None
+    page: int = 1
+    per_page: int = 30
+    has_more: bool = False
+    fetch_all: bool = False
 
 
 class DiffResponse(BaseModel):
@@ -106,8 +110,11 @@ class SelectionResponse(BaseModel):
     """Response model for test selection results."""
     totalTests: int = 0  # Number of selected tests
     totalTestsInDb: int = 0  # Total tests in database (for coverage calculation)
-    astMatches: int = 0
-    semanticMatches: int = 0
+    astMatches: int = 0  # In final table: tests with an AST/DB link
+    semanticMatches: int = 0  # In final table: tests vector search contributed to
+    selectionFunnel: Optional[Dict] = None  # Pipeline explanation + vector vs final counts
+    semanticSearchCandidates: Optional[int] = None  # Raw vector hits before filtering
+    semanticVectorThreshold: Optional[float] = None  # Min cosine similarity used for vector search
     tests: list[dict] = []
     # Enhanced semantic fields
     semanticMatchDetails: List[SemanticMatch] = []
@@ -123,3 +130,7 @@ class SelectionResponse(BaseModel):
     llmInputOutput: Optional[Dict] = None  # {input: str, output: str, assessed_tests_count: int}
     # Confidence distribution
     confidenceDistribution: Optional[Dict] = None  # {high: int, medium: int, low: int}
+    # Diff impact (coverage gaps and breakage warnings)
+    coverageGaps: Optional[List[Dict]] = None  # [{type, symbol?, message?, ...}]
+    breakageWarnings: Optional[List[str]] = None
+    ragDiagnostics: Optional[Dict] = None  # Unified RAG pipeline diagnostics (stage, scores, recovery)

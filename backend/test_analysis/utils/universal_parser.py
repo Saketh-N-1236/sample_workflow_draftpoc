@@ -1,6 +1,9 @@
 """
-Universal test file parser.
-Supports Python, Java, JavaScript, TypeScript via Tree-sitter + regex fallback.
+Universal test file parser (Tree-sitter first, then regex/plugins).
+
+Languages: Python, Java, JavaScript, TypeScript/TSX, C, C++.
+- Merges Tree-sitter + regex for C/C++ (GTest macros + void test_*).
+- Regex/plugin layer when TS finds no tests (other languages).
 Never silently drops a file — always returns best-effort results.
 """
 
@@ -28,6 +31,13 @@ LANGUAGE_BY_EXTENSION = {
     '.rb':   'ruby',
     '.cs':   'csharp',
     '.go':   'go',
+    '.c':    'c',
+    '.h':    'c',
+    '.cpp':  'cpp',
+    '.cc':   'cpp',
+    '.cxx':  'cpp',
+    '.hpp':  'cpp',
+    '.hh':   'cpp',
 }
 
 def detect_language(filepath: Path) -> str:
@@ -57,11 +67,26 @@ TEST_METHOD_PATTERNS = {
         (re.compile(r"(?:^|\s)(?:it|test)\s*\(\s*['\"`]([^'\"` ][^'\"` ]*)['\"`]", re.MULTILINE), 1),
         # describe blocks
         (re.compile(r"(?:^|\s)describe\s*\(\s*['\"`]([^'\"` ][^'\"` ]*)['\"`]", re.MULTILINE), 1),
+        # test.each / it.each — chained title: .each(...)( 'row case' ,
+        (
+            re.compile(
+                r"(?:it|test)\.each\s*\([^;]{0,4000}?\)\s*\(\s*['\"`]([^'\"`]+)['\"`]",
+                re.MULTILINE | re.DOTALL,
+            ),
+            1,
+        ),
     ],
     'typescript': [
         # Same as JavaScript
         (re.compile(r"(?:^|\s)(?:it|test)\s*\(\s*['\"`]([^'\"` ][^'\"` ]*)['\"`]", re.MULTILINE), 1),
         (re.compile(r"(?:^|\s)describe\s*\(\s*['\"`]([^'\"` ][^'\"` ]*)['\"`]", re.MULTILINE), 1),
+        (
+            re.compile(
+                r"(?:it|test)\.each\s*\([^;]{0,4000}?\)\s*\(\s*['\"`]([^'\"`]+)['\"`]",
+                re.MULTILINE | re.DOTALL,
+            ),
+            1,
+        ),
     ],
     'kotlin': [
         (re.compile(r'@Test\s+fun\s+(test\w+)\s*\(', re.MULTILINE), 1),
@@ -76,6 +101,18 @@ TEST_METHOD_PATTERNS = {
     ],
     'csharp': [
         (re.compile(r'\[(?:Test|TestMethod|Fact|Theory)\]\s*\n?\s*(?:public\s+)?(?:void\s+|Task\s+|async\s+Task\s+)(\w+)\s*\(', re.MULTILINE), 1),
+    ],
+    'c': [
+        (re.compile(r'^\s*void\s+(test_\w+)\s*\(', re.MULTILINE), 1),
+    ],
+    'cpp': [
+        (re.compile(r'TEST\s*\(\s*\w+\s*,\s*(\w+)\s*\)', re.MULTILINE), 1),
+        (re.compile(r'TEST_F\s*\(\s*\w+\s*,\s*(\w+)\s*\)', re.MULTILINE), 1),
+        (re.compile(r'TEST_P\s*\(\s*\w+\s*,\s*(\w+)\s*\)', re.MULTILINE), 1),
+        (re.compile(r'FRIEND_TEST\s*\(\s*\w+\s*,\s*(\w+)\s*\)', re.MULTILINE), 1),
+        (re.compile(r'TYPED_TEST\s*\(\s*\w+\s*,\s*(\w+)\s*\)', re.MULTILINE), 1),
+        (re.compile(r'TYPED_TEST_P\s*\(\s*\w+\s*,\s*(\w+)\s*\)', re.MULTILINE), 1),
+        (re.compile(r'^\s*(?:static\s+)?(?:inline\s+)?void\s+(test_\w+)\s*\(', re.MULTILINE), 1),
     ],
 }
 
@@ -96,6 +133,12 @@ TEST_CLASS_PATTERNS = {
         (re.compile(r"describe\s*\(\s*['\"`]([^'\"` ][^'\"` ]*)['\"`]", re.MULTILINE), 1),
     ],
     'kotlin': [
+        (re.compile(r'class\s+(\w*[Tt]est\w*)\s*(?::|{)', re.MULTILINE), 1),
+    ],
+    'c': [
+        (re.compile(r'^\s*void\s+(test_\w+)\s*\(', re.MULTILINE), 1),
+    ],
+    'cpp': [
         (re.compile(r'class\s+(\w*[Tt]est\w*)\s*(?::|{)', re.MULTILINE), 1),
     ],
 }
@@ -124,6 +167,13 @@ IMPORT_PATTERNS = {
     'go': [
         (re.compile(r'"([\w./\-]+)"', re.MULTILINE), 1),
     ],
+    'c': [
+        (re.compile(r'^\s*#include\s+[<"]([^>"]+)[>"]', re.MULTILINE), 1),
+    ],
+    'cpp': [
+        (re.compile(r'^\s*#include\s+[<"]([^>"]+)[>"]', re.MULTILINE), 1),
+        (re.compile(r'^import\s+([\w.]+)\s*;', re.MULTILINE), 1),
+    ],
 }
 
 # Test framework detection patterns
@@ -134,12 +184,14 @@ FRAMEWORK_PATTERNS = {
     'junit5':    [r'import org\.junit\.jupiter', r'@ExtendWith', r'@BeforeEach', r'@AfterEach'],
     'testng':    [r'import org\.testng', r'@Test.*groups', r'testng\.xml'],
     'jest':      [r"from 'jest'", r"require\('jest'\)", r'describe\(', r'it\(', r'expect\('],
+    'vitest':    [r"from 'vitest'", r"import\s*\{[^}]*\}\s*from\s*['\"]vitest['\"]", r'vi\.mock\('],
     'mocha':     [r"from 'mocha'", r"require\('mocha'\)", r"require\('chai'\)"],
     'jasmine':   [r'jasmine\.', r"require\('jasmine'\)"],
     'rspec':     [r'require .rspec', r'RSpec\.describe', r'describe.*do'],
     'go_test':   [r'testing\.T', r'func Test'],
     'nunit':     [r'\[TestFixture\]', r'\[Test\]', r'using NUnit'],
     'xunit':     [r'\[Fact\]', r'\[Theory\]', r'using Xunit'],
+    'gtest':     [r'#include\s*[<"]gtest/', r'TEST\s*\(', r'TEST_F\s*\(', r'INSTANTIATE_TEST_SUITE_P'],
 }
 
 
@@ -150,28 +202,8 @@ class UniversalTestParser:
     """
 
     def __init__(self):
-        self._ts_parsers = {}
-        self._init_treesitter()
-
-    def _init_treesitter(self):
-        """Initialize Tree-sitter parsers for available languages."""
-        ts_languages = {
-            'python':     ('tree_sitter_python',     'python'),
-            'java':       ('tree_sitter_java',        'java'),
-            'javascript': ('tree_sitter_javascript',  'javascript'),
-            'typescript': ('tree_sitter_typescript',  'typescript'),
-        }
-        for lang, (module_name, lang_key) in ts_languages.items():
-            try:
-                import importlib
-                mod = importlib.import_module(module_name)
-                from tree_sitter import Language, Parser
-                language = Language(mod.language())
-                parser = Parser(language)
-                self._ts_parsers[lang] = parser
-                logger.info(f"Tree-sitter parser loaded: {lang}")
-            except Exception as e:
-                logger.debug(f"Tree-sitter not available for {lang}, using regex fallback: {e}")
+        from test_analysis.core.parsers.treesitter_core import get_treesitter_parsers
+        self._ts_parsers = get_treesitter_parsers()
 
     def parse_file(self, filepath: Path) -> Dict:
         """
@@ -211,36 +243,80 @@ class UniversalTestParser:
         # Detect framework from content
         result['framework'] = self._detect_framework(content, language)
 
-        # Try Tree-sitter first, fall back to regex
-        if language in self._ts_parsers:
+        ts_lang = self._treesitter_language_key(filepath, language)
+        used_ts = False
+        ts_result = {'test_methods': [], 'test_classes': [], 'imports': []}
+
+        # 1) Tree-sitter (primary) — always capture imports/structure when grammar exists
+        if ts_lang and ts_lang in self._ts_parsers:
             try:
-                ts_result = self._parse_with_treesitter(content, language, filepath)
-                if ts_result['test_methods'] or ts_result['test_classes']:
-                    result.update(ts_result)
-                    result['parse_method'] = 'treesitter'
-                    logger.debug(f"Tree-sitter parsed {filepath.name}: "
-                                 f"{len(result['test_methods'])} methods, "
-                                 f"{len(result['test_classes'])} classes")
-                    return result
-                else:
-                    logger.debug(f"Tree-sitter returned empty for {filepath.name}, trying regex")
+                ts_result = self._parse_with_treesitter(
+                    content, ts_lang, language, filepath
+                )
+                used_ts = True
+                result['test_methods'] = list(ts_result['test_methods'])
+                result['test_classes'] = list(ts_result['test_classes'])
+                result['imports'] = list(ts_result['imports'])
+                logger.debug(
+                    f"Tree-sitter {filepath.name}: "
+                    f"{len(result['test_methods'])} methods, "
+                    f"{len(result['test_classes'])} classes, "
+                    f"{len(result['imports'])} imports"
+                )
             except Exception as e:
-                logger.debug(f"Tree-sitter failed for {filepath.name}: {e}, using regex")
+                logger.debug(f"Tree-sitter failed for {filepath.name}: {e}")
 
-        # Regex fallback — always runs if Tree-sitter fails or returns empty
-        regex_result = self._parse_with_regex(content, language, filepath)
-        result.update(regex_result)
-        result['parse_method'] = 'regex'
+        # 2) Plugins when TS missed tests, or C/C++ (GTest macros need regex merge)
+        from test_analysis.core.parsers.plugins import default_plugin_chain
+        need_plugins = (
+            not (result['test_methods'] or result['test_classes'])
+            or language in ('c', 'cpp')
+        )
+        n_after_ts = len(result['test_methods']) + len(result['test_classes'])
+        if need_plugins:
+            for plugin_name, plugin_fn in default_plugin_chain():
+                try:
+                    plugin_result = plugin_fn(self, content, language, filepath) or {}
+                    self._merge_parse_layer(result, plugin_result)
+                except Exception as ex:
+                    logger.debug(f"Plugin {plugin_name} failed: {ex}")
 
-        logger.debug(f"Regex parsed {filepath.name}: "
-                     f"{len(result['test_methods'])} methods, "
-                     f"{len(result['test_classes'])} classes")
+        n_final = len(result['test_methods']) + len(result['test_classes'])
+        if n_final > 0:
+            if used_ts and n_final > n_after_ts:
+                result['parse_method'] = 'treesitter+regex'
+            elif used_ts:
+                result['parse_method'] = 'treesitter'
+            else:
+                result['parse_method'] = 'regex'
+        else:
+            result['parse_method'] = 'failed'
 
         if not result['test_methods'] and not result['test_classes']:
-            logger.warning(f"No tests found in {filepath.name} (lang={language}). "
-                           f"File may not be a test file or patterns need updating.")
+            logger.warning(
+                f"No tests found in {filepath.name} (lang={language}). "
+                f"File may not be a test file or patterns need updating."
+            )
 
         return result
+
+    def _merge_parse_layer(self, target: Dict, extra: Dict) -> None:
+        """Merge plugin/secondary layer into target (dedupe by name + line)."""
+        seen = {
+            (m.get('name'), m.get('line_number'))
+            for m in target.get('test_methods', [])
+        }
+        for m in extra.get('test_methods') or []:
+            key = (m.get('name'), m.get('line_number'))
+            if key not in seen:
+                seen.add(key)
+                target.setdefault('test_methods', []).append(dict(m))
+        for c in extra.get('test_classes') or []:
+            if c and c not in target.setdefault('test_classes', []):
+                target['test_classes'].append(c)
+        for imp in extra.get('imports') or []:
+            if imp and imp not in target.setdefault('imports', []):
+                target['imports'].append(imp)
 
     def _detect_framework(self, content: str, language: str) -> str:
         """Detect test framework from file content."""
@@ -254,10 +330,23 @@ class UniversalTestParser:
             # Language-based default
             defaults = {'python': 'pytest', 'java': 'junit', 'javascript': 'jest',
                         'typescript': 'jest', 'kotlin': 'junit5', 'go': 'go_test',
-                        'ruby': 'rspec', 'csharp': 'nunit'}
+                        'ruby': 'rspec', 'csharp': 'nunit', 'c': 'gtest', 'cpp': 'gtest'}
             return defaults.get(language, 'unknown')
 
         return max(scores, key=scores.get)
+
+    def _treesitter_language_key(self, filepath: Path, language: str) -> Optional[str]:
+        """Map logical language to Tree-sitter grammar key present in self._ts_parsers."""
+        suf = filepath.suffix.lower()
+        if language == 'typescript' and suf == '.tsx':
+            return 'tsx' if 'tsx' in self._ts_parsers else (
+                'typescript' if 'typescript' in self._ts_parsers else None
+            )
+        if language == 'typescript':
+            return 'typescript' if 'typescript' in self._ts_parsers else None
+        if language in ('c', 'cpp'):
+            return language if language in self._ts_parsers else None
+        return language if language in self._ts_parsers else None
 
     def _parse_with_regex(self, content: str, language: str, filepath: Path) -> Dict:
         """Parse test file using regex patterns."""
@@ -314,21 +403,27 @@ class UniversalTestParser:
             'imports': imports,
         }
 
-    def _parse_with_treesitter(self, content: str, language: str, filepath: Path) -> Dict:
-        """Parse using Tree-sitter — returns same structure as regex parser."""
-        parser = self._ts_parsers[language]
+    def _parse_with_treesitter(
+        self, content: str, ts_lang: str, language: str, filepath: Path
+    ) -> Dict:
+        """Parse using Tree-sitter grammar ts_lang (may differ from logical language, e.g. tsx)."""
+        parser = self._ts_parsers[ts_lang]
         tree = parser.parse(bytes(content, 'utf-8'))
 
         test_methods = []
         test_classes = []
         imports = []
 
-        if language == 'python':
+        if ts_lang == 'python':
             test_methods, test_classes, imports = self._extract_python_ts(tree, content)
-        elif language == 'java':
+        elif ts_lang == 'java':
             test_methods, test_classes, imports = self._extract_java_ts(tree, content)
-        elif language in ('javascript', 'typescript'):
+        elif ts_lang in ('javascript', 'typescript', 'tsx'):
             test_methods, test_classes, imports = self._extract_js_ts(tree, content)
+        elif ts_lang == 'c':
+            test_methods, test_classes, imports = self._extract_c_ts(tree, content)
+        elif ts_lang == 'cpp':
+            test_methods, test_classes, imports = self._extract_cpp_ts(tree, content)
 
         return {'test_methods': test_methods, 'test_classes': test_classes, 'imports': imports}
 
@@ -340,7 +435,7 @@ class UniversalTestParser:
             matches = list(re.finditer(r'^\s*class\s+(\w+)', content_before, re.MULTILINE))
         elif language == 'java':
             matches = list(re.finditer(r'(?:public\s+)?class\s+(\w+)', content_before))
-        elif language in ('javascript', 'typescript'):
+        elif language in ('javascript', 'typescript', 'c', 'cpp'):
             matches = list(re.finditer(r'describe\s*\(\s*[\'"`]([^\'"`]+)[\'"`]', content_before))
         else:
             return None
@@ -352,9 +447,9 @@ class UniversalTestParser:
     # ── Tree-sitter extraction helpers ──────────────────────────────────────
 
     def _extract_python_ts(self, tree, content: str):
-        """Extract from Python Tree-sitter AST."""
+        """Extract from Python Tree-sitter AST (pytest/unittest: class + test_*)."""
         test_methods, test_classes, imports = [], [], []
-        lines = content.split('\n')
+        class_stack = []
 
         def walk(node):
             if node.type == 'class_definition':
@@ -363,15 +458,20 @@ class UniversalTestParser:
                     class_name = content[name_node.start_byte:name_node.end_byte]
                     if 'test' in class_name.lower() or 'testcase' in class_name.lower():
                         test_classes.append(class_name)
+                    class_stack.append(class_name)
+                    for child in node.children:
+                        walk(child)
+                    class_stack.pop()
+                    return
             elif node.type == 'function_definition':
                 name_node = node.child_by_field_name('name')
                 if name_node:
                     func_name = content[name_node.start_byte:name_node.end_byte]
                     if func_name.startswith('test'):
-                        class_name = None  # simplified
+                        enclosing = class_stack[-1] if class_stack else None
                         test_methods.append({
                             'name': func_name,
-                            'class_name': class_name,
+                            'class_name': enclosing,
                             'line_number': node.start_point[0] + 1
                         })
             elif node.type in ('import_statement', 'import_from_statement'):
@@ -383,32 +483,38 @@ class UniversalTestParser:
         return test_methods, test_classes, imports
 
     def _extract_java_ts(self, tree, content: str):
-        """Extract from Java Tree-sitter AST."""
-        test_methods, test_classes, imports = [], []
-        current_class = [None]  # Use list to allow modification in nested function
+        """Extract from Java Tree-sitter AST (nested classes, JUnit 4/5)."""
+        test_methods, test_classes, imports = [], [], []
+        class_stack: List[str] = []
 
         def walk(node):
             if node.type == 'class_declaration':
                 name_node = node.child_by_field_name('name')
                 if name_node:
                     class_name = content[name_node.start_byte:name_node.end_byte]
-                    # Track all classes (not just test classes) for method association
-                    current_class[0] = class_name
                     if 'test' in class_name.lower():
                         test_classes.append(class_name)
-                    # Recursively walk children to find methods in this class
+                    class_stack.append(class_name)
                     for child in node.children:
                         walk(child)
-                    # Reset class when exiting
-                    current_class[0] = None
-                return
+                    class_stack.pop()
+                    return
             elif node.type == 'method_declaration':
                 # Check for @Test annotation in modifiers
                 has_test = False
                 for child in node.children:
                     if child.type == 'modifiers':
                         modifiers_text = content[child.start_byte:child.end_byte]
-                        if '@Test' in modifiers_text or '@org.junit' in modifiers_text:
+                        if any(
+                            x in modifiers_text
+                            for x in (
+                                '@Test',
+                                '@ParameterizedTest',
+                                '@RepeatedTest',
+                                '@org.junit',
+                                '@org.junit.jupiter.api.Test',
+                            )
+                        ):
                             has_test = True
                             break
                 if has_test:
@@ -416,7 +522,7 @@ class UniversalTestParser:
                     if name_node:
                         test_methods.append({
                             'name': content[name_node.start_byte:name_node.end_byte],
-                            'class_name': current_class[0],  # Use tracked class name
+                            'class_name': class_stack[-1] if class_stack else None,
                             'line_number': node.start_point[0] + 1
                         })
                 else:
@@ -427,7 +533,7 @@ class UniversalTestParser:
                         if name.startswith('test'):
                             test_methods.append({
                                 'name': name,
-                                'class_name': current_class[0],  # Use tracked class name
+                                'class_name': class_stack[-1] if class_stack else None,
                                 'line_number': node.start_point[0] + 1
                             })
             elif node.type == 'import_declaration':
@@ -448,33 +554,173 @@ class UniversalTestParser:
         walk(tree.root_node)
         return test_methods, test_classes, imports
 
+    @staticmethod
+    def _js_call_base_name(func_node, content: str) -> str:
+        """Resolve it / test / describe from it.only, test.skip, etc."""
+        if func_node is None:
+            return ''
+        if func_node.type == 'identifier':
+            return content[func_node.start_byte : func_node.end_byte]
+        if func_node.type == 'member_expression':
+            obj = func_node.child_by_field_name('object')
+            return UniversalTestParser._js_call_base_name(obj, content)
+        return ''
+
+    def _js_first_test_name_arg(self, args_node, content: str) -> Optional[str]:
+        """First string/template argument to it('...') / describe('...')."""
+        if not args_node:
+            return None
+        for c in args_node.children:
+            if c.type in ('(', ')', ','):
+                continue
+            if c.type == 'string':
+                raw = content[c.start_byte : c.end_byte]
+                return raw.strip("'\"`") or None
+            if c.type == 'template_string':
+                raw = content[c.start_byte : c.end_byte]
+                return re.sub(r'^`+|`+$', '', raw).strip() or raw.strip('`')
+        return None
+
     def _extract_js_ts(self, tree, content: str):
-        """Extract from JavaScript/TypeScript Tree-sitter AST."""
+        """Jest/Vitest/Mocha: it/test/describe (+ .only/.skip); suite = enclosing describe."""
         test_methods, test_classes, imports = [], [], []
 
-        def walk(node):
+        def walk(node, suite_stack: List[str]):
             if node.type == 'call_expression':
                 func_node = node.child_by_field_name('function')
-                if func_node:
-                    func_text = content[func_node.start_byte:func_node.end_byte]
-                    if func_text in ('it', 'test', 'describe', 'xit', 'xtest'):
-                        args = node.child_by_field_name('arguments')
-                        if args and args.child_count > 0:
-                            first_arg = args.children[1] if args.child_count > 1 else args.children[0]
-                            if first_arg.type in ('string', 'template_string'):
-                                name = content[first_arg.start_byte:first_arg.end_byte].strip("'\"` ")
-                                if func_text == 'describe':
-                                    test_classes.append(name)
-                                else:
-                                    test_methods.append({
-                                        'name': name,
-                                        'class_name': None,
-                                        'line_number': node.start_point[0] + 1
-                                    })
+                # test.each(a)( 'title', fn ) / it.each`...` patterns: outer call
+                if func_node and func_node.type == 'call_expression':
+                    inner_f = func_node.child_by_field_name('function')
+                    if inner_f and inner_f.type == 'member_expression':
+                        prop = inner_f.child_by_field_name('property')
+                        obj = inner_f.child_by_field_name('object')
+                        prop_txt = (
+                            content[prop.start_byte : prop.end_byte] if prop else ''
+                        )
+                        obj_base = (
+                            self._js_call_base_name(obj, content) if obj else ''
+                        )
+                        if prop_txt == 'each' and obj_base in ('it', 'test'):
+                            outer_args = node.child_by_field_name('arguments')
+                            tname = self._js_first_test_name_arg(
+                                outer_args, content
+                            )
+                            if tname:
+                                test_methods.append({
+                                    'name': tname,
+                                    'class_name': suite_stack[-1]
+                                    if suite_stack
+                                    else None,
+                                    'line_number': node.start_point[0] + 1,
+                                })
+                base = self._js_call_base_name(func_node, content)
+                args = node.child_by_field_name('arguments')
+                if base in ('describe', 'fdescribe') and args:
+                    name = self._js_first_test_name_arg(args, content)
+                    if name:
+                        test_classes.append(name)
+                        new_stack = suite_stack + [name]
+                        for c in args.children:
+                            if c.type in (
+                                'arrow_function',
+                                'function',
+                                'function_expression',
+                            ):
+                                body = c.child_by_field_name('body')
+                                if body:
+                                    for ch in body.children:
+                                        walk(ch, new_stack)
+                        return
+                if base in (
+                    'it',
+                    'test',
+                    'xit',
+                    'xtest',
+                    'fit',
+                ) and args:
+                    name = self._js_first_test_name_arg(args, content)
+                    if name:
+                        test_methods.append({
+                            'name': name,
+                            'class_name': suite_stack[-1] if suite_stack else None,
+                            'line_number': node.start_point[0] + 1,
+                        })
             elif node.type in ('import_statement', 'import_declaration'):
                 imports.append(content[node.start_byte:node.end_byte].strip())
             for child in node.children:
-                walk(child)
+                walk(child, suite_stack)
+
+        walk(tree.root_node, [])
+        return test_methods, test_classes, imports
+
+    def _c_function_identifier(self, node, content: str) -> Optional[str]:
+        """First function name identifier under a function_definition."""
+        if node.type != 'function_definition':
+            return None
+
+        def find_decl(n):
+            for c in n.children:
+                if c.type == 'function_declarator':
+                    for d in c.children:
+                        if d.type == 'identifier':
+                            return content[d.start_byte : d.end_byte]
+                    return find_decl(c)
+                if c.type == 'pointer_declarator':
+                    r = find_decl(c)
+                    if r:
+                        return r
+            return None
+
+        return find_decl(node)
+
+    def _extract_c_ts(self, tree, content: str):
+        """C: #include + void test_* functions (Tree-sitter)."""
+        test_methods, test_classes, imports = [], [], []
+
+        def walk(node):
+            if node.type == 'preproc_include':
+                txt = content[node.start_byte : node.end_byte].strip()
+                if txt and txt not in imports:
+                    imports.append(txt)
+            elif node.type == 'function_definition':
+                name = self._c_function_identifier(node, content)
+                if name and name.startswith('test_'):
+                    test_methods.append({
+                        'name': name,
+                        'class_name': None,
+                        'line_number': node.start_point[0] + 1,
+                    })
+            for c in node.children:
+                walk(c)
+
+        walk(tree.root_node)
+        return test_methods, test_classes, imports
+
+    def _extract_cpp_ts(self, tree, content: str):
+        """C++: includes + void test_* ; TS rarely sees GTEST macros — regex plugin fills TEST/TEST_F."""
+        test_methods, test_classes, imports = [], [], []
+
+        def walk(node):
+            if node.type == 'preproc_include':
+                txt = content[node.start_byte : node.end_byte].strip()
+                if txt and txt not in imports:
+                    imports.append(txt)
+            elif node.type == 'using_declaration' or node.type == 'namespace_definition':
+                pass
+            elif node.type == 'function_definition':
+                name = self._c_function_identifier(node, content)
+                if name and (name.startswith('test_') or name.startswith('Test')):
+                    test_methods.append({
+                        'name': name,
+                        'class_name': None,
+                        'line_number': node.start_point[0] + 1,
+                    })
+            elif node.type in ('import_statement', 'using_declaration'):
+                frag = content[node.start_byte : node.end_byte].strip()
+                if frag and frag not in imports:
+                    imports.append(frag)
+            for c in node.children:
+                walk(c)
 
         walk(tree.root_node)
         return test_methods, test_classes, imports

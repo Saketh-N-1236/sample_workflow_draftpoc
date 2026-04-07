@@ -3,8 +3,16 @@ import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import '../styles/App.css';
 
-const DiffViewer = ({ diffContent, changedFiles = [] }) => {
+const DiffViewer = ({
+  diffContent,
+  changedFiles = [],
+  /** Hide default placeholder when parent shows error / hint / loading */
+  suppressEmptyMessage = false,
+}) => {
   if (!diffContent && changedFiles.length === 0) {
+    if (suppressEmptyMessage) {
+      return null;
+    }
     return (
       <div style={{ padding: '40px', textAlign: 'center', color: '#999', fontStyle: 'italic' }}>
         No diff content available. Select a branch and refresh to see changes.

@@ -38,8 +38,9 @@ export default {
     return api.get(`/repositories/${repoId}/branches`);
   },
 
-  getDiff: (repoId) => {
-    return api.get(`/repositories/${repoId}/diff`);
+  /** @param {string} repoId @param {{ params?: { branch?: string } }} [options] */
+  getDiff: (repoId, options = {}) => {
+    return api.get(`/repositories/${repoId}/diff`, options);
   },
 
   runAnalysis: (repoId) => {

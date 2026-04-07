@@ -1,14 +1,20 @@
 """
 Java test analyzer.
 
-Analyzes Java test repositories and produces all 8 JSON output files.
-Uses the Java dependency plugin for dependency extraction.
+Analyzes Java test repositories.
+
+analyze() now returns BOTH:
+  - AnalyzerResult  (backward-compatible)
+  - a LanguageResult stored on self.language_result after each analyze() call
+
+Set the env var DEBUG_WRITE_JSON=true to also write the legacy 8 JSON files.
 """
 
 from pathlib import Path
 from typing import Dict, List, Set, Optional
 from collections import defaultdict
 import json
+import os
 import re
 import logging
 from datetime import datetime
@@ -19,6 +25,7 @@ from .base_analyzer import BaseAnalyzer, AnalyzerResult
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from test_analysis.utils.dependency_plugins import get_registry
+from test_analysis.engine.models import LanguageResult, TestRecord
 
 logger = logging.getLogger(__name__)
 
@@ -57,9 +64,17 @@ class JavaAnalyzer(BaseAnalyzer):
             supported_frameworks=['junit5', 'junit4', 'junit3', 'testng', 'mockito', 'spring']
         )
         self.dependency_plugin = get_registry().get_plugin('java')
+        # Populated by analyze() — callers can read this directly
+        self.language_result: Optional[LanguageResult] = None
     
     def analyze(self, repo_path: Path, output_dir: Path) -> AnalyzerResult:
-        """Analyze Java repository and produce all 8 JSON files."""
+        """
+        Analyze Java repository.
+
+        Always populates self.language_result with a LanguageResult.
+        Writes JSON files to disk only when DEBUG_WRITE_JSON=true.
+        Returns AnalyzerResult for backward compatibility.
+        """
         self._ensure_output_dir(output_dir)
         self._log_progress("Starting Java analysis")
         
@@ -115,14 +130,59 @@ class JavaAnalyzer(BaseAnalyzer):
         
         self._log_progress("Extracting annotations...")
         annotations = self._extract_annotations(test_files, tests, repo_path)
-        
-        # Write all JSON files
-        self._write_outputs(
-            output_dir, test_files, framework, confidence,
-            tests, dependencies, function_calls, metadata,
-            reverse_index, structure, repo_path,
-            reflection_calls, di_fields, annotations
+
+        # ── Build LanguageResult (in-memory, no disk I/O) ─────────────────
+        test_records: List[TestRecord] = []
+        for t in tests:
+            class_label = t.get('class_name') or ''
+            method_label = t.get('method_name', '')
+            if class_label:
+                full_name = f"{class_label} > {method_label}" if method_label else class_label
+            else:
+                full_name = method_label
+            tr = TestRecord(
+                id=t['test_id'],
+                file=t['file_path'],
+                describe=class_label,
+                name=method_label,
+                full_name=full_name,
+                test_type=t.get('test_type', 'unit'),
+                language='java',
+                framework=framework,
+                line_number=t.get('line_number'),
+                repository_path=t.get('repository_path', str(repo_path)),
+            )
+            test_records.append(tr)
+
+        # Attach test body content from metadata (same order as tests)
+        for i, tr in enumerate(test_records):
+            if i < len(metadata):
+                tr.content = metadata[i].get('description', '') or ''
+
+        self.language_result = LanguageResult(
+            language='java',
+            framework=framework,
+            tests=test_records,
+            reverse_index=reverse_index,
+            function_mappings=function_calls,
+            dependencies=dependencies,
+            metadata=metadata,
+            java_reflection=reflection_calls or [],
+            java_di_fields=di_fields or [],
+            java_annotations=annotations or [],
+            files_analyzed=len(test_files),
+            errors=errors,
         )
+        # ──────────────────────────────────────────────────────────────────
+
+        # Write JSON files only when explicitly requested (debug mode)
+        if os.environ.get('DEBUG_WRITE_JSON', '').lower() in ('1', 'true', 'yes'):
+            self._write_outputs(
+                output_dir, test_files, framework, confidence,
+                tests, dependencies, function_calls, metadata,
+                reverse_index, structure, repo_path,
+                reflection_calls, di_fields, annotations
+            )
         
         # Generate summary
         summary = self._generate_summary(

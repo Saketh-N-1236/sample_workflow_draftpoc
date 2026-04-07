@@ -90,5 +90,22 @@ languages:
     test_frameworks:
       - jest
       - mocha
-    # Using Tree-sitter parser (no manual parser needed)
+    parser_type: "tree_sitter"
+
+  c:
+    extensions: [.c, .h]
+    test_patterns:
+      - "test_*.c"
+      - "*_test.c"
+    test_frameworks:
+      - gtest
+    parser_type: "tree_sitter"
+
+  cpp:
+    extensions: [.cpp, .cc, .cxx, .hpp, .hh]
+    test_patterns:
+      - "*_test.cpp"
+      - "test_*.cpp"
+    test_frameworks:
+      - gtest
     parser_type: "tree_sitter"

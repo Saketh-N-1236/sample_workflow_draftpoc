@@ -1,13 +1,20 @@
 """
 JavaScript/TypeScript test analyzer.
 
-Analyzes JavaScript/TypeScript test repositories and produces all 8 JSON output files.
+Analyzes JavaScript/TypeScript test repositories.
+
+analyze() now returns BOTH:
+  - AnalyzerResult  (backward-compatible, kept for callers that still use it)
+  - a LanguageResult stored on self.language_result after each analyze() call
+
+Set the env var DEBUG_WRITE_JSON=true to also write the legacy 8 JSON files.
 """
 
 from pathlib import Path
 from typing import Dict, List, Set, Optional
 from collections import defaultdict
 import json
+import os
 import re
 import logging
 from datetime import datetime
@@ -19,6 +26,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
 from test_analysis.utils.universal_parser import UniversalTestParser
 from test_analysis.utils.dependency_plugins import get_registry
+from test_analysis.engine.models import LanguageResult, TestRecord
 
 logger = logging.getLogger(__name__)
 
@@ -42,18 +50,39 @@ class JavaScriptAnalyzer(BaseAnalyzer):
         )
         self.parser = UniversalTestParser()
         self.dependency_plugin = get_registry().get_plugin('javascript')
+        # Populated by analyze() — callers can read this directly
+        self.language_result: Optional[LanguageResult] = None
     
-    def analyze(self, repo_path: Path, output_dir: Path) -> AnalyzerResult:
-        """Analyze JavaScript/TypeScript repository and produce all 8 JSON files."""
+    def analyze(
+        self,
+        repo_path: Path,
+        output_dir: Path,
+        test_files: List[Path] = None,
+    ) -> AnalyzerResult:
+        """
+        Analyze JavaScript/TypeScript repository.
+
+        Always populates self.language_result with a LanguageResult.
+        Writes JSON files to disk only when DEBUG_WRITE_JSON=true.
+        Returns AnalyzerResult for backward compatibility.
+
+        Args:
+            repo_path:  Root of the test repository.
+            output_dir: Directory for optional JSON debug output.
+            test_files: Pre-scanned list of test files.  When supplied the
+                        internal file-scan step is skipped (avoids path-
+                        encoding or permission issues on some platforms).
+        """
         self._ensure_output_dir(output_dir)
         self._log_progress("Starting JavaScript/TypeScript analysis")
         
         errors = []
         repo_path = Path(repo_path).resolve()
         
-        # Step 1: Scan test files
+        # Step 1: Scan test files (skip if caller already provided the list)
         self._log_progress("Scanning test files...")
-        test_files = self._scan_test_files(repo_path)
+        if test_files is None:
+            test_files = self._scan_test_files(repo_path)
         if not test_files:
             errors.append("No JavaScript/TypeScript test files found")
             return AnalyzerResult(
@@ -98,13 +127,54 @@ class JavaScriptAnalyzer(BaseAnalyzer):
         self._log_progress("Extracting async tests...")
         async_tests = self._extract_async_tests(tests, test_files, repo_path)
         
-        # Write all JSON files
-        self._write_outputs(
-            output_dir, test_files, framework, confidence,
-            tests, dependencies, function_calls, metadata,
-            reverse_index, structure, repo_path,
-            mocks, async_tests
+        # ── Build LanguageResult (in-memory, no disk I/O) ─────────────────
+        test_records: List[TestRecord] = []
+        for t in tests:
+            desc_label = t.get('class_name') or ''
+            it_label = t.get('method_name', '')
+            full_name = it_label  # already "describe > it" from _extract_tests
+            tr = TestRecord(
+                id=t['test_id'],
+                file=t['file_path'],
+                describe=desc_label,
+                name=it_label.split(' > ')[-1] if ' > ' in it_label else it_label,
+                full_name=full_name,
+                test_type=t.get('test_type', 'unit'),
+                language='javascript',
+                framework=framework,
+                line_number=t.get('line_number'),
+                repository_path=t.get('repository_path', str(repo_path)),
+            )
+            test_records.append(tr)
+
+        # Attach test body content from metadata (same order as tests)
+        for i, tr in enumerate(test_records):
+            if i < len(metadata):
+                tr.content = metadata[i].get('description', '') or ''
+
+        self.language_result = LanguageResult(
+            language='javascript',
+            framework=framework,
+            tests=test_records,
+            reverse_index=reverse_index,
+            function_mappings=function_calls,
+            dependencies=dependencies,
+            metadata=metadata,
+            mocks=mocks or [],
+            async_tests=async_tests or [],
+            files_analyzed=len(test_files),
+            errors=errors,
         )
+        # ──────────────────────────────────────────────────────────────────
+
+        # Write JSON files only when explicitly requested (debug mode)
+        if os.environ.get('DEBUG_WRITE_JSON', '').lower() in ('1', 'true', 'yes'):
+            self._write_outputs(
+                output_dir, test_files, framework, confidence,
+                tests, dependencies, function_calls, metadata,
+                reverse_index, structure, repo_path,
+                mocks, async_tests
+            )
         
         # Generate summary
         summary = self._generate_summary(
@@ -771,33 +841,76 @@ class JavaScriptAnalyzer(BaseAnalyzer):
         r'\s+(?:with|uses|from|for|in|that|>|→|:)\s+', re.IGNORECASE
     )
 
+    @staticmethod
+    def _normalize_import_to_stem(ref_class: str):
+        """
+        Normalize a raw JS/TS import string to its file stem so the reverse
+        index can be queried by the stem that build_search_queries generates.
+
+        '../helpers/utilities' → 'utilities'
+        '../signInFormHook'    → 'signInFormHook'
+        './MyComponent'        → 'MyComponent'
+        'react'                → None  (external, already a bare name)
+        '@reduxjs/toolkit'     → None  (scoped package)
+
+        Only local/relative paths (starting with '.', or containing '/' but NOT
+        starting with '@') are normalized.  External packages are left as-is
+        because their bare names are already the DB key that searches use.
+        """
+        from pathlib import Path as _Path
+        if not ref_class:
+            return None
+        # Skip @-scoped packages (e.g. '@reduxjs/toolkit')
+        if ref_class.startswith('@'):
+            return None
+        # Only normalize when the string looks like a file path (contains '/' or starts with '.')
+        if not (ref_class.startswith('.') or '/' in ref_class):
+            return None
+        stem = _Path(ref_class).stem
+        # If stem == ref_class the Path didn't change anything — nothing to normalize
+        if not stem or stem == ref_class:
+            return None
+        return stem
+
     def _build_reverse_index(
         self, dependencies: List[Dict], function_calls: List[Dict]
     ) -> Dict[str, List[Dict]]:
         """Build reverse index.
 
-        Three sources are merged:
-        1. File-level imports (dependencies.referenced_classes) — e.g. '../helpers/utilities'
+        Four sources are merged:
+        1. File-level imports (dependencies.referenced_classes) — raw path e.g. '../helpers/utilities'
+        1b. Normalized stem of Source 1 — e.g. 'utilities'
         2. Method calls (function_calls.module_name) — e.g. 'localStorage'
-        3. NEW: describe-label extraction from class_name — e.g. 'capitalizeFirstLetter'
+        3. describe-label extraction from class_name — e.g. 'capitalizeFirstLetter'
 
-        Source 3 is the most important for JS/TS tests because production functions
-        are usually called without dot-notation (capitalizeFirstLetter(s)) so they
-        are invisible to the obj.method() regex used for source 2.
-        The Jest describe() block name IS the production symbol under test, so we
-        extract it and index each test under that symbol.
+        Sources 1 and 1b together ensure that both the raw import path (for
+        backward-compat with any old DB rows) and the file stem (what
+        build_search_queries generates as exact_matches) are indexed.
+
+        Source 3 is critical for JS/TS tests: production functions are usually
+        called without dot-notation so the obj.method() regex (Source 2) misses
+        them.  The Jest describe() block name IS the production symbol under
+        test, so we extract and index each test under that symbol.
         """
         reverse_index = defaultdict(list)
         
         for dep in dependencies:
             for ref_class in dep.get('referenced_classes', []):
-                reverse_index[ref_class].append({
+                entry = {
                     'test_id': dep['test_id'],
                     'file_path': dep['file_path'],
                     'class_name': dep.get('class_name', ''),
                     'method_name': dep['method_name'],
                     'reference_type': dep['reference_types'].get(ref_class, 'direct_import'),
-                })
+                }
+                # Source 1: raw import path (e.g. '../helpers/utilities')
+                reverse_index[ref_class].append(entry)
+                # Source 1b: normalized file stem (e.g. 'utilities')
+                # This makes reverse_index queries by stem (produced by
+                # build_search_queries / extract_production_modules_from_file) work.
+                normalized = self._normalize_import_to_stem(ref_class)
+                if normalized:
+                    reverse_index[normalized].append({**entry, 'reference_type': 'normalized_import'})
         
         for call in function_calls:
             if call.get('module_name'):

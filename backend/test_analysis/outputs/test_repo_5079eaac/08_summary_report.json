@@ -1,25 +1,21 @@
 {
-  "generated_at": "2026-03-09T19:00:50.873869",
+  "generated_at": "2026-03-23T12:08:37.426388",
   "data": {
     "test_repository_overview": {
-      "total_test_files": 16,
-      "total_lines_of_code": 2856,
-      "test_framework": "pytest",
-      "framework_confidence": "high"
+      "total_test_files": 0,
+      "total_lines_of_code": 0,
+      "test_framework": "unknown",
+      "framework_confidence": "medium"
     },
     "test_inventory": {
-      "total_tests": 171,
+      "total_tests": 0,
       "total_test_classes": 0,
-      "tests_by_type": {
-        "e2e": 7,
-        "integration": 10,
-        "unit": 154
-      }
+      "tests_by_type": {}
     },
     "summary_for_db": {
-      "files_analyzed": 16,
-      "total_tests": 171,
-      "framework": "pytest"
+      "files_analyzed": 0,
+      "total_tests": 0,
+      "framework": "unknown"
     }
   }
 }

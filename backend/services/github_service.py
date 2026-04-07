@@ -2,9 +2,11 @@
 
 import os
 import httpx
-from typing import Dict, Optional, List
-from urllib.parse import urlparse
+from typing import Any, Dict, Optional, List
+from urllib.parse import urlparse, quote
 import logging
+
+from services.http_client import get_shared_async_client
 
 logger = logging.getLogger(__name__)
 
@@ -105,13 +107,13 @@ class GitHubService:
             owner = repo_info['owner']
             repo = repo_info['repo']
             
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(
-                    f"{self.default_api_url}/repos/{owner}/{repo}",
-                    headers=self.headers
-                )
-                response.raise_for_status()
-                return response.json()
+            client = get_shared_async_client()
+            response = await client.get(
+                f"{self.default_api_url}/repos/{owner}/{repo}",
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            return response.json()
         except httpx.HTTPStatusError as e:
             logger.error(f"GitHub API error: {e.response.status_code} - {e.response.text}")
             return None
@@ -145,89 +147,146 @@ class GitHubService:
             logger.error(f"Error validating access: {e}")
             return False
     
-    async def list_branches(self, repo_url: str) -> List[Dict]:
+    def _format_github_branch_rows(self, raw_branches: List[Dict], default_branch: str) -> List[Dict]:
+        formatted_branches = []
+        for branch in raw_branches:
+            formatted_branches.append({
+                'name': branch.get('name', ''),
+                'default': branch.get('name') == default_branch,
+                'protected': branch.get('protected', False),
+                'commit_id': branch.get('commit', {}).get('sha', '')[:8] if branch.get('commit') else '',
+                'commit_message': ''
+            })
+        return formatted_branches
+
+    async def list_branches(
+        self,
+        repo_url: str,
+        *,
+        page: int = 1,
+        per_page: int = 30,
+        search: Optional[str] = None,
+        fetch_all: bool = False,
+        default_branch_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """
-        List all branches in the repository.
-        Handles pagination to fetch all branches.
-        
-        Args:
-            repo_url: GitHub repository URL
-            
-        Returns:
-            List of branch dictionaries with name, default flag, and commit info
+        List branches. Default: single page. GitHub REST has no server-side branch search;
+        optional `search` filters the current page client-side (use fetch_all to widen).
         """
         if not self.api_token:
             logger.warning("Cannot list branches: API token not configured")
-            return []
-        
+            return {"branches": [], "has_more": False, "page": page, "per_page": per_page}
+
         try:
             repo_info = self.parse_github_url(repo_url)
             owner = repo_info['owner']
             repo = repo_info['repo']
-            
-            # Get default branch from repo info first
-            repo_info_data = await self.get_repository_info(repo_url)
-            default_branch = repo_info_data.get('default_branch', 'main') if repo_info_data else 'main'
-            
-            all_branches = []
-            page = 1
-            per_page = 100
-            
-            async with httpx.AsyncClient(timeout=30.0) as client:
+
+            if default_branch_name:
+                default_branch = default_branch_name
+            else:
+                repo_info_data = await self.get_repository_info(repo_url)
+                default_branch = repo_info_data.get('default_branch', 'main') if repo_info_data else 'main'
+
+            client = get_shared_async_client()
+            eff_per_page = max(1, min(int(per_page), 100))
+            eff_page = max(1, int(page))
+
+            if fetch_all:
+                max_pages = max(1, min(int(os.getenv("BRANCH_LIST_MAX_PAGES", "100")), 1000))
+                all_branches: List[Dict] = []
+                p = 1
+                pg_size = 100
                 while True:
                     response = await client.get(
                         f"{self.default_api_url}/repos/{owner}/{repo}/branches",
                         headers=self.headers,
-                        params={'per_page': per_page, 'page': page}
+                        params={'per_page': pg_size, 'page': p},
                     )
                     response.raise_for_status()
-                    branches = response.json()
-                    
-                    if not branches:
+                    batch = response.json()
+                    if not batch:
                         break
-                    
-                    all_branches.extend(branches)
-                    
-                    # Check Link header for pagination (GitHub uses Link headers)
-                    link_header = response.headers.get('Link', '')
-                    if 'rel="next"' not in link_header:
+                    all_branches.extend(batch)
+                    if 'rel="next"' not in response.headers.get('Link', ''):
                         break
-                    
-                    page += 1
-                    
-                    # Safety limit: prevent infinite loops
-                    if page > 1000:
-                        logger.warning(f"Reached pagination limit (1000 pages) for branches. Total branches fetched: {len(all_branches)}")
+                    p += 1
+                    if p > max_pages:
+                        logger.warning(
+                            "GitHub branch list stopped at BRANCH_LIST_MAX_PAGES=%s (~%s branches)",
+                            max_pages,
+                            len(all_branches),
+                        )
                         break
-                
-                logger.info(f"Fetched {len(all_branches)} branches from GitHub repository")
-                
-                # Format branch information
-                formatted_branches = []
-                for branch in all_branches:
-                    formatted_branches.append({
-                        'name': branch.get('name', ''),
-                        'default': branch.get('name') == default_branch,
-                        'protected': branch.get('protected', False),
-                        'commit_id': branch.get('commit', {}).get('sha', '')[:8] if branch.get('commit') else '',
-                        'commit_message': ''  # GitHub branches API doesn't include commit message
-                    })
-                
-                return formatted_branches
+                formatted = self._format_github_branch_rows(all_branches, default_branch)
+                if search:
+                    s = search.strip().lower()
+                    formatted = [b for b in formatted if s in b['name'].lower()]
+                logger.info("Fetched %s GitHub branches (fetch_all)", len(formatted))
+                return {
+                    "branches": formatted,
+                    "has_more": False,
+                    "page": 1,
+                    "per_page": len(formatted),
+                }
+
+            response = await client.get(
+                f"{self.default_api_url}/repos/{owner}/{repo}/branches",
+                headers=self.headers,
+                params={'per_page': eff_per_page, 'page': eff_page},
+            )
+            response.raise_for_status()
+            raw = response.json()
+            formatted = self._format_github_branch_rows(raw, default_branch)
+            if search:
+                s = search.strip().lower()
+                formatted = [b for b in formatted if s in b['name'].lower()]
+            has_more = 'rel="next"' in response.headers.get('Link', '')
+            return {
+                "branches": formatted,
+                "has_more": has_more,
+                "page": eff_page,
+                "per_page": eff_per_page,
+            }
         except httpx.HTTPStatusError as e:
             logger.error(f"GitHub API error listing branches: {e.response.status_code} - {e.response.text}")
-            return []
+            return {"branches": [], "has_more": False, "page": page, "per_page": per_page}
         except Exception as e:
             logger.error(f"Failed to list branches: {e}")
-            return []
-    
-    async def get_latest_commit(self, repo_url: str, branch: str = None) -> Optional[Dict]:
+            return {"branches": [], "has_more": False, "page": page, "per_page": per_page}
+
+    async def get_branch(self, repo_url: str, branch_name: str) -> Optional[Dict]:
+        """GET a single branch (inject default/selected when missing from a list page)."""
+        if not self.api_token or not (branch_name or "").strip():
+            return None
+        try:
+            ri = self.parse_github_url(repo_url)
+            owner, r = ri["owner"], ri["repo"]
+            enc = quote(str(branch_name).strip(), safe="")
+            client = get_shared_async_client()
+            response = await client.get(
+                f"{self.default_api_url}/repos/{owner}/{r}/branches/{enc}",
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.debug("GitHub get_branch %s: %s", branch_name, e)
+            return None
+
+    async def get_latest_commit(
+        self,
+        repo_url: str,
+        branch: str = None,
+        default_branch_hint: Optional[str] = None,
+    ) -> Optional[Dict]:
         """
         Get latest commit information.
         
         Args:
             repo_url: GitHub repository URL
-            branch: Branch name (if None, will try to get default branch from repo info)
+            branch: Branch name (if None, uses default_branch_hint or repo info)
+            default_branch_hint: Optional default branch from DB to skip an extra API call
             
         Returns:
             Commit information dictionary or None if failed
@@ -241,21 +300,23 @@ class GitHubService:
             owner = repo_info['owner']
             repo = repo_info['repo']
             
-            # If branch not specified, get default branch
             if branch is None:
-                repo_info_data = await self.get_repository_info(repo_url)
-                if repo_info_data:
-                    branch = repo_info_data.get('default_branch', 'main')
+                if default_branch_hint:
+                    branch = default_branch_hint
                 else:
-                    branch = 'main'
+                    repo_info_data = await self.get_repository_info(repo_url)
+                    if repo_info_data:
+                        branch = repo_info_data.get('default_branch', 'main')
+                    else:
+                        branch = 'main'
             
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(
-                    f"{self.default_api_url}/repos/{owner}/{repo}/commits/{branch}",
-                    headers=self.headers
-                )
-                response.raise_for_status()
-                return response.json()
+            client = get_shared_async_client()
+            response = await client.get(
+                f"{self.default_api_url}/repos/{owner}/{repo}/commits/{branch}",
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            return response.json()
         except httpx.HTTPStatusError as e:
             logger.error(f"GitHub API error: {e.response.status_code} - {e.response.text}")
             return None
@@ -284,54 +345,47 @@ class GitHubService:
             owner = repo_info['owner']
             repo = repo_info['repo']
             
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                # GitHub compare API
-                response = await client.get(
-                    f"{self.default_api_url}/repos/{owner}/{repo}/compare/{from_commit}...{to_commit}",
-                    headers=self.headers
-                )
-                response.raise_for_status()
-                compare_data = response.json()
-                
-                # Extract diff information
-                files = compare_data.get('files', [])
-                changed_files = [f.get('filename', '') for f in files]
-                
-                # Build unified diff text from individual file diffs
-                # GitHub patch format needs to be converted to full unified diff format
-                diff_content = []
-                for file_diff in files:
-                    filename = file_diff.get('filename', '')
-                    patch = file_diff.get('patch', '')
-                    status = file_diff.get('status', 'modified')  # added, removed, modified, renamed
-                    
-                    if patch:
-                        # Add proper diff header if not present
-                        if not patch.startswith('diff --git'):
-                            # Build proper unified diff header
-                            if status == 'added':
-                                diff_header = f"diff --git a/{filename} b/{filename}\nnew file mode 100644\nindex 0000000..{file_diff.get('sha', '1111111')[:7]}\n--- /dev/null\n+++ b/{filename}\n"
-                            elif status == 'removed':
-                                diff_header = f"diff --git a/{filename} b/{filename}\ndeleted file mode 100644\nindex {file_diff.get('sha', '1111111')[:7]}..0000000\n--- a/{filename}\n+++ /dev/null\n"
-                            else:
-                                diff_header = f"diff --git a/{filename} b/{filename}\nindex {file_diff.get('sha', '1111111')[:7]}..{file_diff.get('sha', '2222222')[:7]} 100644\n--- a/{filename}\n+++ b/{filename}\n"
-                            diff_content.append(diff_header + patch)
+            client = get_shared_async_client()
+            response = await client.get(
+                f"{self.default_api_url}/repos/{owner}/{repo}/compare/{from_commit}...{to_commit}",
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            compare_data = response.json()
+
+            files = compare_data.get('files', [])
+            changed_files = [f.get('filename', '') for f in files]
+
+            diff_content = []
+            for file_diff in files:
+                filename = file_diff.get('filename', '')
+                patch = file_diff.get('patch', '')
+                status = file_diff.get('status', 'modified')
+
+                if patch:
+                    if not patch.startswith('diff --git'):
+                        if status == 'added':
+                            diff_header = f"diff --git a/{filename} b/{filename}\nnew file mode 100644\nindex 0000000..{file_diff.get('sha', '1111111')[:7]}\n--- /dev/null\n+++ b/{filename}\n"
+                        elif status == 'removed':
+                            diff_header = f"diff --git a/{filename} b/{filename}\ndeleted file mode 100644\nindex {file_diff.get('sha', '1111111')[:7]}..0000000\n--- a/{filename}\n+++ /dev/null\n"
                         else:
-                            diff_content.append(patch)
-                
-                # Calculate stats
-                additions = sum(f.get('additions', 0) for f in files)
-                deletions = sum(f.get('deletions', 0) for f in files)
-                
-                return {
-                    "diff": '\n'.join(diff_content),
-                    "changed_files": [f for f in changed_files if f],  # Filter empty strings
-                    "stats": {
-                        "additions": additions,
-                        "deletions": deletions,
-                        "files_changed": len([f for f in changed_files if f])
-                    }
+                            diff_header = f"diff --git a/{filename} b/{filename}\nindex {file_diff.get('sha', '1111111')[:7]}..{file_diff.get('sha', '2222222')[:7]} 100644\n--- a/{filename}\n+++ b/{filename}\n"
+                        diff_content.append(diff_header + patch)
+                    else:
+                        diff_content.append(patch)
+
+            additions = sum(f.get('additions', 0) for f in files)
+            deletions = sum(f.get('deletions', 0) for f in files)
+
+            return {
+                "diff": '\n'.join(diff_content),
+                "changed_files": [f for f in changed_files if f],
+                "stats": {
+                    "additions": additions,
+                    "deletions": deletions,
+                    "files_changed": len([f for f in changed_files if f])
                 }
+            }
         except httpx.HTTPStatusError as e:
             logger.error(f"GitHub API error getting commit diff: {e.response.status_code} - {e.response.text}")
             return None
@@ -341,14 +395,20 @@ class GitHubService:
             logger.debug(traceback.format_exc())
             return None
     
-    async def get_latest_diff(self, repo_url: str, branch: str = None) -> Optional[Dict]:
+    async def get_latest_diff(
+        self,
+        repo_url: str,
+        branch: str = None,
+        default_branch_hint: Optional[str] = None,
+    ) -> Optional[Dict]:
         """
         Get diff for the latest commit on a branch using GitHub API.
         Compares latest commit with its parent.
         
         Args:
             repo_url: GitHub repository URL
-            branch: Branch name (if None, uses default branch)
+            branch: Branch name (if None, uses default_branch_hint or default branch)
+            default_branch_hint: Optional default branch from DB
             
         Returns:
             Dictionary with diff data, changed files, and stats, or None if failed
@@ -358,8 +418,9 @@ class GitHubService:
             return None
         
         try:
-            # Get latest commit
-            latest_commit = await self.get_latest_commit(repo_url, branch)
+            latest_commit = await self.get_latest_commit(
+                repo_url, branch, default_branch_hint=default_branch_hint
+            )
             if not latest_commit:
                 logger.warning("No latest commit found")
                 return None
@@ -376,55 +437,50 @@ class GitHubService:
                 repo_info = self.parse_github_url(repo_url)
                 owner = repo_info['owner']
                 repo = repo_info['repo']
-                
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    response = await client.get(
-                        f"{self.default_api_url}/repos/{owner}/{repo}/commits/{commit_sha}",
-                        headers=self.headers
-                    )
-                    response.raise_for_status()
-                    commit_data = response.json()
-                    
-                    # Process diff data
-                    files = commit_data.get('files', [])
-                    changed_files = [f.get('filename', '') for f in files]
-                    
-                    # Build unified diff text from individual file diffs
-                    diff_content = []
-                    for file_diff in files:
-                        filename = file_diff.get('filename', '')
-                        patch = file_diff.get('patch', '')
-                        status = file_diff.get('status', 'modified')
-                        
-                        if patch:
-                            # Add proper diff header if not present
-                            if not patch.startswith('diff --git'):
-                                if status == 'added':
-                                    diff_header = f"diff --git a/{filename} b/{filename}\nnew file mode 100644\nindex 0000000..{file_diff.get('sha', '1111111')[:7]}\n--- /dev/null\n+++ b/{filename}\n"
-                                elif status == 'removed':
-                                    diff_header = f"diff --git a/{filename} b/{filename}\ndeleted file mode 100644\nindex {file_diff.get('sha', '1111111')[:7]}..0000000\n--- a/{filename}\n+++ /dev/null\n"
-                                else:
-                                    diff_header = f"diff --git a/{filename} b/{filename}\nindex {file_diff.get('sha', '1111111')[:7]}..{file_diff.get('sha', '2222222')[:7]} 100644\n--- a/{filename}\n+++ b/{filename}\n"
-                                diff_content.append(diff_header + patch)
+
+                client = get_shared_async_client()
+                response = await client.get(
+                    f"{self.default_api_url}/repos/{owner}/{repo}/commits/{commit_sha}",
+                    headers=self.headers,
+                )
+                response.raise_for_status()
+                commit_data = response.json()
+
+                files = commit_data.get('files', [])
+                changed_files = [f.get('filename', '') for f in files]
+                diff_content = []
+                for file_diff in files:
+                    filename = file_diff.get('filename', '')
+                    patch = file_diff.get('patch', '')
+                    status = file_diff.get('status', 'modified')
+
+                    if patch:
+                        if not patch.startswith('diff --git'):
+                            if status == 'added':
+                                diff_header = f"diff --git a/{filename} b/{filename}\nnew file mode 100644\nindex 0000000..{file_diff.get('sha', '1111111')[:7]}\n--- /dev/null\n+++ b/{filename}\n"
+                            elif status == 'removed':
+                                diff_header = f"diff --git a/{filename} b/{filename}\ndeleted file mode 100644\nindex {file_diff.get('sha', '1111111')[:7]}..0000000\n--- a/{filename}\n+++ /dev/null\n"
                             else:
-                                diff_content.append(patch)
-                    
-                    additions = sum(f.get('additions', 0) for f in files)
-                    deletions = sum(f.get('deletions', 0) for f in files)
-                    
-                    return {
-                        "diff": '\n'.join(diff_content),
-                        "changed_files": [f for f in changed_files if f],
-                        "stats": {
-                            "additions": additions,
-                            "deletions": deletions,
-                            "files_changed": len([f for f in changed_files if f])
-                        }
+                                diff_header = f"diff --git a/{filename} b/{filename}\nindex {file_diff.get('sha', '1111111')[:7]}..{file_diff.get('sha', '2222222')[:7]} 100644\n--- a/{filename}\n+++ b/{filename}\n"
+                            diff_content.append(diff_header + patch)
+                        else:
+                            diff_content.append(patch)
+
+                additions = sum(f.get('additions', 0) for f in files)
+                deletions = sum(f.get('deletions', 0) for f in files)
+
+                return {
+                    "diff": '\n'.join(diff_content),
+                    "changed_files": [f for f in changed_files if f],
+                    "stats": {
+                        "additions": additions,
+                        "deletions": deletions,
+                        "files_changed": len([f for f in changed_files if f])
                     }
-            else:
-                # Compare with parent commit
-                parent_sha = parents[0].get('sha')
-                return await self.get_commit_diff(repo_url, parent_sha, commit_sha)
+                }
+
+            parent_sha = parents[0].get('sha')
+            return await self.get_commit_diff(repo_url, parent_sha, commit_sha)
                 
         except Exception as e:
             logger.error(f"Failed to get latest diff: {e}")

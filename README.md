@@ -6,7 +6,7 @@ A production-ready system for analyzing code changes and automatically selecting
 
 - **Multi-Provider Support**: Connect to GitHub and GitLab repositories via API (no cloning required)
 - **Test Analysis**: 8-step pipeline to analyze test repositories and extract metadata
-- **Test Selection**: AST-based and semantic search to identify relevant tests for code changes
+- **Test Selection**: Database (AST-style) linkage plus semantic (vector) search run together by default; results are merged, filtered, and optionally LLM-scored
 - **Web Platform**: Modern React frontend with FastAPI backend
 - **Vector Search**: Pinecone integration for semantic test matching
 
@@ -50,25 +50,27 @@ A production-ready system for analyzing code changes and automatically selecting
    ```
 
 2. **Set up environment variables**
-   ```bash
-   # Copy .env.example to .env and configure
-   cp .env.example .env
-   ```
-   
-   Required variables:
+
+   Create a `.env` file in the project root (or under `backend/` — the backend loads either). Typical variables:
+
    ```bash
    # GitHub (for GitHub repositories)
    GITHUB_API_TOKEN=your_token_here
-   
+
    # GitLab (for GitLab repositories)
    GITLAB_API_TOKEN=your_token_here
-   
+
    # Pinecone (for semantic search)
    PINECONE_API_KEY=your_key_here
    PINECONE_INDEX_NAME=test-embeddings
-   
-   # Database
-   DATABASE_URL=postgresql://user:password@localhost:5432/test_impact_analysis
+
+   # PostgreSQL (used by backend/deterministic/db_connection.py — not DATABASE_URL)
+   DB_HOST=localhost
+   DB_PORT=5432
+   DB_NAME=planon
+   DB_USER=your_user
+   DB_PASSWORD=your_password
+   DB_SCHEMA=planon1
    ```
 
 3. **Install backend dependencies**
@@ -114,9 +116,9 @@ sample_workflow/
 │   ├── api/               # FastAPI routes and models
 │   ├── services/          # Business logic (repository, analysis, selection)
 │   ├── test_analysis/     # Test analysis pipeline (8-step)
-│   ├── git_diff_processor/# Git diff parsing and AST-based test selection
-│   ├── semantic_retrieval/# Semantic search engine (Pinecone + Advanced RAG)
-│   ├── deterministic/     # Database loading scripts
+│   ├── git_diff_processor/# AST-based test selection (orchestration + merge)
+│   ├── deterministic/     # PostgreSQL layer + git diff parsing (parsing/)
+│   ├── semantic/          # Semantic / RAG (Pinecone, embeddings, prompts)
 │   ├── config/            # Application configuration
 │   ├── llm/               # LLM abstraction layer (OpenAI/Gemini/Ollama)
 │   ├── parsers/           # Code parsers (Tree-sitter)
@@ -151,9 +153,10 @@ sample_workflow/
 
 ### 4. Select Tests
 
-- Click "Test Selection" button
-- System matches code changes against tests
-- Results show selected tests with AST and semantic matches
+- Click "Test Selection" (or equivalent) after a diff is available
+- The backend parses the diff, queries the **test analysis database** (function/class/module links), and runs **semantic search** over embeddings when enabled
+- Multiple bound test repos are supported: AST-style lookups can run across each bound schema and merge
+- The API response can include `selectionFunnel`, `coverage_gaps`, `dead_zone_result`, and `rag_diagnostics` to explain what ran (including advisory flags when changed files have no DB linkage yet)
 
 ## Configuration
 

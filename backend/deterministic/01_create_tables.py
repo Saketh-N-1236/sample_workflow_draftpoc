@@ -25,11 +25,13 @@ Run this script:
 import sys
 from pathlib import Path
 
-# Add current directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+_det = Path(__file__).resolve().parent
+_backend = _det.parent
+sys.path.insert(0, str(_backend))
+sys.path.insert(0, str(_det))
 
 from db_connection import get_connection, test_connection, get_db_config
-from utils.output_formatter import print_header, print_section, print_item
+from test_analysis.utils.output_formatter import print_header, print_section, print_item
 import os
 from dotenv import load_dotenv
 from pathlib import Path
@@ -525,27 +527,25 @@ def create_selection_audit_log_table(conn, schema: str = None):
         print(f"  - Indexes: repository_id, timestamp")
 
 
-def create_java_reflection_calls_table(conn, schema: str):
-    """Create java_reflection_calls table for Java reflection usage tracking."""
+def create_java_reflection_table(conn, schema: str):
+    """Create java_reflection table for Java reflection usage tracking."""
     with conn.cursor() as cursor:
-        cursor.execute(f"DROP TABLE IF EXISTS {schema}.java_reflection_calls CASCADE")
+        cursor.execute(f"DROP TABLE IF EXISTS {schema}.java_reflection CASCADE")
         cursor.execute(f"""
-            CREATE TABLE {schema}.java_reflection_calls (
+            CREATE TABLE {schema}.java_reflection (
                 id SERIAL PRIMARY KEY,
                 test_id VARCHAR(50) NOT NULL,
-                reflection_method VARCHAR(255),
+                reflection_type VARCHAR(255),
                 target_class TEXT,
                 target_method TEXT,
-                target_field TEXT,
-                line_number INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (test_id) REFERENCES {schema}.test_registry(test_id) ON DELETE CASCADE
             )
         """)
-        cursor.execute(f"CREATE INDEX idx_java_reflection_test ON {schema}.java_reflection_calls(test_id)")
-        cursor.execute(f"CREATE INDEX idx_java_reflection_target ON {schema}.java_reflection_calls(target_class)")
+        cursor.execute(f"CREATE INDEX idx_java_reflection_test ON {schema}.java_reflection(test_id)")
+        cursor.execute(f"CREATE INDEX idx_java_reflection_target ON {schema}.java_reflection(target_class)")
         conn.commit()
-        print(f"[OK] Created table: {schema}.java_reflection_calls")
+        print(f"[OK] Created table: {schema}.java_reflection")
 
 
 def create_java_di_fields_table(conn, schema: str):
@@ -558,8 +558,7 @@ def create_java_di_fields_table(conn, schema: str):
                 test_id VARCHAR(50) NOT NULL,
                 field_name VARCHAR(255),
                 field_type TEXT,
-                injection_type VARCHAR(50),
-                annotation_names TEXT[],
+                annotation VARCHAR(255),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (test_id) REFERENCES {schema}.test_registry(test_id) ON DELETE CASCADE
             )
@@ -579,16 +578,14 @@ def create_java_annotations_table(conn, schema: str):
                 id SERIAL PRIMARY KEY,
                 test_id VARCHAR(50) NOT NULL,
                 annotation_name VARCHAR(255),
-                annotation_attributes JSONB,
-                target_type VARCHAR(50),
+                annotation_args TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (test_id) REFERENCES {schema}.test_registry(test_id) ON DELETE CASCADE,
-                UNIQUE(test_id, annotation_name, target_type)
+                UNIQUE(test_id, annotation_name)
             )
         """)
         cursor.execute(f"CREATE INDEX idx_java_ann_test ON {schema}.java_annotations(test_id)")
         cursor.execute(f"CREATE INDEX idx_java_ann_name ON {schema}.java_annotations(annotation_name)")
-        cursor.execute(f"CREATE INDEX idx_java_ann_attrs ON {schema}.java_annotations USING GIN (annotation_attributes)")
         conn.commit()
         print(f"[OK] Created table: {schema}.java_annotations")
 
@@ -603,7 +600,7 @@ def create_python_fixtures_table(conn, schema: str):
                 test_id VARCHAR(50) NOT NULL,
                 fixture_name VARCHAR(255),
                 fixture_scope VARCHAR(50),
-                fixture_type VARCHAR(50),
+                fixture_params TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (test_id) REFERENCES {schema}.test_registry(test_id) ON DELETE CASCADE
             )
@@ -719,8 +716,8 @@ def create_all_tables_in_schema(conn, schema: str, schema_definition=None):
         # Java tables
         if schema_definition.java_tables:
             print(f"Creating {len(schema_definition.java_tables)} Java-specific tables...")
-            if 'java_reflection_calls' in schema_definition.java_tables:
-                create_java_reflection_calls_table(conn, schema)
+            if 'java_reflection' in schema_definition.java_tables:
+                create_java_reflection_table(conn, schema)
             if 'java_di_fields' in schema_definition.java_tables:
                 create_java_di_fields_table(conn, schema)
             if 'java_annotations' in schema_definition.java_tables:

@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-03-13T14:32:39.787498",
+  "generated_at": "2026-03-17T19:01:28.268687",
   "data": {
-    "total_tests": 386,
+    "total_tests": 0,
     "tests_with_function_calls": 0,
     "total_mappings": 0,
-    "average_mappings_per_test": 0.0,
+    "average_mappings_per_test": 0,
     "test_function_mappings": []
   }
 }

@@ -325,6 +325,16 @@ def create_test_repository(
     extract_dir = TEST_REPO_DATA_DIR / hash_value[:8]
     extracted_path = extract_zip_file(zip_file_path, extract_dir)
     
+    # Normalize path: Convert to absolute and resolve
+    extracted_path = Path(extracted_path).resolve()
+    
+    # Store as absolute path (more reliable across different working directories)
+    stored_path = str(extracted_path)
+    
+    # Validate that the path exists before storing
+    if not extracted_path.exists():
+        raise Exception(f"Extracted path does not exist after extraction: {extracted_path}")
+    
     # Generate schema name
     schema_name = generate_schema_name(hash_value)
     
@@ -345,7 +355,7 @@ def create_test_repository(
                 test_repo_id,
                 name,
                 zip_filename or zip_file_path.name,
-                str(extracted_path),
+                stored_path,
                 hash_value,
                 'pending',
                 datetime.now()
@@ -625,4 +635,30 @@ def update_test_repository_status(test_repo_id: str, status: str) -> bool:
             """, (status, datetime.now() if status == 'ready' else None, test_repo_id))
             conn.commit()
     
+    return True
+
+
+def update_extracted_path(test_repo_id: str, new_path: str) -> bool:
+    """
+    Update the extracted_path for a test repository.
+    
+    Used for path recovery when the stored path doesn't exist.
+    
+    Args:
+        test_repo_id: ID of the test repository
+        new_path: New extracted path to store
+        
+    Returns:
+        True if successful
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(f"""
+                UPDATE {DB_SCHEMA}.test_repositories
+                SET extracted_path = %s
+                WHERE id = %s
+            """, (new_path, test_repo_id))
+            conn.commit()
+    
+    logger.info(f"Updated extracted_path for test_repo_id={test_repo_id} to {new_path}")
     return True

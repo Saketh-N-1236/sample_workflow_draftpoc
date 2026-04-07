@@ -85,7 +85,7 @@ def verify_indexing_completeness(test_repo_path: str, conn=None) -> Dict[str, An
                 # Try to resolve the path
                 resolved = Path(p).resolve()
                 indexed_paths_normalized.add(str(resolved))
-            except:
+            except Exception:
                 # If resolution fails, use as-is (might be relative)
                 indexed_paths_normalized.add(str(Path(p)))
         

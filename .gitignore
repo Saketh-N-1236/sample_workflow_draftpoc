@@ -209,7 +209,7 @@ marimo/_lsp/
 __marimo__/
 
 # ChromaDB data directory
-semantic_retrieval/chromadb_data/
+semantic/chromadb_data/
 
 # Tree-sitter build artifacts
 tree-sitter-*/

@@ -19,12 +19,14 @@ Run this script:
 import sys
 from pathlib import Path
 
-# Add current directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+_det = Path(__file__).resolve().parent
+_backend = _det.parent
+sys.path.insert(0, str(_backend))
+sys.path.insert(0, str(_det))
 
 from db_connection import get_connection, test_connection, get_db_config
 from utils.db_helpers import count_table_records, get_tests_for_production_class
-from utils.output_formatter import print_header, print_section, print_item
+from test_analysis.utils.output_formatter import print_header, print_section, print_item
 import os
 from dotenv import load_dotenv
 from pathlib import Path

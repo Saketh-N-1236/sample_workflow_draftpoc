@@ -37,6 +37,13 @@ DEFAULT_TEST_FILE_PATTERNS = {
     '.rb':   [r'.*_spec\.rb$', r'.*_test\.rb$'],
     '.go':   [r'.*_test\.go$'],
     '.cs':   [r'.*Test\.cs$', r'.*Tests\.cs$'],
+    '.c':    [r'test_.*\.c$', r'.*_test\.c$', r'.*_tests\.c$'],
+    '.h':    [r'test_.*\.h$', r'.*_test\.h$'],
+    '.cpp':  [r'.*_test\.cpp$', r'.*_test\.cc$', r'test_.*\.cpp$', r'.*Test\.cpp$', r'.*Tests\.cpp$'],
+    '.cc':   [r'.*_test\.cc$', r'test_.*\.cc$'],
+    '.cxx':  [r'.*_test\.cxx$', r'test_.*\.cxx$'],
+    '.hpp':  [r'.*_test\.hpp$', r'test_.*\.hpp$'],
+    '.hh':   [r'.*_test\.hh$'],
 }
 
 # Flatten for backward compatibility

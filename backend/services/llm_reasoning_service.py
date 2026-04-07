@@ -74,7 +74,8 @@ class LLMReasoningService:
         
         # Limit to top N candidates
         candidates_to_assess = test_candidates[:top_n]
-        
+        _max_tokens = min(12000, 2000 + top_n * 280)
+
         try:
             # Build prompt
             prompt = self._build_relevance_prompt(diff_content, candidates_to_assess)
@@ -84,7 +85,17 @@ class LLMReasoningService:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert software testing assistant. You MUST respond with valid JSON containing assessments for ALL test cases provided. Do not omit any tests, even if they have low relevance scores. Your response must be a valid JSON object starting with { and ending with }. NEVER return an empty assessments array - always provide scores for all tests, even if they are low (0.1-0.3)."
+                        "content": (
+                            "You are an expert in mapping code changes to tests. "
+                            "Score how likely each test needs to run given the diff — either because it directly "
+                            "exercises the new/changed code, OR because it guards existing behavior in the same "
+                            "file that could be broken by the change (regression guard). "
+                            "Penalize same-domain-but-different-FILE matches (semantic false positives). "
+                            "Never penalize same-file tests just because they test a different action/method "
+                            "than the one that changed — those are regression guards and should score 0.70+. "
+                            "You MUST return valid JSON with an assessment for EVERY test id provided. "
+                            "Never return an empty assessments array."
+                        ),
                     },
                     {
                         "role": "user",
@@ -92,7 +103,7 @@ class LLMReasoningService:
                     }
                 ],
                 temperature=0.2,  # Lower temperature for more consistent scoring
-                max_tokens=8000  # Increased to handle 20 tests with full explanations
+                max_tokens=_max_tokens,
             )
             
             response = await self.llm_provider.chat_completion(request)
@@ -146,28 +157,55 @@ class LLMReasoningService:
         # Build a more explicit prompt that requires all tests to be assessed
         test_ids_list = [f'"{test.get("test_id", "unknown")}"' for test in test_candidates]
         
-        prompt = f"""You are analyzing code changes and must assess the relevance of {len(test_candidates)} test cases.
+        prompt = f"""You are analyzing **production code changes** and must score {len(test_candidates)} **test** candidates.
 
-Code Changes (Git Diff):
+## Code changes (git diff)
 ```
 {truncated_diff}
 ```
 
-Test Cases to Assess (YOU MUST ASSESS ALL {len(test_candidates)} TESTS):
+## Tests to score (assess ALL {len(test_candidates)} — none may be omitted)
 {chr(10).join(test_list)}
 
-CRITICAL INSTRUCTIONS:
-1. You MUST provide an assessment for EVERY SINGLE test case listed above ({len(test_candidates)} total)
-2. Do NOT omit any tests, even if they seem unrelated
-3. For each test, provide a relevance score from 0.0 to 1.0:
-   - 0.0-0.2: Very low relevance (test is unrelated to changes)
-   - 0.3-0.5: Low to medium relevance (test may be tangentially related)
-   - 0.6-0.8: High relevance (test is likely related to changes)
-   - 0.9-1.0: Very high relevance (test directly validates changed functionality)
-4. Provide a brief explanation (1-2 sentences) for each test
+## Scoring rubric (read carefully)
+Infer the **changed file paths and symbols** from the diff (added/removed/modified functions, classes, hooks, constants, reducer cases). You do not need a scenario name.
 
-IMPORTANT: Low scores (0.0-0.3) are VALID and REQUIRED. Do not skip tests just because they have low relevance.
-The scoring system needs scores for ALL tests to calculate confidence properly.
+**0.85 – 1.0 — Direct**
+The test almost certainly executes, imports, or asserts behavior of code in the **same files or symbols** that changed, OR it directly tests the **new symbol/feature** introduced in the diff.
+
+**0.70 – 0.84 — Regression guard (same file, different symbol)**
+The test covers **other behavior in the same changed file** (e.g. a different action in the same reducer, a different method in the same class, a different export from the same module).
+Even though the test does not directly test the new/changed symbol, it **must run** to confirm the change did not accidentally break existing behavior.
+→ Apply this band when: the test class/describe name or file path references the **same module** as the changed file (e.g. "paymentReducer" tests when `paymentReducer.js` changed).
+→ This is especially important for **additive diffs** (new case/method added, nothing removed).
+
+**0.55 – 0.69 — Strong indirect**
+The test targets a **named dependency** that appears in the diff (e.g. same helper, shared constant, or barrel import the diff edits) even if the test file path and class differ.
+
+**0.25 – 0.50 — Weak / thematic**
+Same **product area** (e.g. "auth", "checkout") but the test does **not** clearly reference the changed files/symbols. Typical semantic-search false positive.
+
+**0.0 – 0.20 — Unrelated**
+Different feature, different module, or only vague vocabulary overlap. The test would not be expected to fail from this diff.
+
+**Match type hints:**
+- If match reasons show `exact`, `function_level`, or `direct_file` → the static code analyser confirmed a dependency link. Treat this as strong evidence; score at least 0.55 unless the test is clearly in an unrelated file.
+- If match reasons show only `semantic` → be **extra skeptical**. Require explicit overlap with changed paths/symbols for scores above 0.35. Semantic matches can be vocabulary false positives (e.g. two different reducers that use similar words).
+
+## Retrieval context
+These candidates were already retrieved by embedding search and static analysis; this step scores **what you are given**.
+- **Semantic false positives** (same domain, different file) are expected — penalize them.
+- **Regression guards** (same file, different symbol) are expected and valuable — reward them.
+- **False positive (scoring)** = giving a high score to a test in a **completely different file/module**.
+- **False negative (scoring)** = giving a low score to a test that **covers the same file/module** as the diff.
+
+## Rules
+1. One assessment per test id; **never** omit a test.
+2. Uncertainty bias differs by match type:
+   - **AST-confirmed** (match reasons: exact/function_level/direct_file): when uncertain → score **≥ 0.55**. The static analyser already confirmed a code link; trust that evidence.
+   - **Semantic-only** (match reasons: only semantic/colocated): when uncertain → score **≤ 0.35**. Semantic similarity alone can be misleading.
+3. One short explanation per test (what overlaps or why it misses the diff).
+4. For **additive diffs** (diff only adds new code, nothing removed): all tests for the changed file are regression guards even if they test pre-existing behavior — score them 0.70+.
 
 You MUST return a JSON object with exactly {len(test_candidates)} assessments. The JSON must have this structure:
 
@@ -303,24 +341,19 @@ CRITICAL: Do NOT return an empty assessments array {{"assessments": []}}. Even i
                 logger.error(f"Original content length: {len(content)}")
                 logger.error(f"Original content (first 1000 chars): {content[:1000]}")
                 raise
-            assessments = data.get('assessments', [])
-            
-            # Validate that we got assessments
-            if not assessments or len(assessments) == 0:
-                logger.error(f"LLM returned empty assessments array. Expected {len(test_candidates)} assessments.")
-                logger.error(f"LLM response content (first 1000 chars): {content[:1000]}")
-                logger.error(f"Parsed JSON data: {data}")
-                # This is a critical issue - LLM should assess all tests
-                # Create default assessments with low scores as fallback
-                logger.warning(f"Creating fallback assessments with default low scores for all {len(test_candidates)} tests")
-                for test in test_candidates:
-                    test_id = test.get('test_id')
-                    assessments.append({
-                        'test_id': test_id,
-                        'score': 0.2,  # Default low score
-                        'explanation': f'LLM returned empty response - assigned default low relevance score'
-                    })
-            
+            assessments = data.get("assessments", [])
+
+            if not assessments:
+                logger.error(
+                    "LLM returned empty assessments array. Expected %s assessments; "
+                    "using llm_score=0 for candidates (no synthetic scores).",
+                    len(test_candidates),
+                )
+                logger.error(
+                    "LLM response content (first 1000 chars): %s", content[:1000]
+                )
+                logger.error("Parsed JSON data: %s", data)
+
             # Create a map of test_id -> assessment
             assessment_map = {}
             for assessment in assessments:

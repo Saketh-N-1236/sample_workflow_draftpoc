@@ -99,6 +99,11 @@ class Settings(BaseSettings):
     inference_log_db_path: str = "./data/inference_logs.db"
 
 
+# One-time warnings/logs so scripts and API don't flood logs
+_env_warning_logged = False
+_config_info_logged = False
+
+
 def get_settings() -> Settings:
     """Get settings instance.
     
@@ -113,6 +118,7 @@ def get_settings() -> Settings:
     Returns:
         Settings instance
     """
+    global _env_warning_logged
     import logging
     import os
     from pathlib import Path
@@ -135,9 +141,12 @@ def get_settings() -> Settings:
             env_file = cwd_env_file
             logger.info(f"Found .env file in current working directory: {env_file}")
         else:
-            logger.warning(f".env file not found at project root ({project_root / '.env'}) or current directory ({cwd_env_file})")
-            logger.warning(f"  Project root: {project_root}")
-            logger.warning(f"  Current working directory: {os.getcwd()}")
+            if not _env_warning_logged:
+                _env_warning_logged = True
+                logger.warning(
+                    f".env file not found at project root ({project_root / '.env'}) or current directory ({cwd_env_file}). "
+                    f"Using defaults and environment variables. Project root: {project_root}"
+                )
             env_file = None
     
     # Load .env file explicitly to ensure it's found regardless of working directory
@@ -159,15 +168,17 @@ def get_settings() -> Settings:
     # We've already loaded .env into os.environ, so Settings() will pick it up
     settings = Settings()
     
-    # Log configuration summary (only on first call or when changed)
-    model_display = settings.model_name or f"{settings.llm_provider} default"
-    embedding_model_display = settings.embedding_model_name or f"{settings.embedding_provider} default"
-    
-    logger.info(
-        f"Configuration: LLM Provider={settings.llm_provider.upper()}, "
-        f"Model={model_display}, "
-        f"Embedding Provider={settings.embedding_provider.upper()}, "
-        f"Embedding Model={embedding_model_display}"
-    )
-    
+    # Log configuration summary only once to avoid log spam when get_settings() is called repeatedly
+    global _config_info_logged
+    if not _config_info_logged:
+        _config_info_logged = True
+        model_display = settings.model_name or f"{settings.llm_provider} default"
+        embedding_model_display = settings.embedding_model_name or f"{settings.embedding_provider} default"
+        logger.info(
+            f"Configuration: LLM Provider={settings.llm_provider.upper()}, "
+            f"Model={model_display}, "
+            f"Embedding Provider={settings.embedding_provider.upper()}, "
+            f"Embedding Model={embedding_model_display}"
+        )
+
     return settings

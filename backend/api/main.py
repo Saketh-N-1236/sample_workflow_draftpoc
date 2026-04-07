@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s [%(name)s] %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
@@ -48,6 +48,15 @@ app = FastAPI(
     description="API for test impact analysis and test selection",
     version="1.0.0"
 )
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    try:
+        from services.http_client import close_shared_async_client
+        await close_shared_async_client()
+    except Exception as e:
+        logger.warning(f"Could not close shared HTTP client: {e}")
 
 
 @app.on_event("startup")

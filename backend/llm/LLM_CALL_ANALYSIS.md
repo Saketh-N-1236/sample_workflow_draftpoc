@@ -11,25 +11,24 @@ This document provides a complete breakdown of all LLM calls in the system, incl
 
 ## LLM Chat Completion Calls
 
-### 1. Query Understanding (Advanced RAG)
-**Location**: `semantic_retrieval/advanced_rag/query_understanding.py`
+### 1. Git diff summary (Advanced RAG, optional)
+**Location**: `semantic/prompts/diff_summarizer.py` (used from `semantic/retrieval/rag_pipeline.py`)
 
-- **Calls**: 1 time (if Advanced RAG enabled AND Query Rewriting enabled)
-- **Max Tokens**: 4,000
-- **Purpose**: Analyze code change intent and extract related concepts
-- **When**: Step 1 of Advanced RAG pipeline
+- **Calls**: 0–1 time (LLM summarizes the diff; kept only if cosine similarity vs raw diff ≥ validation threshold)
+- **Max Tokens**: (model-dependent; summarization call)
+- **Purpose**: Richer “original query” for semantic search than static change description alone
+- **When**: Before query rewriting, when `diff_content` is present
 
 **Calculation**:
-- Best case: 0 calls (Query Rewriting disabled)
-- Average case: 1 call
-- Worst case: 1 call
+- Best case: 0 calls (no diff text or summarization skipped / fails)
+- Average case: 0–1 call
 
 ---
 
-### 2. Query Rewriting (Advanced RAG)
-**Location**: `semantic_retrieval/advanced_rag/query_rewriter.py`
+### 2. Query Rewriting (unified RAG)
+**Location**: `semantic/prompts/query_rewriter.py` (called from `semantic/retrieval/rag_pipeline.py`)
 
-- **Calls**: 1 time (if Advanced RAG enabled AND Query Rewriting enabled)
+- **Calls**: 1 time per selection (mandatory in unified RAG; no disable flag)
 - **Max Tokens**: 1,500
 - **Purpose**: Generate multiple query variations from different perspectives
 - **When**: Step 2 of Advanced RAG pipeline
@@ -41,33 +40,8 @@ This document provides a complete breakdown of all LLM calls in the system, incl
 
 ---
 
-### 3. LLM Re-ranking (Advanced RAG)
-**Location**: `semantic_retrieval/advanced_rag/reranker.py`
-
-- **Calls**: Variable (batches of 50 candidates)
-- **Max Tokens**: Dynamic calculation
-  - Formula: `min(max(len(batch) * 120 + 2000, 4000), 32000)`
-  - Minimum: 4,000 tokens
-  - Maximum: 32,000 tokens (model limit)
-- **Purpose**: Re-rank semantic search candidates by relevance
-- **When**: Step 4 of Advanced RAG pipeline (if Re-ranking enabled)
-
-**Dynamic Calculation**:
-- Batch size: 50 candidates per batch
-- Formula: `min(max(len(batch) * 120 + 2000, 4000), 32000)`
-- Per batch (50 candidates): `min(max(50 * 120 + 2000, 4000), 32000) = min(8000, 32000) = 8,000 tokens`
-- For 200 candidates: 4 batches × 8,000 = 32,000 tokens total
-- For 100 candidates: 2 batches × 8,000 = 16,000 tokens total
-
-**Calculation**:
-- Best case: 0 calls (Re-ranking disabled)
-- Average case: 1-2 batches (50-100 candidates) = 1-2 calls × 8,000 = 8,000-16,000 tokens
-- Worst case: 4 batches (200 candidates) = 4 calls × 8,000 = 32,000 tokens
-
----
-
-### 4. LLM Reasoning (Test Relevance Assessment)
-**Location**: `web_platform/services/llm_reasoning_service.py`
+### 3. LLM Reasoning (Test Relevance Assessment)
+**Location**: `services/llm_reasoning_service.py`
 
 - **Calls**: 1 time (always, if LLM reasoning enabled)
 - **Max Tokens**: 8,000
@@ -84,7 +58,7 @@ This document provides a complete breakdown of all LLM calls in the system, incl
 ## Embedding Generation Calls
 
 ### 5. Embedding Generation (Test Analysis Phase)
-**Location**: `semantic_retrieval/embedding_generator.py`
+**Location**: `semantic/embedding_generation/embedding_generator.py`
 
 - **Calls**: N times (one per test file in repository)
 - **Max Tokens**: N/A (embeddings don't use max_tokens)
@@ -98,48 +72,34 @@ This document provides a complete breakdown of all LLM calls in the system, incl
 
 ---
 
-### 6. Query Embedding (Basic Semantic Search)
-**Location**: `semantic_retrieval/semantic_search.py`
+### 6. Validation embeddings (unified RAG — summary only)
+**Location**: `semantic/retrieval/validation.py` (used from `rag_pipeline.py`)
 
-- **Calls**: 1 time (if using basic semantic search)
-- **Max Tokens**: N/A (embeddings don't use max_tokens)
-- **Purpose**: Generate embedding for the change description
-- **When**: Basic semantic search (non-Advanced RAG)
-
-**Calculation**:
-- Best case: 0 calls (if using Advanced RAG)
-- Average case: 1 call
-- Worst case: 1 call
+- **Calls**: Embed `diff_content` plus one embedding for the LLM summary text (when summarizing the diff)
+- **Purpose**: Cosine gate: accept or reject the diff summary vs raw diff (`GIT_DIFF_SUMMARY_VALIDATION_THRESHOLD`)
+- **When**: Only when `diff_content` is present and a non-empty summary is returned — **not** applied to rewritten queries
 
 ---
 
-### 7. Multi-Query Embeddings (Advanced RAG)
-**Location**: `semantic_retrieval/advanced_rag/advanced_semantic_search.py`
+### 7. Multi-Query Embeddings (unified RAG retrieval)
+**Location**: `semantic/retrieval/rag_pipeline.py` (`_vector_search_queries`)
 
-- **Calls**: N times (one per query variation)
+- **Calls**: One embedding per rewriter output (typically 2–4; all non-empty strings)
 - **Max Tokens**: N/A (embeddings don't use max_tokens)
-- **Purpose**: Generate embeddings for each query variation
-- **When**: Step 3 of Advanced RAG pipeline
+- **Purpose**: Pinecone search per variation; results merged
+- **When**: After mandatory query rewriting (no post-rewrite cosine filter)
 
 **Calculation**:
-- Best case: 1 call (Query Rewriting disabled, only original query)
-- Average case: 3-5 calls (1 original + 2-4 variations)
-- Worst case: 6 calls (1 original + 5 variations)
+- Typical: 2–4 calls (one per query variation from `QueryRewriterService`)
+- Lenient fallback: 1 call (`RAG_LENIENT_FALLBACK=1`) if the rewriter returns fewer than 2 queries
 
 ---
 
-### 8. Multi-Query Embeddings (Basic Multi-Query Search)
-**Location**: `semantic_retrieval/semantic_search.py` - `find_tests_semantic_multi_query`
+### 8. Legacy `find_tests_semantic_with_multi_queries` (unused by default path)
+**Location**: `semantic/retrieval/multi_query_search.py`
 
-- **Calls**: 3 times (function query, module query, rich query)
-- **Max Tokens**: N/A (embeddings don't use max_tokens)
-- **Purpose**: Generate embeddings for different query perspectives
-- **When**: Multi-query semantic search (non-Advanced RAG)
-
-**Calculation**:
-- Best case: 0 calls (if using Advanced RAG or single query)
-- Average case: 3 calls
-- Worst case: 3 calls
+- **Status**: Not used by `find_tests_semantic` after unified RAG; kept for optional tooling.
+- **Calls**: N/A for normal API selection flow (use section 7 instead).
 
 ---
 
@@ -162,7 +122,7 @@ This document provides a complete breakdown of all LLM calls in the system, incl
 ### Scenario 2: Advanced RAG (All Features Enabled)
 
 **LLM Chat Completions**:
-- Query Understanding: 1 call × 4,000 = **4,000 tokens**
+- Diff summary (optional LLM): 1 call × 4,000 = **4,000 tokens**
 - Query Rewriting: 1 call × 1,500 = **1,500 tokens**
 - LLM Re-ranking: 2-4 calls × 8,000 = **16,000-32,000 tokens** (average: 2 batches)
 - LLM Reasoning: 1 call × 8,000 = **8,000 tokens**
@@ -178,7 +138,7 @@ This document provides a complete breakdown of all LLM calls in the system, incl
 ### Scenario 3: Advanced RAG (Query Rewriting Disabled)
 
 **LLM Chat Completions**:
-- Query Understanding: 0 calls (skipped)
+- Diff summary (optional LLM): 0 calls (skipped)
 - Query Rewriting: 0 calls (disabled)
 - LLM Re-ranking: 2-4 calls × 8,000 = **16,000-32,000 tokens**
 - LLM Reasoning: 1 call × 8,000 = **8,000 tokens**
@@ -194,7 +154,7 @@ This document provides a complete breakdown of all LLM calls in the system, incl
 ### Scenario 4: Advanced RAG (Re-ranking Disabled)
 
 **LLM Chat Completions**:
-- Query Understanding: 1 call × 4,000 = **4,000 tokens**
+- Diff summary (optional LLM): 1 call × 4,000 = **4,000 tokens**
 - Query Rewriting: 1 call × 1,500 = **1,500 tokens**
 - LLM Re-ranking: 0 calls (disabled)
 - LLM Reasoning: 1 call × 8,000 = **8,000 tokens**
@@ -211,7 +171,7 @@ This document provides a complete breakdown of all LLM calls in the system, incl
 
 | Component | Calls | Max Tokens/Call | Total Max Tokens |
 |-----------|-------|-----------------|------------------|
-| **Query Understanding** | 0-1 | 4,000 | 0-4,000 |
+| **Diff summary (LLM)** | 0-1 | (varies) | (varies) |
 | **Query Rewriting** | 0-1 | 1,500 | 0-1,500 |
 | **LLM Re-ranking** | 0-4 | 8,000 | 0-32,000 |
 | **LLM Reasoning** | 0-1 | 8,000 | 0-8,000 |
@@ -236,7 +196,7 @@ This document provides a complete breakdown of all LLM calls in the system, incl
 - Re-ranking: 2 batches (100 candidates)
 - Query Variations: 3-4 queries
 - **Total Calls**: 5 chat completions
-  - Query Understanding: 1 × 4,000 = 4,000
+  - Diff summary (optional LLM): 1 × 4,000 = 4,000
   - Query Rewriting: 1 × 1,500 = 1,500
   - LLM Re-ranking: 2 × 8,000 = 16,000
   - LLM Reasoning: 1 × 8,000 = 8,000
@@ -251,7 +211,7 @@ This document provides a complete breakdown of all LLM calls in the system, incl
 - Re-ranking: 4 batches (200 candidates)
 - Query Variations: 5 queries
 - **Total Calls**: 7 chat completions
-  - Query Understanding: 1 × 4,000 = 4,000
+  - Diff summary (optional LLM): 1 × 4,000 = 4,000
   - Query Rewriting: 1 × 1,500 = 1,500
   - LLM Re-ranking: 4 × 8,000 = 32,000
   - LLM Reasoning: 1 × 8,000 = 8,000
@@ -276,7 +236,7 @@ Embeddings don't use `max_tokens` (they're not chat completions), but here's the
 ## Key Insights
 
 1. **LLM Re-ranking is the largest token consumer**: Up to 32,000 tokens (4 batches × 8,000)
-2. **Query Understanding and Rewriting are fixed**: 4,000 + 1,500 = 5,500 tokens total
+2. **Diff summary (optional LLM) and Rewriting are fixed**: 4,000 + 1,500 = 5,500 tokens total
 3. **LLM Reasoning is consistent**: Always 8,000 tokens (if enabled)
 4. **Embeddings are lightweight**: No token limits, but many API calls
 5. **Total system max tokens**: 0-45,500 tokens per test selection run
@@ -286,6 +246,6 @@ Embeddings don't use `max_tokens` (they're not chat completions), but here's the
 ## Recommendations
 
 1. **Monitor token usage**: Track actual usage vs. max_tokens to optimize
-2. **Batch size tuning**: Adjust reranker batch size (currently 50) based on performance
-3. **Conditional calls**: Skip Query Understanding if Query Rewriting is disabled (already implemented)
-4. **Caching**: Consider caching query understanding/rewriting results for similar diffs
+2. **Query variations**: Tune num_query_variations based on diff complexity
+3. **Conditional calls**: Disable query rewriting via `semantic_config` / env when you want fewer LLM calls
+4. **Caching**: Consider caching diff summaries / rewritten queries for similar diffs

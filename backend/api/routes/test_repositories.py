@@ -408,20 +408,27 @@ async def get_test_repository_analysis(test_repo_id: str):
             results['totalTestClasses'] = results['test_registry'].get('total_classes', 0)
             results['totalTestMethods'] = results['totalTests']
         
-        if results.get('test_files'):
-            test_files_data = results['test_files']
-            results['testFiles'] = test_files_data.get('total_files', 0)
-        
-        # Calculate modules from test registry (unique packages)
+        # TEST FILES — read from test_registry (total_files already computed above)
         if results.get('test_registry'):
+            results['testFiles'] = results['test_registry'].get('total_files', 0)
+        elif results.get('test_files'):
+            # Legacy fallback (JSON-based pipelines)
+            results['testFiles'] = results['test_files'].get('total_files', 0)
+
+        # MODULES — use reverse_index production classes (most accurate)
+        if results.get('reverse_index'):
+            results['modulesIdentified'] = results['reverse_index'].get('total_production_classes', 0)
+        elif results.get('test_registry'):
+            # Fallback: count unique source directories as a proxy for modules
             tests = results['test_registry'].get('tests', [])
-            # Count unique packages/modules
-            packages = set()
+            dirs: set = set()
             for test in tests:
-                pkg = test.get('package', '')
-                if pkg:
-                    packages.add(pkg)
-            results['modulesIdentified'] = len(packages)
+                fp = test.get('file_path', '')
+                if fp:
+                    parent = str(Path(fp).parent)
+                    if parent not in ('.', ''):
+                        dirs.add(parent)
+            results['modulesIdentified'] = len(dirs)
         
         if results.get('static_dependencies'):
             deps = results['static_dependencies'].get('dependencies', {})
@@ -482,6 +489,21 @@ async def get_test_repository_analysis(test_repo_id: str):
             results['framework'] = results['framework_detection'].get('framework') or \
                                  results['framework_detection'].get('primary_framework') or \
                                  results['framework_detection'].get('detected_framework', 'unknown')
+
+        # FRAMEWORK fallback — derive from the primary language stored in test_registry
+        if results['framework'] == 'unknown' and results.get('test_registry'):
+            _tests_list = results['test_registry'].get('tests', [])
+            if _tests_list:
+                from collections import Counter as _Counter
+                _lang_counts = _Counter(t.get('language', '') for t in _tests_list if t.get('language'))
+                _primary_lang = _lang_counts.most_common(1)[0][0] if _lang_counts else ''
+                _FRAMEWORK_DEFAULTS = {
+                    'java': 'JUnit5',
+                    'python': 'pytest',
+                    'javascript': 'Jest',
+                    'typescript': 'Jest',
+                }
+                results['framework'] = _FRAMEWORK_DEFAULTS.get(_primary_lang, 'unknown')
         
         # Try to load summary report from JSON file (if available)
         # Use schema-specific output directory
@@ -660,30 +682,102 @@ async def analyze_test_repository(test_repo_id: str):
     Run test analysis on a specific test repository.
     
     This will:
-    1. Create tables in the test repository's schema
-    2. Run the analysis pipeline
+    1. Create schema if needed
+    2. Run the analysis pipeline (which creates tables and loads data)
     3. Store results in the schema
     """
     try:
         # Get test repository
         test_repo = get_test_repository(test_repo_id)
         if not test_repo:
+            logger.error(f"[ANALYZE] Test repository not found: {test_repo_id}")
             raise HTTPException(status_code=404, detail="Test repository not found")
         
         extracted_path = test_repo.get('extracted_path')
         schema_name = test_repo.get('schema_name')
+        hash_value = test_repo.get('hash', '')
         
+        logger.info(f"[ANALYZE] Starting analysis for test_repo_id={test_repo_id}, extracted_path={extracted_path}, schema_name={schema_name}")
+        
+        # Path recovery: If stored path doesn't exist, try to reconstruct it
         if not extracted_path:
-            raise HTTPException(status_code=400, detail="Test repository has no extracted path")
+            logger.warning(f"[ANALYZE] Test repository {test_repo_id} has no extracted_path, attempting recovery...")
+            if hash_value:
+                # Try to reconstruct path from expected location
+                from services.test_repo_service import TEST_REPO_DATA_DIR
+                expected_path = TEST_REPO_DATA_DIR / hash_value[:8]
+                if expected_path.exists():
+                    logger.info(f"[ANALYZE] Found test repository at expected location: {expected_path}")
+                    extracted_path = str(expected_path)
+                    # Update database with correct path
+                    from services.test_repo_service import update_extracted_path
+                    update_extracted_path(test_repo_id, extracted_path)
+                else:
+                    logger.error(f"[ANALYZE] Test repository {test_repo_id} has no extracted_path and recovery failed")
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"Test repository has no extracted path. Please re-upload the test repository."
+                    )
+            else:
+                logger.error(f"[ANALYZE] Test repository {test_repo_id} has no extracted_path and no hash for recovery")
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Test repository has no extracted path. Please re-upload the test repository."
+                )
         
-        if not Path(extracted_path).exists():
-            raise HTTPException(status_code=400, detail=f"Extracted path does not exist: {extracted_path}")
+        extracted_path_obj = Path(extracted_path)
+        if not extracted_path_obj.exists():
+            logger.warning(f"[ANALYZE] Stored path does not exist: {extracted_path}, attempting recovery...")
+            # Path recovery: Try to find the repository in expected location
+            if hash_value:
+                from services.test_repo_service import TEST_REPO_DATA_DIR
+                expected_path = TEST_REPO_DATA_DIR / hash_value[:8]
+                
+                # Check if it exists in expected location
+                if expected_path.exists():
+                    logger.info(f"[ANALYZE] Found test repository at expected location: {expected_path}")
+                    extracted_path = str(expected_path)
+                    extracted_path_obj = Path(extracted_path)
+                    # Update database with correct path
+                    from services.test_repo_service import update_extracted_path
+                    update_extracted_path(test_repo_id, extracted_path)
+                else:
+                    # Try to find any directory matching the hash in TEST_REPO_DATA_DIR
+                    if TEST_REPO_DATA_DIR.exists():
+                        for subdir in TEST_REPO_DATA_DIR.iterdir():
+                            if subdir.is_dir() and hash_value[:8] in str(subdir):
+                                logger.info(f"[ANALYZE] Found alternative path: {subdir}")
+                                extracted_path = str(subdir)
+                                extracted_path_obj = Path(extracted_path)
+                                # Update database with correct path
+                                from services.test_repo_service import update_extracted_path
+                                update_extracted_path(test_repo_id, extracted_path)
+                                break
+                        else:
+                            # No matching directory found
+                            logger.error(f"[ANALYZE] Extracted path does not exist and recovery failed: {extracted_path}")
+                            raise HTTPException(
+                                status_code=400, 
+                                detail=f"Extracted path does not exist: {extracted_path}. The test repository may have been deleted or moved. Please re-upload the test repository."
+                            )
+                    else:
+                        logger.error(f"[ANALYZE] TEST_REPO_DATA_DIR does not exist: {TEST_REPO_DATA_DIR}")
+                        raise HTTPException(
+                            status_code=400, 
+                            detail=f"Extracted path does not exist: {extracted_path}. The test repository may have been deleted or moved. Please re-upload the test repository."
+                        )
+            else:
+                logger.error(f"[ANALYZE] Extracted path does not exist and no hash for recovery: {extracted_path}")
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Extracted path does not exist: {extracted_path}. The test repository may have been deleted or moved. Please re-upload the test repository."
+                )
         
         # Update status to analyzing
         update_test_repository_status(test_repo_id, 'analyzing')
         
         try:
-            # Create tables in schema if needed
+            # Ensure schema exists (analysis service will create tables)
             if schema_name:
                 import sys
                 # Add backend/ to path for imports
@@ -692,31 +786,32 @@ async def analyze_test_repository(test_repo_id: str):
                 if str(project_root) not in sys.path:
                     sys.path.insert(0, str(project_root))
                 
-                from deterministic.db_connection import get_connection, create_schema_if_not_exists
-                # Import create_all_tables_in_schema from 01_create_tables
-                import importlib.util
-                create_tables_path = project_root / "deterministic" / "01_create_tables.py"
-                spec = importlib.util.spec_from_file_location("create_tables", create_tables_path)
-                create_tables_module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(create_tables_module)
-                create_all_tables_in_schema = create_tables_module.create_all_tables_in_schema
+                from deterministic.db_connection import create_schema_if_not_exists
                 
-                # Create schema if it doesn't exist
-                create_schema_if_not_exists(schema_name)
-                
-                # Create all tables in the schema (without schema_def - will be created later in analysis)
-                with get_connection() as conn:
-                    create_all_tables_in_schema(conn, schema_name, None)
+                # Create schema if it doesn't exist (tables will be created by analysis service)
+                logger.info(f"[ANALYZE] Ensuring schema exists: {schema_name}")
+                schema_created = create_schema_if_not_exists(schema_name)
+                if not schema_created:
+                    logger.warning(f"[ANALYZE] Failed to create schema {schema_name}, but continuing (may already exist)")
             
-            # Run analysis pipeline
+            # Run analysis pipeline (it will create tables and load data)
+            logger.info(f"[ANALYZE] Running analysis pipeline for path: {extracted_path}")
             results = await analysis_service.run_pipeline(
                 repo_path=extracted_path,
                 test_repo_id=test_repo_id,
                 schema_name=schema_name
             )
             
+            # Check if analysis was successful
+            if results.get('success') is False:
+                error_msg = results.get('error', 'Unknown error')
+                logger.error(f"[ANALYZE] Analysis pipeline returned error: {error_msg}")
+                update_test_repository_status(test_repo_id, 'error')
+                raise HTTPException(status_code=500, detail=f"Analysis failed: {error_msg}")
+            
             # Update status to ready
             update_test_repository_status(test_repo_id, 'ready')
+            logger.info(f"[ANALYZE] Analysis completed successfully: {results.get('total_tests', 0)} tests found")
             
             return TestRepositoryAnalysisResponse(
                 status="completed",
@@ -727,15 +822,20 @@ async def analyze_test_repository(test_repo_id: str):
                 total_tests=results.get("total_tests", 0),
                 message="Analysis completed successfully"
             )
+        except HTTPException:
+            # Re-raise HTTP exceptions (they already have proper status codes)
+            raise
         except Exception as e:
             # Update status to error
+            logger.error(f"[ANALYZE] Analysis failed for test_repo_id={test_repo_id}: {e}", exc_info=True)
             update_test_repository_status(test_repo_id, 'error')
             raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
             
     except HTTPException:
+        # Re-raise HTTP exceptions
         raise
     except Exception as e:
-        logger.error(f"Failed to analyze test repository: {e}", exc_info=True)
+        logger.error(f"[ANALYZE] Failed to analyze test repository {test_repo_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to analyze test repository: {str(e)}")
 
 
@@ -743,13 +843,9 @@ async def analyze_test_repository(test_repo_id: str):
 async def regenerate_embeddings(test_repo_id: str):
     """
     Regenerate embeddings for a specific test repository.
-    
-    This will:
-    1. Load test data from the existing analysis
-    2. Generate embeddings using the configured embedding provider
-    3. Store embeddings in Pinecone
-    
-    NOTE: This does NOT run the full analysis pipeline (no table creation, data loading, etc.)
+
+    Loads test files directly from the extracted repo path (TEST_REPO_PATH), chunks them,
+    generates embeddings, and stores in Pinecone. No analysis output files required.
     """
     try:
         # Get test repository
@@ -765,42 +861,31 @@ async def regenerate_embeddings(test_repo_id: str):
         
         if not Path(extracted_path).exists():
             raise HTTPException(status_code=400, detail=f"Extracted path does not exist: {extracted_path}")
-        
-        if not schema_name:
-            raise HTTPException(status_code=400, detail="Test repository has no schema. Please run analysis first.")
-        
-        # Check if analysis output files exist (required for embedding generation)
+
         # backend/api/routes/ -> parent.parent.parent = backend/
         project_root = Path(__file__).parent.parent.parent
-        output_dir = project_root / "test_analysis" / "outputs" / schema_name
-        registry_json = output_dir / "03_test_registry.json"
-        metadata_json = output_dir / "05_test_metadata.json"
-        
-        if not registry_json.exists() or not metadata_json.exists():
-            raise HTTPException(
-                status_code=400,
-                detail="Analysis output files not found. Please run analysis first before regenerating embeddings."
-            )
-        
-        # Set environment variables for embedding generation
+
+        # Set environment variables for embedding generation (repo-only; no analysis JSON required)
         import os
         env = os.environ.copy()
         env['TEST_REPO_ID'] = test_repo_id
-        env['TEST_REPO_SCHEMA'] = schema_name
-        
-        # Run only embedding generation (not full analysis)
-        embedding_script = project_root / "semantic_retrieval" / "embedding_generator.py"
+        env['TEST_REPO_PATH'] = extracted_path
+        if schema_name:
+            env['TEST_REPO_SCHEMA'] = schema_name
+
+        # Run embedding generation (loads from test repo path only)
+        embedding_script = project_root / "semantic" / "embedding_generation" / "embedding_generator.py"
         if not embedding_script.exists():
             raise HTTPException(status_code=500, detail="Embedding generator script not found")
-        
+
         import subprocess
         import sys
-        
+
         logger.info(f"Regenerating embeddings for test repository: {test_repo_id}")
-        
+
         result = subprocess.run(
             [sys.executable, str(embedding_script)],
-            cwd=str(embedding_script.parent.parent),
+            cwd=str(project_root),
             capture_output=True,
             text=True,
             timeout=1800,  # 30 minutes timeout

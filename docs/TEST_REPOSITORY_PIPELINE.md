@@ -35,7 +35,7 @@ graph TB
         TR_ROUTES[routes/test_repositories.py<br/>REST API Endpoints]
         TR_SVC[services/test_repo_service.py<br/>ZIP Extraction + Schema + DB]
         AN_SVC[services/analysis_service.py<br/>6-Phase Analysis Pipeline]
-        EMB_GEN[semantic_retrieval/embedding_generator.py<br/>Embedding Generation]
+        EMB_GEN[semantic/embedding_generator.py<br/>Embedding Generation]
     end
 
     subgraph AnalysisPipeline ["Analysis Pipeline (Deterministic Scripts)"]
@@ -686,10 +686,10 @@ Same ZIP uploaded twice:
 | `web_platform/api/models/test_repository.py` | Pydantic request/response models |
 | `web_platform/services/test_repo_service.py` | ZIP extraction, SHA-256 hashing, schema creation, PostgreSQL CRUD |
 | `web_platform/services/analysis_service.py` | Orchestrates 6-phase analysis pipeline; runs deterministic scripts; triggers embedding generation |
-| `semantic_retrieval/embedding_generator.py` | Loads JSON analysis output, builds embedding text, calls LLMFactory, stores in Pinecone |
-| `semantic_retrieval/backends/pinecone_backend.py` | Pinecone client: create/ensure index, upsert vectors, delete by repo, handle dimension mismatch |
-| `semantic_retrieval/utils/content_summarizer.py` | Smart test content summarization (priority: assertions → function calls → setup) |
-| `semantic_retrieval/config.py` | Constants: EMBEDDING_DIMENSIONS, BATCH_SIZE, PINECONE_DESCRIPTION_MAX_CHARS, token limits |
+| `semantic/embedding_generator.py` | Loads JSON analysis output, builds embedding text, calls LLMFactory, stores in Pinecone |
+| `semantic/backends/pinecone_backend.py` | Pinecone client: create/ensure index, upsert vectors, delete by repo, handle dimension mismatch |
+| `semantic/utils/content_summarizer.py` | Smart test content summarization (priority: assertions → function calls → setup) |
+| `semantic/config.py` | Constants: EMBEDDING_DIMENSIONS, BATCH_SIZE, PINECONE_DESCRIPTION_MAX_CHARS, token limits |
 | `llm/factory.py` | LLMFactory: creates embedding provider from settings (Ollama / OpenAI / Gemini) |
 | `config/settings.py` | Reads `.env` file, exposes EMBEDDING_PROVIDER, PINECONE_API_KEY, etc. |
 | `test_analysis/core/analyzers/python_analyzer.py` | AST-based Python test extraction: names, docstrings, test body content |

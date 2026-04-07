@@ -3,7 +3,7 @@
 import sys
 from pathlib import Path
 from fastapi import APIRouter, HTTPException, Query
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 
 # Add backend/ to path: backend/api/routes/ -> parent.parent.parent = backend/
@@ -22,6 +22,14 @@ from api.models.repository import (
 )
 from services.gitlab_service import GitLabService
 from services.github_service import GitHubService
+from services.repository_vcs import (
+    resolve_provider,
+    effective_branch,
+    normalize_diff_payload,
+    reflag_default_branches,
+    sanitize_branch_rows,
+    ensure_branches_present,
+)
 from services.repository_db import (
     create_repository,
     get_repository_by_id,
@@ -154,18 +162,18 @@ async def connect_repository(repo_data: RepositoryCreate):
                 detail=f"Unsupported provider: {provider}. Supported providers: 'github', 'gitlab'"
             )
         
-        # Get default branch for the repository
+        # Default branch from project/repo API (avoids listing every branch on connect)
         default_branch = None
         if provider == 'gitlab':
             gitlab_service = GitLabService()
-            branches = await gitlab_service.list_branches(repo_data.url)
-            if branches:
-                default_branch = next((b['name'] for b in branches if b.get('default')), branches[0]['name'] if branches else None)
+            pinfo = await gitlab_service.get_project_info(repo_data.url)
+            if pinfo:
+                default_branch = pinfo.get('default_branch')
         elif provider == 'github':
             github_service = GitHubService()
-            branches = await github_service.list_branches(repo_data.url)
-            if branches:
-                default_branch = next((b['name'] for b in branches if b.get('default')), branches[0]['name'] if branches else None)
+            info = await github_service.get_repository_info(repo_data.url)
+            if info:
+                default_branch = info.get('default_branch')
         
         # Create repository in database
         repository_data = create_repository(
@@ -187,73 +195,112 @@ async def connect_repository(repo_data: RepositoryCreate):
 
 
 @router.get("/{repo_id}/branches", response_model=BranchesResponse)
-async def list_branches(repo_id: str):
+async def list_branches(
+    repo_id: str,
+    page: int = Query(1, ge=1),
+    per_page: int = Query(100, ge=1, le=100),
+    search: Optional[str] = Query(None, description="Filter branches (GitLab: server-side; GitHub: current page)"),
+    fetch_all: bool = Query(
+        True,
+        description="If true (default), list all branches up to BRANCH_LIST_MAX_PAGES. Set false for one page only.",
+    ),
+):
     """
-    List all branches in the repository.
-    Uses GitLab/GitHub API for repositories (no local clone needed).
+    List branches. Defaults match the UI dropdown: full list + accurate default from the provider.
+    When fetch_all=false, default/selected branches are still injected if missing from the page.
     """
-    # Get repository from database
     repo = get_repository_by_id(repo_id)
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found. Please connect the repository first.")
     
     try:
         repo_url = repo["url"]
-        provider = repo.get("provider")  # Get stored provider or detect
-        
-        # Determine provider
-        if not provider:
-            if GitLabService.is_gitlab_url(repo_url):
-                provider = 'gitlab'
-            elif GitHubService.is_github_url(repo_url):
-                provider = 'github'
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Could not determine repository provider."
-                )
-        
-        # Use appropriate API based on provider
-        if provider == 'gitlab':
-            gitlab_service = GitLabService()
-            branches = await gitlab_service.list_branches(repo_url)
-            
-            if not branches:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Failed to list branches via GitLab API. Check GITLAB_API_TOKEN."
-                )
-            
-            # Find default branch
-            default_branch = next((b['name'] for b in branches if b.get('default')), None)
-            
-            return BranchesResponse(
-                branches=[BranchResponse(**b) for b in branches],
-                default_branch=default_branch
+        provider = resolve_provider(repo_url, repo.get("provider"))
+        stored_default = repo.get("default_branch")
+        selected = repo.get("selected_branch")
+
+        gitlab_service = GitLabService()
+        github_service = GitHubService()
+
+        live_default: Optional[str] = None
+        if provider == "gitlab":
+            pinfo = await gitlab_service.get_project_info(repo_url)
+            if pinfo:
+                live_default = pinfo.get("default_branch")
+        elif provider == "github":
+            ginfo = await github_service.get_repository_info(repo_url)
+            if ginfo:
+                live_default = ginfo.get("default_branch")
+
+        effective_default = live_default or stored_default
+
+        if provider == "gitlab":
+            result = await gitlab_service.list_branches(
+                repo_url,
+                page=page,
+                per_page=per_page,
+                search=search,
+                fetch_all=fetch_all,
             )
-            
-        elif provider == 'github':
-            github_service = GitHubService()
-            branches = await github_service.list_branches(repo_url)
-            
-            if not branches:
-                raise HTTPException(
-                    status_code=500,
-                    detail="Failed to list branches via GitHub API. Check GITHUB_API_TOKEN."
-                )
-            
-            # Find default branch
-            default_branch = next((b['name'] for b in branches if b.get('default')), None)
-            
-            return BranchesResponse(
-                branches=[BranchResponse(**b) for b in branches],
-                default_branch=default_branch
+            branches = list(result.get("branches") or [])
+            await ensure_branches_present(
+                provider,
+                repo_url,
+                branches,
+                {effective_default, selected, stored_default},
+                gitlab_service=gitlab_service,
+            )
+        elif provider == "github":
+            result = await github_service.list_branches(
+                repo_url,
+                page=page,
+                per_page=per_page,
+                search=search,
+                fetch_all=fetch_all,
+                default_branch_name=effective_default,
+            )
+            branches = list(result.get("branches") or [])
+            await ensure_branches_present(
+                provider,
+                repo_url,
+                branches,
+                {effective_default, selected, stored_default},
+                github_service=github_service,
             )
         else:
             raise HTTPException(
                 status_code=501,
                 detail=f"Branch listing via API is not supported for provider: {provider}"
             )
+
+        reflag_default_branches(branches, effective_default)
+        branches = sanitize_branch_rows(branches)
+
+        selected_s = str(selected or "").strip()
+        live_s = str(effective_default or "").strip()
+
+        def _branch_sort_key(b: dict) -> tuple:
+            n = b.get("name") or ""
+            if live_s and n == live_s:
+                return (0, n.lower())
+            if selected_s and n == selected_s:
+                return (1, n.lower())
+            return (2, n.lower())
+
+        branches.sort(key=_branch_sort_key)
+
+        default_branch = live_default or stored_default
+        if not default_branch:
+            default_branch = next((b["name"] for b in branches if b.get("default")), None)
+
+        return BranchesResponse(
+            branches=[BranchResponse(**b) for b in branches],
+            default_branch=default_branch,
+            page=result.get("page", page),
+            per_page=result.get("per_page", per_page),
+            has_more=result.get("has_more", False),
+            fetch_all=fetch_all,
+        )
     except HTTPException:
         raise
     except Exception as e:
@@ -278,31 +325,15 @@ async def get_diff(repo_id: str, branch: str = None):
     
     try:
         repo_url = repo["url"]
-        provider = repo.get("provider")  # Get stored provider
+        provider = resolve_provider(repo_url, repo.get("provider"))
+        branch = effective_branch(branch, repo.get("selected_branch"), repo.get("default_branch"))
+        default_hint = repo.get("default_branch")
         
-        # Use provided branch, or selected_branch, or default_branch
-        if not branch:
-            branch = repo.get("selected_branch") or repo.get("default_branch")
-        
-        import logging
-        logger = logging.getLogger(__name__)
-        
-        # Determine provider
-        if not provider:
-            if GitLabService.is_gitlab_url(repo_url):
-                provider = 'gitlab'
-            elif GitHubService.is_github_url(repo_url):
-                provider = 'github'
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Could not determine repository provider."
-                )
-        
-        # Use appropriate API based on provider
         if provider == 'gitlab':
             gitlab_service = GitLabService()
-            diff_data = await gitlab_service.get_latest_diff(repo_url, branch=branch)
+            diff_data = await gitlab_service.get_latest_diff(
+                repo_url, branch=branch, default_branch_hint=default_hint
+            )
             
             if not diff_data:
                 raise HTTPException(
@@ -310,18 +341,24 @@ async def get_diff(repo_id: str, branch: str = None):
                     detail="Failed to get diff via GitLab API. Check GITLAB_API_TOKEN and branch name."
                 )
             
-            logger.info(f"Diff data for repo {repo_id}, branch {branch}: diff_length={len(diff_data.get('diff', ''))}, files={len(diff_data.get('changed_files', []))}")
+            norm = normalize_diff_payload(diff_data)
+            logger.info(
+                f"Diff data for repo {repo_id}, branch {branch}: diff_length={len(norm.get('diff', ''))}, "
+                f"files={len(norm.get('changedFiles', []))}"
+            )
             
             return DiffResponse(
-                diff=diff_data.get("diff", ""),
-                changedFiles=diff_data.get("changed_files", []),
-                stats=diff_data.get("stats", {}),
+                diff=norm["diff"],
+                changedFiles=norm["changedFiles"],
+                stats=norm["stats"],
                 branch=branch
             )
             
         elif provider == 'github':
             github_service = GitHubService()
-            diff_data = await github_service.get_latest_diff(repo_url, branch=branch)
+            diff_data = await github_service.get_latest_diff(
+                repo_url, branch=branch, default_branch_hint=default_hint
+            )
             
             if not diff_data:
                 raise HTTPException(
@@ -329,12 +366,16 @@ async def get_diff(repo_id: str, branch: str = None):
                     detail="Failed to get diff via GitHub API. Check GITHUB_API_TOKEN and branch name."
                 )
             
-            logger.info(f"Diff data for repo {repo_id}, branch {branch}: diff_length={len(diff_data.get('diff', ''))}, files={len(diff_data.get('changed_files', []))}")
+            norm = normalize_diff_payload(diff_data)
+            logger.info(
+                f"Diff data for repo {repo_id}, branch {branch}: diff_length={len(norm.get('diff', ''))}, "
+                f"files={len(norm.get('changedFiles', []))}"
+            )
             
             return DiffResponse(
-                diff=diff_data.get("diff", ""),
-                changedFiles=diff_data.get("changed_files", []),
-                stats=diff_data.get("stats", {}),
+                diff=norm["diff"],
+                changedFiles=norm["changedFiles"],
+                stats=norm["stats"],
                 branch=branch
             )
         else:

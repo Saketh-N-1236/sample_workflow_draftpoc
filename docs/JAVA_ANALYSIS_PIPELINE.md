@@ -580,7 +580,7 @@ env['TEST_REPO_ID']     = test_repo_id      # e.g., "a1b2c3d4..."
 env['TEST_REPO_SCHEMA'] = schema_name       # e.g., "test_repo_a1b2c3d4"
 
 subprocess.run(
-    [sys.executable, "semantic_retrieval/embedding_generator.py"],
+    [sys.executable, "semantic/embedding_generator.py"],
     env=env,
     timeout=1800   # 30 minutes
 )
@@ -828,9 +828,9 @@ WHERE id = ?;
 | `deterministic/07_load_java_reflection.py` | Reads `09_java_reflection_calls.json` → inserts into `java_reflection_calls` |
 | `deterministic/08_load_java_di_fields.py` | Reads `10_java_di_fields.json` → inserts into `java_di_fields` |
 | `deterministic/09_load_java_annotations.py` | Reads `11_java_annotations.json` → inserts into `java_annotations` |
-| `semantic_retrieval/embedding_generator.py` | Reads JSON output → builds text → calls LLM → stores in Pinecone |
-| `semantic_retrieval/utils/content_summarizer.py` | Summarizes Java method body: assertions first, then function calls |
-| `semantic_retrieval/backends/pinecone_backend.py` | `index.upsert()` — stores 768-dim vector + metadata per test |
+| `semantic/embedding_generator.py` | Reads JSON output → builds text → calls LLM → stores in Pinecone |
+| `semantic/utils/content_summarizer.py` | Summarizes Java method body: assertions first, then function calls |
+| `semantic/backends/pinecone_backend.py` | `index.upsert()` — stores 768-dim vector + metadata per test |
 | `deterministic/db_connection.py` | PostgreSQL connection pool, `create_schema_if_not_exists()` |
 | `test_analysis/outputs/{schema_name}/` | Directory holding all 11 JSON output files |
 

@@ -70,6 +70,7 @@ class SelectionService:
             # Get bound test repositories if repository_id is provided
             test_repo_schemas = []
             test_repo_paths = []
+            bound_repos: list = []
             
             if repository_id:
                 try:
@@ -100,22 +101,16 @@ class SelectionService:
             # Process the diff and get test selection results
             logger.info(f"[SELECT] Processing diff - {len(diff_content)} chars, {len(test_repo_schemas)} schema(s): {test_repo_schemas}")
             
-            # Use first schema if multiple (or None for default)
+            # Primary schema/path for semantic namespace and parser search root
             schema_name = test_repo_schemas[0] if test_repo_schemas else None
             test_repo_path = test_repo_paths[0] if test_repo_paths else None
-            
-            # Get test_repo_id from bound repos if available
+
+            # Get test_repo_id from bound repos if available (passed into processor; no os.environ)
             test_repo_id = None
             if bound_repos and len(bound_repos) > 0:
-                # Use primary test repo if available, otherwise first one
-                primary_repo = next((r for r in bound_repos if r.get('is_primary')), None)
-                test_repo_id = (primary_repo or bound_repos[0]).get('id')
-            
-            # Set TEST_REPO_ID in environment for embedding queries
-            if test_repo_id:
-                import os
-                os.environ['TEST_REPO_ID'] = test_repo_id
-            
+                primary_repo = next((r for r in bound_repos if r.get("is_primary")), None)
+                test_repo_id = (primary_repo or bound_repos[0]).get("id")
+
             # Get semantic config from repository if available
             # NOTE: quality_threshold / num_query_variations are further adjusted
             # adaptively inside process_diff_and_select_tests → build_adaptive_semantic_config()
@@ -132,9 +127,11 @@ class SelectionService:
                 project_root=self.project_root,
                 use_semantic=True,
                 test_repo_path=test_repo_path,
-                schema_name=schema_name,  # Pass schema name to processor
-                file_list=changed_files_from_api,  # Pass file list from API for headerless diffs
-                semantic_config=semantic_config  # Pass saved semantic config
+                schema_name=schema_name,
+                schema_names=test_repo_schemas if test_repo_schemas else None,
+                test_repo_id=test_repo_id,
+                file_list=changed_files_from_api,
+                semantic_config=semantic_config,
             )
             
             logger.info(
@@ -178,8 +175,11 @@ class SelectionService:
             # Enhance results with semantic-specific details
             enhanced_results = self._enhance_selection_results(results)
             enhanced_results['total_tests_in_db'] = total_tests_in_db  # Ensure it's in enhanced results too
-            logger.info(f"Enhanced results - total_tests: {enhanced_results.get('total_tests', 0)}")
-            logger.info(f"Enhanced results - tests list length: {len(enhanced_results.get('tests', []))}")
+            logger.debug(
+                "Enhanced selection: total_tests=%s tests_len=%s",
+                enhanced_results.get("total_tests", 0),
+                len(enhanced_results.get("tests", [])),
+            )
             
             # Include LLM scores, confidence distribution, test suites, and LLM input/output from results
             if results.get('llm_scores'):
@@ -190,7 +190,27 @@ class SelectionService:
                 enhanced_results['test_suites'] = results.get('test_suites')
             if results.get('llm_input_output'):
                 enhanced_results['llm_input_output'] = results.get('llm_input_output')
-            
+            if results.get('coverage_gaps') is not None:
+                enhanced_results['coverage_gaps'] = results.get('coverage_gaps')
+            if results.get('breakage_warnings') is not None:
+                enhanced_results['breakage_warnings'] = results.get('breakage_warnings')
+            if results.get('impact_intelligence'):
+                enhanced_results['impact_intelligence'] = results.get('impact_intelligence')
+            if results.get('cochange_selection'):
+                enhanced_results['cochange_selection'] = results.get('cochange_selection')
+            if results.get('selection_funnel'):
+                enhanced_results['selection_funnel'] = results.get('selection_funnel')
+            if results.get('semantic_search_candidates') is not None:
+                enhanced_results['semantic_search_candidates'] = results.get(
+                    'semantic_search_candidates'
+                )
+            if results.get('semantic_vector_threshold') is not None:
+                enhanced_results['semantic_vector_threshold'] = results.get(
+                    'semantic_vector_threshold'
+                )
+            if results.get('rag_diagnostics') is not None:
+                enhanced_results['rag_diagnostics'] = results.get('rag_diagnostics')
+
             # Calculate execution time
             execution_time_ms = int((time.time() - start_time) * 1000)
             
@@ -229,15 +249,16 @@ class SelectionService:
                 except Exception as e:
                     logger.warning(f"Failed to log audit entry: {e}")
             
-            # Log diagnostics if available
-            if enhanced_results.get('diagnostics'):
-                diag = enhanced_results['diagnostics']
-                logger.info(f"Diagnostics:")
-                logger.info(f"  - Parsed files: {diag.get('parsed_files', 0)}")
-                logger.info(f"  - Parsed classes: {diag.get('parsed_classes', 0)}")
-                logger.info(f"  - Search exact matches: {diag.get('search_exact_matches', 0)}")
-                logger.info(f"  - DB reverse_index: {diag.get('db_reverse_index_count', 0)}")
-                logger.info(f"  - DB test_registry: {diag.get('db_test_registry_count', 0)}")
+            if enhanced_results.get("diagnostics"):
+                diag = enhanced_results["diagnostics"]
+                logger.debug(
+                    "Selection diagnostics: files=%s classes=%s exact=%s ri=%s registry=%s",
+                    diag.get("parsed_files", 0),
+                    diag.get("parsed_classes", 0),
+                    diag.get("search_exact_matches", 0),
+                    diag.get("db_reverse_index_count", 0),
+                    diag.get("db_test_registry_count", 0),
+                )
             
             return enhanced_results
             
@@ -382,7 +403,7 @@ class SelectionService:
         embedding_status = None
         try:
             import os
-            from semantic_retrieval.config import VECTOR_BACKEND
+            from semantic.config import VECTOR_BACKEND
             embedding_status = {
                 'backend': VECTOR_BACKEND.lower(),
                 'available': True
@@ -408,6 +429,8 @@ class SelectionService:
         # Ensure total_tests_in_db is preserved if it exists in results
         if 'total_tests_in_db' in results:
             enhanced['total_tests_in_db'] = results['total_tests_in_db']
-            logger.info(f"_enhance_selection_results: Preserved total_tests_in_db={results['total_tests_in_db']}")
+            logger.debug(
+                "Preserved total_tests_in_db=%s", results["total_tests_in_db"]
+            )
         
         return enhanced

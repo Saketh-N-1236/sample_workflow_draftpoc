@@ -237,8 +237,8 @@ async def get_embedding_status(test_repo_id: Optional[str] = Query(None)):
     try:
         import os
         from datetime import datetime
-        from semantic_retrieval.config import VECTOR_BACKEND
-        from semantic_retrieval.backends import get_backend
+        from semantic.config import VECTOR_BACKEND
+        from semantic.backends import get_backend
         from deterministic.db_connection import get_connection
         from config.settings import get_settings
         from llm.factory import LLMFactory
@@ -441,7 +441,7 @@ async def get_embedding_status(test_repo_id: Optional[str] = Query(None)):
                     from pathlib import Path
                     # backend/api/routes/ -> parent.parent.parent = backend/
                     project_root = Path(__file__).parent.parent.parent
-                    embedding_script = project_root / "semantic_retrieval" / "embedding_generator.py"
+                    embedding_script = project_root / "semantic" / "embedding_generation" / "embedding_generator.py"
                     if embedding_script.exists():
                         mtime = embedding_script.stat().st_mtime
                         last_generated = datetime.fromtimestamp(mtime).isoformat()

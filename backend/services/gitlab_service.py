@@ -2,9 +2,11 @@
 
 import os
 import httpx
-from typing import Dict, Optional, List
-from urllib.parse import urlparse
+from typing import Any, Dict, Optional, List
+from urllib.parse import urlparse, quote
 import logging
+
+from services.http_client import get_shared_async_client
 
 logger = logging.getLogger(__name__)
 
@@ -119,13 +121,13 @@ class GitLabService:
             # URL encode the project path (replace / with %2F)
             encoded_path = project_path.replace('/', '%2F')
             
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(
-                    f"{api_url}/projects/{encoded_path}",
-                    headers=self.headers
-                )
-                response.raise_for_status()
-                return response.json()
+            client = get_shared_async_client()
+            response = await client.get(
+                f"{api_url}/projects/{encoded_path}",
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            return response.json()
         except httpx.HTTPStatusError as e:
             logger.error(f"GitLab API error: {e.response.status_code} - {e.response.text}")
             return None
@@ -133,13 +135,19 @@ class GitLabService:
             logger.error(f"Failed to get GitLab project info: {e}")
             return None
     
-    async def get_latest_commit(self, repo_url: str, branch: str = None) -> Optional[Dict]:
+    async def get_latest_commit(
+        self,
+        repo_url: str,
+        branch: str = None,
+        default_branch_hint: Optional[str] = None,
+    ) -> Optional[Dict]:
         """
         Get latest commit information.
         
         Args:
             repo_url: GitLab repository URL
-            branch: Branch name (if None, will try to get default branch from project info)
+            branch: Branch name (if None, uses default_branch_hint or project info)
+            default_branch_hint: Optional default branch from DB to avoid an extra project API call
             
         Returns:
             Commit information dictionary or None if failed
@@ -149,13 +157,16 @@ class GitLabService:
             return None
         
         try:
-            # If branch not specified, try to get default branch from project info
+            # If branch not specified, prefer stored default from caller, then project API
             if branch is None:
-                project_info = await self.get_project_info(repo_url)
-                if project_info:
-                    branch = project_info.get('default_branch') or 'main'
+                if default_branch_hint:
+                    branch = default_branch_hint
                 else:
-                    branch = 'main'
+                    project_info = await self.get_project_info(repo_url)
+                    if project_info:
+                        branch = project_info.get('default_branch') or 'main'
+                    else:
+                        branch = 'main'
             
             # Get the correct API URL for this repository
             api_url = self.get_api_url_for_repo(repo_url)
@@ -164,20 +175,19 @@ class GitLabService:
             project_path = project_info['project_path']
             encoded_path = project_path.replace('/', '%2F')
             
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.get(
-                    f"{api_url}/projects/{encoded_path}/repository/commits",
-                    headers=self.headers,
-                    params={'ref_name': branch, 'per_page': 1}
-                )
-                response.raise_for_status()
-                commits = response.json()
-                
-                if commits and len(commits) > 0:
-                    return commits[0]
-                else:
-                    logger.warning(f"No commits found for branch '{branch}'")
-                    return None
+            client = get_shared_async_client()
+            response = await client.get(
+                f"{api_url}/projects/{encoded_path}/repository/commits",
+                headers=self.headers,
+                params={'ref_name': branch, 'per_page': 1},
+            )
+            response.raise_for_status()
+            commits = response.json()
+
+            if commits and len(commits) > 0:
+                return commits[0]
+            logger.warning(f"No commits found for branch '{branch}'")
+            return None
         except httpx.HTTPStatusError as e:
             error_text = e.response.text if hasattr(e.response, 'text') else str(e)
             logger.error(f"GitLab API error: {e.response.status_code} - {error_text}")
@@ -225,89 +235,204 @@ class GitLabService:
             logger.error(f"Error validating access: {e}")
             return False
     
-    async def list_branches(self, repo_url: str) -> List[Dict]:
+    def _format_gitlab_branch_rows(self, raw_branches: List[Dict]) -> List[Dict]:
+        formatted_branches = []
+        for branch in raw_branches:
+            formatted_branches.append({
+                'name': branch.get('name', ''),
+                'default': branch.get('default', False),
+                'protected': branch.get('protected', False),
+                'commit_id': branch.get('commit', {}).get('id', '')[:8] if branch.get('commit') else '',
+                'commit_message': branch.get('commit', {}).get('message', '')[:50] if branch.get('commit') else ''
+            })
+        return formatted_branches
+
+    async def list_branches(
+        self,
+        repo_url: str,
+        *,
+        page: int = 1,
+        per_page: int = 30,
+        search: Optional[str] = None,
+        fetch_all: bool = False,
+    ) -> Dict[str, Any]:
         """
-        List all branches in the repository.
-        Handles pagination to fetch all branches.
-        
-        Args:
-            repo_url: GitLab repository URL
-            
+        List branches. By default returns one page (fast). Use fetch_all=True for full scan.
+
         Returns:
-            List of branch dictionaries with name, default flag, and commit info
+            dict with keys: branches (formatted), has_more, page, per_page
         """
         if not self.api_token:
             logger.warning("Cannot list branches: API token not configured")
-            return []
-        
+            return {"branches": [], "has_more": False, "page": page, "per_page": per_page}
+
         try:
-            # Get the correct API URL for this repository
             api_url = self.get_api_url_for_repo(repo_url)
-            
             project_info = self.parse_gitlab_url(repo_url)
             project_path = project_info['project_path']
             encoded_path = project_path.replace('/', '%2F')
-            
-            all_branches = []
-            page = 1
-            per_page = 100
-            
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            client = get_shared_async_client()
+
+            if fetch_all:
+                max_pages = max(1, min(int(os.getenv("BRANCH_LIST_MAX_PAGES", "100")), 1000))
+                all_branches: List[Dict] = []
+                p = 1
+                pg_size = 100
                 while True:
                     response = await client.get(
                         f"{api_url}/projects/{encoded_path}/repository/branches",
                         headers=self.headers,
-                        params={'per_page': per_page, 'page': page}
+                        params={'per_page': pg_size, 'page': p, **({'search': search} if search else {})},
                     )
                     response.raise_for_status()
-                    branches = response.json()
-                    
-                    if not branches:
+                    batch = response.json()
+                    if not batch:
                         break
-                    
-                    all_branches.extend(branches)
-                    
-                    # Check if there are more pages
-                    # GitLab API returns 'X-Total-Pages' header or Link header
+                    all_branches.extend(batch)
                     total_pages = response.headers.get('X-Total-Pages')
-                    if total_pages:
-                        total_pages = int(total_pages)
-                        if page >= total_pages:
-                            break
-                    
-                    # Also check Link header for pagination
-                    link_header = response.headers.get('Link', '')
-                    if 'rel="next"' not in link_header:
+                    if total_pages and p >= int(total_pages):
                         break
-                    
-                    page += 1
-                    
-                    # Safety limit: prevent infinite loops
-                    if page > 1000:
-                        logger.warning(f"Reached pagination limit (1000 pages) for branches. Total branches fetched: {len(all_branches)}")
+                    if 'rel="next"' not in response.headers.get('Link', ''):
                         break
-                
-                logger.info(f"Fetched {len(all_branches)} branches from GitLab repository")
-                
-                # Format branch information
-                formatted_branches = []
-                for branch in all_branches:
-                    formatted_branches.append({
-                        'name': branch.get('name', ''),
-                        'default': branch.get('default', False),
-                        'protected': branch.get('protected', False),
-                        'commit_id': branch.get('commit', {}).get('id', '')[:8] if branch.get('commit') else '',
-                        'commit_message': branch.get('commit', {}).get('message', '')[:50] if branch.get('commit') else ''
-                    })
-                
-                return formatted_branches
+                    p += 1
+                    if p > max_pages:
+                        logger.warning(
+                            "GitLab branch list stopped at BRANCH_LIST_MAX_PAGES=%s (~%s branches)",
+                            max_pages,
+                            len(all_branches),
+                        )
+                        break
+                formatted = self._format_gitlab_branch_rows(all_branches)
+                logger.info("Fetched %s GitLab branches (fetch_all)", len(formatted))
+                return {
+                    "branches": formatted,
+                    "has_more": False,
+                    "page": 1,
+                    "per_page": len(formatted),
+                }
+
+            eff_per_page = max(1, min(int(per_page), 100))
+            eff_page = max(1, int(page))
+            params: Dict[str, Any] = {'per_page': eff_per_page, 'page': eff_page}
+            if search:
+                params['search'] = search.strip()
+            response = await client.get(
+                f"{api_url}/projects/{encoded_path}/repository/branches",
+                headers=self.headers,
+                params=params,
+            )
+            response.raise_for_status()
+            raw = response.json()
+            formatted = self._format_gitlab_branch_rows(raw)
+            total_pages_hdr = response.headers.get('X-Total-Pages')
+            has_more = False
+            if total_pages_hdr:
+                has_more = eff_page < int(total_pages_hdr)
+            else:
+                has_more = len(raw) >= eff_per_page and 'rel="next"' in response.headers.get('Link', '')
+            return {
+                "branches": formatted,
+                "has_more": has_more,
+                "page": eff_page,
+                "per_page": eff_per_page,
+            }
         except httpx.HTTPStatusError as e:
             logger.error(f"GitLab API error listing branches: {e.response.status_code} - {e.response.text}")
-            return []
+            return {"branches": [], "has_more": False, "page": page, "per_page": per_page}
         except Exception as e:
             logger.error(f"Failed to list branches: {e}")
-            return []
-    
+            return {"branches": [], "has_more": False, "page": page, "per_page": per_page}
+
+    async def get_branch(self, repo_url: str, branch_name: str) -> Optional[Dict]:
+        """GET a single branch (used to inject default/selected when not on the current list page)."""
+        if not self.api_token or not (branch_name or "").strip():
+            return None
+        try:
+            api_url = self.get_api_url_for_repo(repo_url)
+            project_info = self.parse_gitlab_url(repo_url)
+            encoded_path = project_info["project_path"].replace("/", "%2F")
+            enc_branch = quote(str(branch_name).strip(), safe="")
+            client = get_shared_async_client()
+            response = await client.get(
+                f"{api_url}/projects/{encoded_path}/repository/branches/{enc_branch}",
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            logger.debug("GitLab get_branch %s: %s", branch_name, e)
+            return None
+
+    def _pack_gitlab_diff_list(self, diff_rows: List[Dict]) -> Dict:
+        """Normalize GitLab per-file diff array into our standard shape."""
+        if not diff_rows:
+            return {
+                "diff": "",
+                "changed_files": [],
+                "stats": {"additions": 0, "deletions": 0, "files_changed": 0},
+            }
+        changed_files = [d.get("new_path", d.get("old_path", "")) for d in diff_rows]
+        diff_content = [d.get("diff", "") for d in diff_rows if d.get("diff")]
+        additions = sum(d.get("added_lines", 0) or 0 for d in diff_rows)
+        deletions = sum(d.get("removed_lines", 0) or 0 for d in diff_rows)
+        if additions == 0 and deletions == 0 and diff_content:
+            full_diff = "\n".join(diff_content)
+            additions = sum(
+                1
+                for line in full_diff.split("\n")
+                if line.startswith("+") and not line.startswith("+++")
+            )
+            deletions = sum(
+                1
+                for line in full_diff.split("\n")
+                if line.startswith("-") and not line.startswith("---")
+            )
+        cf = [f for f in changed_files if f]
+        return {
+            "diff": "\n".join(diff_content),
+            "changed_files": cf,
+            "stats": {
+                "additions": additions,
+                "deletions": deletions,
+                "files_changed": len(cf),
+            },
+        }
+
+    async def _fetch_commit_diff_raw(
+        self, repo_url: str, commit_sha: str
+    ) -> Optional[Dict]:
+        """
+        GET .../repository/commits/:sha/diff — works when repository/compare returns no diffs
+        (seen on some self-hosted GitLab versions/settings).
+        """
+        if not self.api_token or not commit_sha:
+            return None
+        try:
+            api_url = self.get_api_url_for_repo(repo_url)
+            project_info = self.parse_gitlab_url(repo_url)
+            project_path = project_info["project_path"]
+            encoded_path = project_path.replace("/", "%2F")
+            client = get_shared_async_client()
+            response = await client.get(
+                f"{api_url}/projects/{encoded_path}/repository/commits/{commit_sha}/diff",
+                headers=self.headers,
+            )
+            response.raise_for_status()
+            diff_data = response.json()
+            if not isinstance(diff_data, list):
+                return None
+            packed = self._pack_gitlab_diff_list(diff_data)
+            if packed.get("diff") or packed.get("changed_files"):
+                logger.info(
+                    "GitLab commit diff endpoint returned %s file(s) for %s…",
+                    len(packed.get("changed_files") or []),
+                    commit_sha[:8],
+                )
+            return packed
+        except Exception as e:
+            logger.warning("GitLab commit diff fallback failed: %s", e)
+            return None
+
     async def get_commit_diff(self, repo_url: str, from_commit: str, to_commit: str) -> Optional[Dict]:
         """
         Get diff between two commits using GitLab API.
@@ -331,45 +456,53 @@ class GitLabService:
             project_path = project_info['project_path']
             encoded_path = project_path.replace('/', '%2F')
             
-            async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.get(
-                    f"{api_url}/projects/{encoded_path}/repository/compare",
-                    headers=self.headers,
-                    params={'from': from_commit, 'to': to_commit}
-                )
-                response.raise_for_status()
-                compare_data = response.json()
-                
-                # Extract diff information
-                diff_text = compare_data.get('diffs', [])
-                changed_files = [d.get('new_path', d.get('old_path', '')) for d in diff_text]
-                
-                # Build unified diff text from individual file diffs
-                diff_content = []
-                for file_diff in diff_text:
-                    if file_diff.get('diff'):
-                        diff_content.append(file_diff['diff'])
-                
-                # Calculate stats - try API fields first, fallback to parsing diff content
-                additions = sum(d.get('added_lines', 0) or 0 for d in diff_text)
-                deletions = sum(d.get('removed_lines', 0) or 0 for d in diff_text)
-                
-                # If API doesn't provide line counts, parse the diff content
-                if additions == 0 and deletions == 0 and diff_content:
-                    full_diff = '\n'.join(diff_content)
-                    # Count lines starting with + (added) and - (removed)
-                    additions = sum(1 for line in full_diff.split('\n') if line.startswith('+') and not line.startswith('+++'))
-                    deletions = sum(1 for line in full_diff.split('\n') if line.startswith('-') and not line.startswith('---'))
-                
-                return {
-                    "diff": '\n'.join(diff_content),
-                    "changed_files": [f for f in changed_files if f],  # Filter empty strings
-                    "stats": {
-                        "additions": additions,
-                        "deletions": deletions,
-                        "files_changed": len([f for f in changed_files if f])
-                    }
+            client = get_shared_async_client()
+            response = await client.get(
+                f"{api_url}/projects/{encoded_path}/repository/compare",
+                headers=self.headers,
+                params={'from': from_commit, 'to': to_commit},
+            )
+            response.raise_for_status()
+            compare_data = response.json()
+
+            diff_text = compare_data.get('diffs', [])
+            changed_files = [d.get('new_path', d.get('old_path', '')) for d in diff_text]
+
+            diff_content = []
+            for file_diff in diff_text:
+                if file_diff.get('diff'):
+                    diff_content.append(file_diff['diff'])
+
+            additions = sum(d.get('added_lines', 0) or 0 for d in diff_text)
+            deletions = sum(d.get('removed_lines', 0) or 0 for d in diff_text)
+
+            if additions == 0 and deletions == 0 and diff_content:
+                full_diff = '\n'.join(diff_content)
+                additions = sum(1 for line in full_diff.split('\n') if line.startswith('+') and not line.startswith('+++'))
+                deletions = sum(1 for line in full_diff.split('\n') if line.startswith('-') and not line.startswith('---'))
+
+            result = {
+                "diff": '\n'.join(diff_content),
+                "changed_files": [f for f in changed_files if f],
+                "stats": {
+                    "additions": additions,
+                    "deletions": deletions,
+                    "files_changed": len([f for f in changed_files if f])
                 }
+            }
+            if not (result["diff"] or "").strip() and not result["changed_files"]:
+                logger.warning(
+                    "GitLab compare returned no diffs (from=%s, to=%s); trying commit diff API",
+                    str(from_commit)[:8],
+                    str(to_commit)[:8],
+                )
+                fallback = await self._fetch_commit_diff_raw(repo_url, to_commit)
+                if fallback and (
+                    (fallback.get("diff") or "").strip()
+                    or fallback.get("changed_files")
+                ):
+                    return fallback
+            return result
         except httpx.HTTPStatusError as e:
             logger.error(f"GitLab API error getting commit diff: {e.response.status_code} - {e.response.text}")
             return None
@@ -379,7 +512,12 @@ class GitLabService:
             logger.debug(traceback.format_exc())
             return None
     
-    async def get_latest_diff(self, repo_url: str, branch: str = None) -> Optional[Dict]:
+    async def get_latest_diff(
+        self,
+        repo_url: str,
+        branch: str = None,
+        default_branch_hint: Optional[str] = None,
+    ) -> Optional[Dict]:
         """
         Get diff for the latest commit on a branch using GitLab API.
         Compares latest commit with its parent.
@@ -397,7 +535,9 @@ class GitLabService:
         
         try:
             # Get latest commit
-            latest_commit = await self.get_latest_commit(repo_url, branch)
+            latest_commit = await self.get_latest_commit(
+                repo_url, branch, default_branch_hint=default_branch_hint
+            )
             if not latest_commit:
                 logger.warning("No latest commit found")
                 return None
@@ -417,38 +557,34 @@ class GitLabService:
                 project_path = project_info['project_path']
                 encoded_path = project_path.replace('/', '%2F')
                 
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    response = await client.get(
-                        f"{api_url}/projects/{encoded_path}/repository/commits/{commit_id}/diff",
-                        headers=self.headers
-                    )
-                    response.raise_for_status()
-                    diff_data = response.json()
-                    
-                    # Process diff data
-                    changed_files = [d.get('new_path', d.get('old_path', '')) for d in diff_data]
-                    diff_content = [d.get('diff', '') for d in diff_data if d.get('diff')]
-                    
-                    # Calculate stats - try API fields first, fallback to parsing diff content
-                    additions = sum(d.get('added_lines', 0) or 0 for d in diff_data)
-                    deletions = sum(d.get('removed_lines', 0) or 0 for d in diff_data)
-                    
-                    # If API doesn't provide line counts, parse the diff content
-                    if additions == 0 and deletions == 0 and diff_content:
-                        full_diff = '\n'.join(diff_content)
-                        # Count lines starting with + (added) and - (removed)
-                        additions = sum(1 for line in full_diff.split('\n') if line.startswith('+') and not line.startswith('+++'))
-                        deletions = sum(1 for line in full_diff.split('\n') if line.startswith('-') and not line.startswith('---'))
-                    
-                    return {
-                        "diff": '\n'.join(diff_content),
-                        "changed_files": [f for f in changed_files if f],
-                        "stats": {
-                            "additions": additions,
-                            "deletions": deletions,
-                            "files_changed": len([f for f in changed_files if f])
-                        }
+                client = get_shared_async_client()
+                response = await client.get(
+                    f"{api_url}/projects/{encoded_path}/repository/commits/{commit_id}/diff",
+                    headers=self.headers,
+                )
+                response.raise_for_status()
+                diff_data = response.json()
+
+                changed_files = [d.get('new_path', d.get('old_path', '')) for d in diff_data]
+                diff_content = [d.get('diff', '') for d in diff_data if d.get('diff')]
+
+                additions = sum(d.get('added_lines', 0) or 0 for d in diff_data)
+                deletions = sum(d.get('removed_lines', 0) or 0 for d in diff_data)
+
+                if additions == 0 and deletions == 0 and diff_content:
+                    full_diff = '\n'.join(diff_content)
+                    additions = sum(1 for line in full_diff.split('\n') if line.startswith('+') and not line.startswith('+++'))
+                    deletions = sum(1 for line in full_diff.split('\n') if line.startswith('-') and not line.startswith('---'))
+
+                return {
+                    "diff": '\n'.join(diff_content),
+                    "changed_files": [f for f in changed_files if f],
+                    "stats": {
+                        "additions": additions,
+                        "deletions": deletions,
+                        "files_changed": len([f for f in changed_files if f])
                     }
+                }
             else:
                 # Compare with parent commit
                 parent_id = parent_ids[0]

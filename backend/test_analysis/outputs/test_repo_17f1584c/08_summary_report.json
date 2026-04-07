@@ -1,24 +1,21 @@
 {
-  "generated_at": "2026-03-13T14:32:39.787498",
+  "generated_at": "2026-03-17T19:01:28.268687",
   "data": {
     "test_repository_overview": {
-      "total_test_files": 100,
-      "total_lines_of_code": 3255,
-      "test_framework": "junit5",
-      "framework_confidence": "high"
+      "total_test_files": 0,
+      "total_lines_of_code": 0,
+      "test_framework": "unknown",
+      "framework_confidence": "medium"
     },
     "test_inventory": {
-      "total_tests": 386,
-      "total_test_classes": 100,
-      "tests_by_type": {
-        "unit": 374,
-        "integration": 12
-      }
+      "total_tests": 0,
+      "total_test_classes": 0,
+      "tests_by_type": {}
     },
     "summary_for_db": {
-      "files_analyzed": 100,
-      "total_tests": 386,
-      "framework": "junit5"
+      "files_analyzed": 0,
+      "total_tests": 0,
+      "framework": "unknown"
     }
   }
 }

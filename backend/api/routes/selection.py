@@ -14,6 +14,9 @@ if str(_backend_path) not in sys.path:
 from api.models.repository import SelectionResponse
 from services.selection_service import SelectionService
 from services.repository_db import get_repository_by_id
+from services.repository_vcs import resolve_provider, effective_branch, normalize_diff_payload
+from services.gitlab_service import GitLabService
+from services.github_service import GitHubService
 
 router = APIRouter(prefix="/repositories", tags=["selection"])
 selection_service = SelectionService()
@@ -30,38 +33,21 @@ async def select_tests(repo_id: str):
     
     try:
         repo_url = repo["url"]
-        provider = repo.get("provider")  # Get stored provider
+        provider = resolve_provider(repo_url, repo.get("provider"))
+        branch = effective_branch(None, repo.get("selected_branch"), repo.get("default_branch"))
+        default_hint = repo.get("default_branch")
         # Get risk threshold - preserve None if disabled, convert to int if set
         risk_threshold = repo.get("risk_threshold")
         if risk_threshold is not None:
             risk_threshold = int(risk_threshold)  # Ensure it's an integer
         # If risk_threshold is None, keep it as None (risk analysis disabled)
         
-        # Get diff from API (no local clone needed)
-        from services.gitlab_service import GitLabService
-        from services.github_service import GitHubService
-        
-        # Use selected branch or default branch
-        branch = repo.get("selected_branch") or repo.get("default_branch")
-        
-        # Determine provider
-        if not provider:
-            from services.gitlab_service import GitLabService
-            if GitLabService.is_gitlab_url(repo_url):
-                provider = 'gitlab'
-            elif GitHubService.is_github_url(repo_url):
-                provider = 'github'
-            else:
-                raise HTTPException(
-                    status_code=400,
-                    detail="Could not determine repository provider."
-                )
-        
-        # Use appropriate API based on provider
         logger.info(f"Getting diff for provider: {provider}, branch: {branch}")
         if provider == 'gitlab':
             gitlab_service = GitLabService()
-            diff_data = await gitlab_service.get_latest_diff(repo_url, branch=branch)
+            diff_data = await gitlab_service.get_latest_diff(
+                repo_url, branch=branch, default_branch_hint=default_hint
+            )
             
             if not diff_data:
                 logger.error("Failed to get diff via GitLab API")
@@ -70,15 +56,11 @@ async def select_tests(repo_id: str):
                     detail="Failed to get diff via GitLab API for test selection."
                 )
             
-            # Normalize keys (GitLab uses changed_files, but we want changedFiles for consistency)
-            if 'changed_files' in diff_data and 'changedFiles' not in diff_data:
-                diff_data['changedFiles'] = diff_data.pop('changed_files')
-            
-            logger.info(f"Got diff data: {len(diff_data.get('diff', ''))} chars, {len(diff_data.get('changedFiles', diff_data.get('changed_files', [])))} files")
-            
         elif provider == 'github':
             github_service = GitHubService()
-            diff_data = await github_service.get_latest_diff(repo_url, branch=branch)
+            diff_data = await github_service.get_latest_diff(
+                repo_url, branch=branch, default_branch_hint=default_hint
+            )
             
             if not diff_data:
                 logger.error("Failed to get diff via GitHub API")
@@ -86,17 +68,17 @@ async def select_tests(repo_id: str):
                     status_code=500,
                     detail="Failed to get diff via GitHub API for test selection."
                 )
-            
-            # Normalize keys (GitHub uses changed_files, but we want changedFiles for consistency)
-            if 'changed_files' in diff_data and 'changedFiles' not in diff_data:
-                diff_data['changedFiles'] = diff_data.pop('changed_files')
-            
-            logger.info(f"Got diff data: {len(diff_data.get('diff', ''))} chars, {len(diff_data.get('changedFiles', []))} files")
         else:
             raise HTTPException(
                 status_code=501,
                 detail=f"Test selection via API is not supported for provider: {provider}"
             )
+
+        diff_data = normalize_diff_payload(diff_data)
+        logger.info(
+            f"Got diff data: {len(diff_data.get('diff', ''))} chars, "
+            f"{len(diff_data.get('changedFiles', []))} files"
+        )
         
         # Risk Analysis: Check if changed files exceed threshold
         # If risk_threshold is None, skip risk analysis and proceed with normal selection
@@ -188,12 +170,17 @@ async def select_tests(repo_id: str):
         
         # Extract total tests count from results
         total_tests_in_db = results.get("total_tests_in_db", 0)
-        logger.info(f"Returning selection results: total_tests={results.get('total_tests', 0)}, total_tests_in_db={total_tests_in_db}, tests_count={len(results.get('tests', []))}")
-        logger.info(f"Results keys: {list(results.keys())}")
-        if results.get('tests'):
-            logger.info(f"First test sample: {results['tests'][0]}")
+        logger.info(
+            "select-tests: total_tests=%s total_tests_in_db=%s returned=%s",
+            results.get("total_tests", 0),
+            total_tests_in_db,
+            len(results.get("tests", [])),
+        )
+        logger.debug("Selection result keys: %s", list(results.keys()))
+        if results.get("tests"):
+            logger.debug("First test id=%s", results["tests"][0].get("test_id"))
         else:
-            logger.warning("No tests in results!")
+            logger.warning("No tests in selection results")
         
         # If total_tests_in_db is still 0, try to calculate it directly from bound repositories
         if total_tests_in_db == 0:
@@ -223,6 +210,9 @@ async def select_tests(repo_id: str):
             totalTestsInDb=total_tests_in_db,  # Add total tests in database
             astMatches=results.get("ast_matches", 0),
             semanticMatches=results.get("semantic_matches", 0),
+            selectionFunnel=results.get("selection_funnel"),
+            semanticSearchCandidates=results.get("semantic_search_candidates"),
+            semanticVectorThreshold=results.get("semantic_vector_threshold"),
             tests=results.get("tests", []),
             semanticMatchDetails=results.get("semantic_match_details", []),
             astMatchDetails=results.get("ast_match_details", []),
@@ -237,7 +227,10 @@ async def select_tests(repo_id: str):
             selectionDisabled=False,
             llmScores=results.get("llm_scores"),
             llmInputOutput=results.get("llm_input_output"),
-            confidenceDistribution=results.get("confidence_distribution")
+            confidenceDistribution=results.get("confidence_distribution"),
+            coverageGaps=results.get("coverage_gaps"),
+            breakageWarnings=results.get("breakage_warnings"),
+            ragDiagnostics=results.get("rag_diagnostics"),
         )
         logger.info(f"SelectionResponse created: totalTests={response.totalTests}, totalTestsInDb={response.totalTestsInDb}")
         return response

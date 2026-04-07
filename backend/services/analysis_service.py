@@ -13,7 +13,12 @@ _backend_path = Path(__file__).parent.parent
 if str(_backend_path) not in sys.path:
     sys.path.insert(0, str(_backend_path))
 
-# Import new architecture components
+# New unified pipeline components
+from test_analysis.engine.repo_analyzer import RepoAnalyzer
+from deterministic.loader import load_to_db
+from deterministic.db_connection import get_connection_with_schema
+
+# Legacy imports kept for backward-compat (detection_report, merge summary)
 from test_analysis.core.detection import create_detection_report
 from test_analysis.core.analyzers import BaseAnalyzer
 from test_analysis.core.analyzers import JavaAnalyzer, PythonAnalyzer, JavaScriptAnalyzer, TreeSitterFallbackAnalyzer
@@ -196,57 +201,69 @@ class AnalysisService:
             total_tables = len(schema_def.core_tables) + len(schema_def.java_tables) + len(schema_def.python_tables) + len(schema_def.js_tables)
             logger.info(f"Schema built: {total_tables} tables total ({len(schema_def.core_tables)} core + {len(schema_def.java_tables)} Java + {len(schema_def.python_tables)} Python + {len(schema_def.js_tables)} JS)")
             
-            # STEP 5: LOAD - Load to database using existing deterministic scripts
+            # STEP 5: LOAD — in-process loader (replaces 14 subprocesses)
             if progress_callback:
                 await progress_callback("Loading data to database...")
             
-            logger.info("[PHASE 5] LOAD - Loading data to database")
-            await self._load_to_database(schema_name or os.getenv('TEST_REPO_SCHEMA'), progress_callback, schema_def)
+            logger.info("[PHASE 5] LOAD - Loading data to database (in-process)")
+            effective_schema = schema_name or os.getenv('TEST_REPO_SCHEMA', 'planon1')
+
+            analysis_result = RepoAnalyzer().analyze(
+                repo_path_obj,
+                schema_name=effective_schema,
+                repo_id=test_repo_id or "",
+                progress_callback=(
+                    (lambda msg: None)  # sync wrapper — progress from engine goes to logger
+                    if progress_callback is None
+                    else None
+                ),
+            )
+
+            try:
+                with get_connection_with_schema(effective_schema) as conn:
+                    load_stats = load_to_db(conn, analysis_result, effective_schema)
+                if progress_callback:
+                    await progress_callback(f"  [OK] Loaded {analysis_result.total_tests} tests into DB")
+                logger.info(f"[PHASE 5] Load complete. Stats: {load_stats}")
+            except Exception as load_err:
+                logger.error(f"[PHASE 5] In-process load failed: {load_err}", exc_info=True)
+                if progress_callback:
+                    await progress_callback(f"  [ERROR] DB load failed: {load_err}")
             
             # STEP 6: Generate embeddings
             if progress_callback:
                 await progress_callback("Generating embeddings...")
             
-            logger.info("[PHASE 6] EMBED - Generating embeddings")
-            await self._generate_embeddings(test_repo_id, schema_name or os.getenv('TEST_REPO_SCHEMA'), progress_callback)
+            logger.info("[PHASE 6] EMBED - Generating embeddings (NEW: Direct file loading)")
+            await self._generate_embeddings(
+                test_repo_id=test_repo_id, 
+                schema_name=effective_schema, 
+                progress_callback=progress_callback,
+                repo_path=str(repo_path_obj)  # Pass repo path for direct file loading
+            )
             
-            # Read summary for results
-            summary_path = output_dir / "08_summary_report.json"
+            # Build results summary from AnalysisResult (no JSON file needed)
             results = {
-                "files_analyzed": 0,
-                "functions_extracted": 0,
-                "modules_identified": 0,
-                "test_files": 0,
-                "total_tests": 0,
+                "files_analyzed": sum(
+                    lr.files_analyzed for lr in analysis_result.languages.values()
+                ),
+                "test_files": sum(
+                    lr.files_analyzed for lr in analysis_result.languages.values()
+                ),
+                "total_tests": analysis_result.total_tests,
+                "total_test_classes": len({t.describe for t in analysis_result.all_tests if t.describe}),
+                "total_test_methods": analysis_result.total_tests,
+                "functions_extracted": len(analysis_result.function_mappings),
+                "modules_identified": len(analysis_result.reverse_index),
+                "total_dependencies": len(analysis_result.dependencies),
+                "total_production_classes": len(analysis_result.reverse_index),
+                "framework": analysis_result.framework,
             }
-            
-            if summary_path.exists():
-                try:
-                    import json
-                    with open(summary_path, 'r') as f:
-                        summary = json.load(f)
-                        data = summary.get('data', summary)
-                        test_overview = data.get('test_repository_overview', {})
-                        test_inventory = data.get('test_inventory', {})
-                        dependencies = data.get('dependencies', {})
-                        structure = data.get('structure', {})
-                        
-                        results.update({
-                            "files_analyzed": test_overview.get("total_test_files", 0),
-                            "test_files": test_overview.get("total_test_files", 0),
-                            "total_tests": test_inventory.get("total_tests", 0),
-                            "total_test_classes": test_inventory.get("total_test_classes", 0),
-                            "total_test_methods": test_inventory.get("total_tests", 0),
-                            "functions_extracted": dependencies.get("total_dependency_mappings", 0),
-                            "modules_identified": structure.get("package_count", 0) or len(structure.get("test_categories", [])),
-                            "total_dependencies": dependencies.get("total_dependency_mappings", 0),
-                            "total_production_classes": dependencies.get("total_production_classes_referenced", 0),
-                            "framework": test_overview.get("test_framework", "unknown")
-                        })
-                except Exception as e:
-                    logger.error(f"Failed to read summary file: {e}", exc_info=True)
-            
-            # Return results
+
+            # Optionally write consolidated analysis.json for debugging
+            if os.environ.get('DEBUG_WRITE_JSON', '').lower() in ('1', 'true', 'yes'):
+                analysis_result.write_consolidated_json(output_dir)
+
             return {
                 'success': True,
                 'detection_report': detection_report.to_dict(),
@@ -254,7 +271,7 @@ class AnalysisService:
                 'merged_summary': merged_summary,
                 'schema_definition': schema_def.to_dict(),
                 'output_directory': str(output_dir),
-                **results,  # Include summary statistics
+                **results,
             }
         
         except Exception as e:
@@ -266,98 +283,35 @@ class AnalysisService:
     
     async def _load_to_database(self, schema_name: Optional[str] = None, progress_callback=None, schema_def=None):
         """
-        Load analysis results to database using existing deterministic scripts.
-        
-        Args:
-            schema_name: Optional schema name
-            progress_callback: Optional progress callback
-            schema_def: Optional SchemaDefinition object for language-specific tables
+        DEPRECATED — replaced by deterministic/loader.py load_to_db() called directly
+        from run_pipeline().  This stub exists only to avoid AttributeError if any
+        external code still calls it.
         """
-        if schema_name:
-            os.environ['TEST_REPO_SCHEMA'] = schema_name
-        
-        # Store schema definition for table creation script
-        if schema_def:
-            import json
-            os.environ['SCHEMA_DEFINITION'] = json.dumps(schema_def.to_dict())
-        
-        scripts = [
-            ("deterministic/01_create_tables.py", "Creating database tables..."),
-            ("deterministic/02_load_test_registry.py", "Loading test registry..."),
-            ("deterministic/03_load_dependencies.py", "Loading dependencies..."),
-            ("deterministic/04_load_reverse_index.py", "Loading reverse index..."),
-            ("deterministic/04b_load_function_mappings.py", "Loading function mappings..."),
-            ("deterministic/05_load_metadata.py", "Loading metadata..."),
-            ("deterministic/06_load_structure.py", "Loading structure..."),
-            # Java-specific loaders
-            ("deterministic/07_load_java_reflection.py", "Loading Java reflection calls..."),
-            ("deterministic/08_load_java_di_fields.py", "Loading Java DI fields..."),
-            ("deterministic/09_load_java_annotations.py", "Loading Java annotations..."),
-            # Python-specific loaders
-            ("deterministic/10_load_python_fixtures.py", "Loading Python fixtures..."),
-            ("deterministic/11_load_python_decorators.py", "Loading Python decorators..."),
-            ("deterministic/12_load_python_async_tests.py", "Loading Python async tests..."),
-            # JavaScript-specific loaders
-            ("deterministic/13_load_js_mocks.py", "Loading JavaScript mocks..."),
-            ("deterministic/14_load_js_async_tests.py", "Loading JavaScript async tests..."),
-        ]
-        
-        for script_name, script_message in scripts:
-            script_path = self.project_root / script_name
-            if not script_path.exists():
-                logger.warning(f"Script not found: {script_path}")
-                continue
-            
-            try:
-                if progress_callback:
-                    await progress_callback(f"  [RUN] {script_message}")
-                logger.info(f"[LOAD] Running {script_name}")
-                
-                # Pass schema name as argument for table creation script
-                cmd = [sys.executable, str(script_path)]
-                if script_name == "deterministic/01_create_tables.py" and schema_name:
-                    cmd.append(schema_name)
-                
-                result = subprocess.run(
-                    cmd,
-                    cwd=str(self.project_root),
-                    capture_output=True,
-                    text=True,
-                    timeout=120,
-                    env=os.environ.copy()
-                )
-                
-                if result.returncode != 0:
-                    error_msg = f"  [FAILED] {script_message} (exit code: {result.returncode})"
-                    if progress_callback:
-                        await progress_callback(error_msg)
-                    logger.error(error_msg)
-                    logger.error(f"Script stderr: {result.stderr}")
-                else:
-                    success_msg = f"  [OK] {script_message}"
-                    if progress_callback:
-                        await progress_callback(success_msg)
-                    logger.info(success_msg)
-            except subprocess.TimeoutExpired:
-                error_msg = f"  [TIMEOUT] {script_message}"
-                if progress_callback:
-                    await progress_callback(error_msg)
-                logger.error(error_msg)
-            except Exception as e:
-                error_msg = f"  [ERROR] {script_message}: {e}"
-                if progress_callback:
-                    await progress_callback(error_msg)
-                logger.error(error_msg)
+        logger.warning(
+            "[DEPRECATED] _load_to_database() is no longer used. "
+            "Loading is now handled in-process by deterministic/loader.py."
+        )
     
-    async def _generate_embeddings(self, test_repo_id: Optional[str] = None, schema_name: Optional[str] = None, progress_callback=None):
-        """Generate and store embeddings in Pinecone for semantic search."""
+    async def _generate_embeddings(self, test_repo_id: Optional[str] = None, schema_name: Optional[str] = None, progress_callback=None, repo_path: Optional[str] = None):
+        """
+        Generate and store embeddings in Pinecone for semantic search.
+        
+        NEW APPROACH: Uses direct file loading from test repository (no JSON/database dependency).
+        """
         env = os.environ.copy()
         if test_repo_id:
             env['TEST_REPO_ID'] = test_repo_id
         if schema_name:
             env['TEST_REPO_SCHEMA'] = schema_name
         
-        embedding_script = self.project_root / "semantic_retrieval" / "embedding_generator.py"
+        # NEW APPROACH: Pass test repository path for direct file loading
+        if repo_path:
+            env['TEST_REPO_PATH'] = repo_path
+            logger.info(f"[EMBED] Using NEW approach: Direct file loading from {repo_path}")
+        else:
+            logger.warning("[EMBED] TEST_REPO_PATH not set, falling back to legacy JSON approach")
+        
+        embedding_script = self.project_root / "semantic" / "embedding_generation" / "embedding_generator.py"
         if embedding_script.exists():
             try:
                 if progress_callback:

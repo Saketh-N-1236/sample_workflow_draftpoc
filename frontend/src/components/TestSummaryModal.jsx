@@ -53,19 +53,43 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
     || 0;
   const notSelectedCount = Math.max(0, totalTests - selectedCount);
   const selectedTestIds = new Set(selectedTests.map(t => String(t.test_id)));
+  // Vector threshold used (for similarity calibration)
+  const vectorThreshold = selectionResults?.semanticVectorThreshold 
+    ?? selectionResults?.semantic_vector_threshold 
+    ?? 0.22;
+  const calibrateSimilarity = (sim) => {
+    if (sim === undefined || sim === null) return null;
+    const thr = Math.max(0, Math.min(0.99, Number(vectorThreshold) || 0));
+    const calibrated = (sim - thr) / (1 - thr);
+    return Math.max(0, Math.min(1, calibrated));
+  };
   
-  // Calculate average confidence score
-  const confidenceScores = selectedTests
-    .map(t => t.confidence_score)
-    .filter(score => score !== undefined && score !== null);
-  const avgConfidenceScore = confidenceScores.length > 0
-    ? (confidenceScores.reduce((sum, score) => sum + score, 0) / confidenceScores.length).toFixed(1)
+  // Calculate improved display confidence
+  // Displayed = max(backend confidence_score, recomputed weighted sum from breakdown)
+  const displayedConfidenceScores = selectedTests
+    .map(t => {
+      const raw = t?.confidence_score;
+      const b = t?.confidence_breakdown || {};
+      const astPct = b.ast_percentage ?? b.astPercentage ?? 0;
+      const semanticPct = b.semantic_percentage ?? b.semanticPercentage ?? 0;
+      const llmPct = b.llm_percentage ?? b.llmPercentage ?? 0;
+      const speedPct = b.speed_percentage ?? b.speedPercentage ?? 0;
+      const hasBreakdown = [astPct, semanticPct, llmPct, speedPct].some(v => typeof v === 'number' && v > 0);
+      const recomputed = hasBreakdown ? (astPct + semanticPct + llmPct + speedPct) : null;
+      const candidates = [];
+      if (typeof raw === 'number') candidates.push(raw);
+      if (typeof recomputed === 'number') candidates.push(recomputed);
+      return candidates.length ? Math.max(...candidates) : null;
+    })
+    .filter(score => score !== null && score !== undefined);
+  const avgConfidenceScore = displayedConfidenceScores.length > 0
+    ? (displayedConfidenceScores.reduce((sum, score) => sum + score, 0) / displayedConfidenceScores.length).toFixed(1)
     : 0;
   
   // Calculate confidence distribution
-  const highConfidence = confidenceScores.filter(s => s >= 70).length;
-  const mediumConfidence = confidenceScores.filter(s => s >= 50 && s < 70).length;
-  const lowConfidence = confidenceScores.filter(s => s < 50).length;
+  const highConfidence = displayedConfidenceScores.filter(s => s >= 70).length;
+  const mediumConfidence = displayedConfidenceScores.filter(s => s >= 50 && s < 70).length;
+  const lowConfidence = displayedConfidenceScores.filter(s => s < 50).length;
 
   // Get selected test IDs for highlighting
   const selectedTestIdsSet = new Set(selectedTests.map(t => String(t.test_id)));
@@ -192,7 +216,7 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
             </div>
             <div style={{ fontSize: '14px', color: '#e65100', fontWeight: '500' }}>Avg Confidence</div>
             <div style={{ fontSize: '12px', color: '#666', marginTop: '4px' }}>
-              {selectedCount > 0 ? `${selectedCount} tests` : 'N/A'}
+              {selectedCount > 0 ? `${displayedConfidenceScores.length} scored` : 'N/A'}
             </div>
           </div>
         </div>
@@ -311,7 +335,7 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
               backdropFilter: 'blur(10px)'
             }}>
               <h4 style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: 'white' }}>
-                Formula:
+                Display Formula:
               </h4>
               <div style={{ 
                 fontFamily: 'monospace', 
@@ -322,7 +346,7 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                 marginBottom: '12px',
                 textAlign: 'center'
               }}>
-                Total = (AST × 40%) + (Semantic × 30%) + (LLM × 20%) + (Speed × 10%)
+                Displayed = max(Backend, AST×50% + Semantic×40% + LLM×10%)
               </div>
             </div>
 
@@ -333,7 +357,7 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                 borderRadius: '6px',
                 backdropFilter: 'blur(10px)'
               }}>
-                <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '4px' }}>AST Component (40%)</div>
+                <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '4px' }}>AST Component (50%)</div>
                 <div style={{ fontSize: '14px', fontWeight: '600' }}>
                   Based on match type & quality
                 </div>
@@ -351,12 +375,12 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                 borderRadius: '6px',
                 backdropFilter: 'blur(10px)'
               }}>
-                <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '4px' }}>Semantic Component (30%)</div>
+                <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '4px' }}>Semantic Component (40%)</div>
                 <div style={{ fontSize: '14px', fontWeight: '600' }}>
                   Vector similarity score
                 </div>
                 <div style={{ fontSize: '11px', opacity: 0.8, marginTop: '4px' }}>
-                  • Similarity × 100 (capped at 60)<br/>
+                  • Similarity × 100 (full 0–100 range)<br/>
                   • From semantic search<br/>
                   • Meaning-based matching
                 </div>
@@ -368,7 +392,7 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                 borderRadius: '6px',
                 backdropFilter: 'blur(10px)'
               }}>
-                <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '4px' }}>LLM Component (20%)</div>
+                <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '4px' }}>LLM Component (10%)</div>
                 <div style={{ fontSize: '14px', fontWeight: '600' }}>
                   AI relevance assessment
                 </div>
@@ -385,14 +409,9 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                 borderRadius: '6px',
                 backdropFilter: 'blur(10px)'
               }}>
-                <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '4px' }}>Speed Component (10%)</div>
-                <div style={{ fontSize: '14px', fontWeight: '600' }}>
-                  Fixed contribution
-                </div>
+                <div style={{ fontSize: '12px', opacity: 0.9, marginBottom: '4px' }}>Speed Component (merged into Semantic)</div>
                 <div style={{ fontSize: '11px', opacity: 0.8, marginTop: '4px' }}>
-                  • Constant: 10 points<br/>
-                  • Same for all tests<br/>
-                  • Baseline factor
+                  • Included in Semantic weight (40%)
                 </div>
               </div>
             </div>
@@ -409,7 +428,12 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
               const semanticPct = breakdown.semantic_percentage ?? breakdown.semanticPercentage ?? 0;
               const llmPct = breakdown.llm_percentage ?? breakdown.llmPercentage ?? 0;
               const speedPct = breakdown.speed_percentage ?? breakdown.speedPercentage ?? 1;
-              const totalScore = exampleTest?.confidence_score ?? 0;
+              const semanticCombinedPct = semanticPct + speedPct;
+              const backendScore = exampleTest?.confidence_score ?? 0;
+              const totalScore = Math.max(
+                backendScore,
+                astPct + semanticCombinedPct + llmPct
+              );
 
               return (
                 <div style={{ 
@@ -432,17 +456,15 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                     borderRadius: '4px'
                   }}>
                     <div style={{ marginBottom: '8px' }}>
-                      <span style={{ color: '#a8d5ff' }}>AST:</span> {astScore} × 0.40 = <strong>{astPct.toFixed(1)}%</strong>
+                      <span style={{ color: '#a8d5ff' }}>AST:</span> {astScore} × 0.50 = <strong>{astPct.toFixed(1)}%</strong>
                     </div>
                     <div style={{ marginBottom: '8px' }}>
-                      <span style={{ color: '#d4a5ff' }}>Semantic:</span> {vectorScore} × 0.30 = <strong>{semanticPct.toFixed(1)}%</strong>
+                      <span style={{ color: '#d4a5ff' }}>Semantic:</span> {vectorScore} × 0.40 = <strong>{semanticCombinedPct.toFixed(1)}%</strong>
                     </div>
                     <div style={{ marginBottom: '8px' }}>
-                      <span style={{ color: '#ffcc80' }}>LLM:</span> {llmComponent} × 0.20 = <strong>{llmPct.toFixed(1)}%</strong>
+                      <span style={{ color: '#ffcc80' }}>LLM:</span> {llmComponent} × 0.10 = <strong>{llmPct.toFixed(1)}%</strong>
                     </div>
-                    <div style={{ marginBottom: '8px' }}>
-                      <span style={{ color: '#e0e0e0' }}>Speed:</span> {speedComponent} × 0.10 = <strong>{speedPct.toFixed(1)}%</strong>
-                    </div>
+                    
                     <div style={{ 
                       marginTop: '12px', 
                       paddingTop: '12px', 
@@ -493,7 +515,12 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                       const semanticPct = breakdown.semantic_percentage ?? breakdown.semanticPercentage ?? 0;
                       const llmPct = breakdown.llm_percentage ?? breakdown.llmPercentage ?? 0;
                       const speedPct = breakdown.speed_percentage ?? breakdown.speedPercentage ?? 1;
-                      const totalScore = test.confidence_score ?? 0;
+                      const semanticCombinedPct = semanticPct + speedPct;
+                      const backendScore = test.confidence_score ?? 0;
+                      const totalScore = Math.max(
+                        backendScore,
+                        astPct + semanticCombinedPct + llmPct
+                      );
                       const testName = test.method_name || test.test_id || `Test ${idx + 1}`;
 
                       return (
@@ -535,16 +562,13 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                             </div>
                             <div style={{ marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
                               <span style={{ color: '#d4a5ff' }}>Semantic ({vectorScore}):</span>
-                              <strong style={{ color: '#fff' }}>{semanticPct.toFixed(1)}%</strong>
+                              <strong style={{ color: '#fff' }}>{semanticCombinedPct.toFixed(1)}%</strong>
                             </div>
                             <div style={{ marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
                               <span style={{ color: '#ffcc80' }}>LLM ({llmComponent}):</span>
                               <strong style={{ color: '#fff' }}>{llmPct.toFixed(1)}%</strong>
                             </div>
-                            <div style={{ marginBottom: '6px', display: 'flex', justifyContent: 'space-between' }}>
-                              <span style={{ color: '#e0e0e0' }}>Speed ({speedComponent}):</span>
-                              <strong style={{ color: '#fff' }}>{speedPct.toFixed(1)}%</strong>
-                            </div>
+                            
                             <div style={{ 
                               marginTop: '8px', 
                               paddingTop: '8px', 
@@ -590,8 +614,8 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
               fontSize: '12px',
               opacity: 0.9
             }}>
-              <strong>Note:</strong> AST-only tests (no semantic match) get a minimum boost to 50% to ensure they pass the 40% threshold. 
-              The final score is capped between 0-100%.
+              <strong>Note:</strong> Formula: AST×50% + Semantic×40% + LLM×10%.
+              Scores range 0–100%. Labels: High ≥70, Medium ≥50, Low &lt;50.
             </div>
           </div>
         )}
@@ -753,11 +777,16 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                           )}
                         </td>
                         <td style={{ padding: '8px' }}>
-                          {similarity !== undefined && similarity !== null ? (
-                            <span style={{ color: similarity >= 0.6 ? '#2e7d32' : similarity >= 0.4 ? '#f57c00' : '#c62828' }}>
-                              {(similarity * 100).toFixed(1)}%
-                            </span>
-                          ) : (
+                          {similarity !== undefined && similarity !== null ? (() => {
+                            const simCal = calibrateSimilarity(similarity);
+                            const pct = ((simCal ?? similarity) * 100).toFixed(1);
+                            const color = (simCal ?? similarity) >= 0.6 ? '#2e7d32' : (simCal ?? similarity) >= 0.4 ? '#f57c00' : '#c62828';
+                            return (
+                              <span title={`raw ${(similarity*100).toFixed(1)}% • thr ${Math.round(vectorThreshold*100)}%`} style={{ color }}>
+                                {pct}%
+                              </span>
+                            );
+                          })() : (
                             '-'
                           )}
                         </td>
@@ -781,7 +810,8 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span style={{ color: '#666', fontSize: '10px', fontWeight: '500' }}>Semantic:</span>
                                 <strong style={{ color: '#7b1fa2', fontSize: '11px' }}>
-                                  {(confidenceBreakdown.semantic_percentage ?? confidenceBreakdown.semanticPercentage ?? 0).toFixed(1)}%
+                                  {(((confidenceBreakdown.semantic_percentage ?? confidenceBreakdown.semanticPercentage ?? 0)
+                                    + (confidenceBreakdown.speed_percentage ?? confidenceBreakdown.speedPercentage ?? 0))).toFixed(1)}%
                                 </strong>
                               </div>
                               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -790,12 +820,7 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                                   {(confidenceBreakdown.llm_percentage ?? confidenceBreakdown.llmPercentage ?? 0).toFixed(1)}%
                                 </strong>
                               </div>
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                <span style={{ color: '#666', fontSize: '10px', fontWeight: '500' }}>Speed:</span>
-                                <strong style={{ color: '#666', fontSize: '11px' }}>
-                                  {(confidenceBreakdown.speed_percentage ?? confidenceBreakdown.speedPercentage ?? 0).toFixed(1)}%
-                                </strong>
-                              </div>
+                              
                             </div>
                           ) : (
                             <span style={{ color: '#999', fontSize: '10px', fontStyle: 'italic' }}>N/A</span>
@@ -945,11 +970,16 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                               )}
                             </td>
                             <td style={{ padding: '8px' }}>
-                              {similarity !== undefined && similarity !== null ? (
-                                <span style={{ color: similarity >= 0.6 ? '#2e7d32' : similarity >= 0.4 ? '#f57c00' : '#c62828' }}>
-                                  {(similarity * 100).toFixed(1)}%
-                                </span>
-                              ) : (
+                              {similarity !== undefined && similarity !== null ? (() => {
+                                const simCal = calibrateSimilarity(similarity);
+                                const pct = ((simCal ?? similarity) * 100).toFixed(1);
+                                const color = (simCal ?? similarity) >= 0.6 ? '#2e7d32' : (simCal ?? similarity) >= 0.4 ? '#f57c00' : '#c62828';
+                                return (
+                                  <span title={`raw ${(similarity*100).toFixed(1)}% • thr ${Math.round(vectorThreshold*100)}%`} style={{ color }}>
+                                    {pct}%
+                                  </span>
+                                );
+                              })() : (
                                 '-'
                               )}
                             </td>
@@ -970,24 +1000,20 @@ const TestSummaryModal = ({ isOpen, onClose, selectionResults, totalTestsInDb })
                                       {(confidenceBreakdown.ast_percentage ?? confidenceBreakdown.astPercentage ?? 0).toFixed(1)}%
                                     </strong>
                                   </div>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ color: '#666', fontSize: '10px', fontWeight: '500' }}>Semantic:</span>
-                                    <strong style={{ color: '#7b1fa2', fontSize: '11px' }}>
-                                      {(confidenceBreakdown.semantic_percentage ?? confidenceBreakdown.semanticPercentage ?? 0).toFixed(1)}%
-                                    </strong>
-                                  </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ color: '#666', fontSize: '10px', fontWeight: '500' }}>Semantic:</span>
+                                <strong style={{ color: '#7b1fa2', fontSize: '11px' }}>
+                                  {(((confidenceBreakdown.semantic_percentage ?? confidenceBreakdown.semanticPercentage ?? 0)
+                                    + (confidenceBreakdown.speed_percentage ?? confidenceBreakdown.speedPercentage ?? 0))).toFixed(1)}%
+                                </strong>
+                              </div>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                     <span style={{ color: '#666', fontSize: '10px', fontWeight: '500' }}>LLM:</span>
                                     <strong style={{ color: '#f57c00', fontSize: '11px' }}>
                                       {(confidenceBreakdown.llm_percentage ?? confidenceBreakdown.llmPercentage ?? 0).toFixed(1)}%
                                     </strong>
                                   </div>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                    <span style={{ color: '#666', fontSize: '10px', fontWeight: '500' }}>Speed:</span>
-                                    <strong style={{ color: '#666', fontSize: '11px' }}>
-                                      {(confidenceBreakdown.speed_percentage ?? confidenceBreakdown.speedPercentage ?? 0).toFixed(1)}%
-                                    </strong>
-                                  </div>
+                              
                                 </div>
                               ) : (
                                 <span style={{ color: '#999', fontSize: '10px', fontStyle: 'italic' }}>N/A</span>
