@@ -1,0 +1,382 @@
+{
+  "scenario": "4",
+  "category": "EDGE CASES",
+  "title": "3 simultaneous edge cases: symbol renamed + symbol deleted + new symbol with no test",
+  "commit_message": "refactor!: rename CARD_NUMBER_REGEX → FULL_CARD_REGEX, remove advertisement fn, add getStreamingQuality",
+
+  "changed_files": [
+    "src/types/constants.ts",
+    "src/services/api/common/ApiEndPoints.js",
+    "src/helpers/utilities.js"
+  ],
+  "changed_symbols": {
+    "RENAMED":  { "old": "CARD_NUMBER_REGEX",  "new": "FULL_CARD_REGEX",        "file": "src/types/constants.ts" },
+    "DELETED":  { "symbol": "advertisement",                                     "file": "src/services/api/common/ApiEndPoints.js" },
+    "ADDED":    { "symbol": "getStreamingQuality",                               "file": "src/helpers/utilities.js" }
+  },
+
+  "edge_case_breakdown": {
+    "edge_case_1_RENAMED_SYMBOL": {
+      "description": "CARD_NUMBER_REGEX was renamed to FULL_CARD_REGEX and its pattern now also accepts 16-digit cards.",
+      "selection_effect": "Tests are still selected (describe label = 'CARD_NUMBER_REGEX' exists in the repo) — but ALL will FAIL because the old name no longer exists in source.",
+      "system_must_detect": "Symbol CARD_NUMBER_REGEX removed from diff. Symbol FULL_CARD_REGEX added. No describe('FULL_CARD_REGEX') exists in test repository → GAP.",
+      "tests_selected_and_will_fail": [
+        "CARD_NUMBER_REGEX > accepts a properly spaced 19-character card number",
+        "CARD_NUMBER_REGEX > rejects a card number shorter than 17 characters",
+        "CARD_NUMBER_REGEX validates checkout flow input > accepts a standard 19-character card number with spaces",
+        "CARD_NUMBER_REGEX validates checkout flow input > rejects a card number shorter than 17 characters",
+        "CARD_NUMBER_REGEX validates checkout flow input > rejects a card number that contains letters"
+      ]
+    },
+    "edge_case_2_DELETED_SYMBOL": {
+      "description": "advertisement() function entirely removed from ApiEndPoints.js.",
+      "selection_effect": "The test 'advertisement endpoint builder produces a correctly interpolated URL' is selected as CRITICAL and will FAIL at runtime because the function no longer exists in source.",
+      "system_must_detect": "Symbol 'advertisement' removed from diff (lines with -). Existing test selected → must emit BREAKAGE WARNING, not just CRITICAL.",
+      "test_selected_and_will_fail": "endpoints.favourites > advertisement endpoint builder produces a correctly interpolated URL"
+    },
+    "edge_case_3_NEW_SYMBOL_NO_TEST": {
+      "description": "getStreamingQuality() is a brand-new export in utilities.js. No describe block in the test repository mentions it.",
+      "selection_effect": "No test is selected. System must emit a COVERAGE GAP.",
+      "system_must_detect": "Symbol 'getStreamingQuality' added (diff lines with +). Scan test-manifest.json — symbol not in any symbols[]. → REPORT GAP, no test run."
+    }
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "describe() label or symbols[] matches old symbol name (before rename/delete). Tests will be selected but may fail at runtime.",
+      "tests": [
+        {
+          "test":       "CARD_NUMBER_REGEX > accepts a properly spaced 19-character card number",
+          "file":       "test_repository/standalone/regex.constants.test.js",
+          "edge_case":  "RENAME",
+          "result":     "⚠️  WILL FAIL — CARD_NUMBER_REGEX no longer exported; FULL_CARD_REGEX is the new name",
+          "category":   "standalone"
+        },
+        {
+          "test":       "CARD_NUMBER_REGEX > rejects a card number shorter than 17 characters",
+          "file":       "test_repository/standalone/regex.constants.test.js",
+          "edge_case":  "RENAME",
+          "result":     "⚠️  WILL FAIL — old symbol deleted",
+          "category":   "standalone"
+        },
+        {
+          "test":       "CARD_NUMBER_REGEX validates checkout flow input > accepts a standard 19-character card number with spaces",
+          "file":       "test_repository/cross-dependent/payment-state.cross.test.js",
+          "edge_case":  "RENAME",
+          "result":     "⚠️  WILL FAIL — CARD_NUMBER_REGEX inlined in test but mismatch in intent",
+          "category":   "cross-dependent"
+        },
+        {
+          "test":       "CARD_NUMBER_REGEX validates checkout flow input > rejects a card number shorter than 17 characters",
+          "file":       "test_repository/cross-dependent/payment-state.cross.test.js",
+          "edge_case":  "RENAME",
+          "result":     "⚠️  WILL FAIL — old name no longer valid contract with source",
+          "category":   "cross-dependent"
+        },
+        {
+          "test":       "CARD_NUMBER_REGEX validates checkout flow input > rejects a card number that contains letters",
+          "file":       "test_repository/cross-dependent/payment-state.cross.test.js",
+          "edge_case":  "RENAME",
+          "category":   "cross-dependent"
+        },
+        {
+          "test":       "endpoints.favourites > advertisement endpoint builder produces a correctly interpolated URL",
+          "file":       "test_repository/feature/api-navigation.feature.test.js",
+          "edge_case":  "DELETE",
+          "result":     "⚠️  WILL FAIL — advertisement() deleted from source; test inlines the function so it still runs, but the source contract is broken",
+          "category":   "feature"
+        }
+      ],
+      "count": 6,
+      "breakdown": {
+        "standalone":      2,
+        "cross-dependent": 3,
+        "feature":         1
+      }
+    },
+
+    "HIGH": {
+      "reason": "Sibling symbols in the same changed source files — not directly changed but defensively included",
+      "tests": [
+        {
+          "test":  "EMAIL_REGEX > accepts a valid .com email address",
+          "file":  "test_repository/standalone/regex.constants.test.js",
+          "why":   "constants.ts changed (CARD_NUMBER_REGEX renamed) — all constants in same file are HIGH",
+          "category": "standalone"
+        },
+        {
+          "test":  "EMAIL_REGEX > rejects an email address missing the @ symbol",
+          "file":  "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "EMAIL_REGEX > rejects a non-.com domain (e.g. .org)",
+          "file":  "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "PASSWORD_REGEX_CHANGE_PASSWORD > accepts a password meeting all requirements",
+          "file":  "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "PASSWORD_REGEX_CHANGE_PASSWORD > rejects a password without an uppercase letter",
+          "file":  "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "PASSWORD_REGEX_CHANGE_PASSWORD > rejects a password without a special character",
+          "file":  "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "PASSWORD_REGEX_CHANGE_PASSWORD > rejects a password longer than 30 characters",
+          "file":  "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "CARD_REGEX > accepts a string of digits and spaces",
+          "file":  "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "CARD_REGEX > rejects letters inside a card number",
+          "file":  "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "PHONE_REGEX > accepts a 10-digit phone number",
+          "file":  "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "PHONE_REGEX > accepts a phone number with a + country prefix",
+          "file":  "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "PHONE_REGEX > rejects a phone number shorter than 10 digits",
+          "file":  "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "UNIQUE_USERNAME_REGEX > accepts a valid alphanumeric username with a letter",
+          "file":  "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "UNIQUE_USERNAME_REGEX > rejects a username made entirely of digits",
+          "file":  "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "validateEmailOrUsername uses EMAIL_REGEX > routes input containing @ to email validation and accepts a valid address",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "why":   "sources include constants.ts",
+          "category": "cross-dependent"
+        },
+        {
+          "test":  "validateEmailOrUsername uses EMAIL_REGEX > routes plain text input to username validation and accepts a clean username",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test":  "validateEmailOrUsername uses EMAIL_REGEX > returns an error message when the email format is invalid via EMAIL_REGEX",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test":  "validateEmailOrUsername uses EMAIL_REGEX > returns an error message when the username contains special characters",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test":  "generateCardNumber output satisfies CARD_REGEX > output of generateCardNumber preserves first and last 4 digits",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "why":   "sources include constants.ts AND utilities.js (both changed files)",
+          "priority_boost": "HIGH → near-CRITICAL because BOTH changed files appear in sources[]",
+          "category": "cross-dependent"
+        },
+        {
+          "test":  "generateCardNumber output satisfies CARD_REGEX > correctly masks middle digits with X characters",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test":  "storageKeys align with payment flow expectations > storageKeys.stripePaymentDetails equals STRIPEPAYMENTDETAILS",
+          "file":  "test_repository/cross-dependent/payment-state.cross.test.js",
+          "why":   "sources include constants.ts",
+          "category": "cross-dependent"
+        },
+        {
+          "test":  "checkNull > returns an empty string when the value is null",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "why":   "sources=[utilities.js] — new function added to same file",
+          "category": "standalone"
+        },
+        {
+          "test":  "checkNull > returns the original value when it is defined and non-null",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "checkArray > returns an empty array when the input is null",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "checkArray > returns the original array when it contains items",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "checkWhiteSpace > returns true for a string that contains a space",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "checkWhiteSpace > returns false for a string with no whitespace",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "getTimes > correctly parses 3661 seconds into 1h 01m 01s",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "getTimes > returns 0 hours when the duration is under 3600 seconds",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "getProgressWidth > calculates 50% when value is half of max",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "getProgressWidth > returns 0 when the value argument is missing or falsy",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "endpoints.payment > addCard points to the correct payment creation path",
+          "file":  "test_repository/feature/api-navigation.feature.test.js",
+          "why":   "ApiEndPoints.js changed (advertisement deleted) — sibling endpoints in same file",
+          "category": "feature"
+        },
+        {
+          "test":  "endpoints.payment > getAllCards points to the cards listing path",
+          "file":  "test_repository/feature/api-navigation.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test":  "endpoints.payment > paymentsCheckout points to the checkout path",
+          "file":  "test_repository/feature/api-navigation.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test":  "endpoints.favourites > addCardtoFavourite endpoint points to sports favourites add path",
+          "file":  "test_repository/feature/api-navigation.feature.test.js",
+          "category": "feature"
+        }
+      ],
+      "count": 34
+    },
+
+    "LOW": {
+      "reason": "No loosely connected tests identified",
+      "tests": [],
+      "count": 0
+    },
+
+    "SKIP": {
+      "reason": "Zero source overlap with any changed file",
+      "skipped_files": [
+        "test_repository/cross-dependent/auth-storage.cross.test.js  (isUserLoggedIn, updateNewTokenDetails, capitalizeFirstLetter — storage.ts not changed)",
+        "test_repository/feature/user-profile.feature.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js"
+      ],
+      "count": 37
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "gap_id": "GAP-01",
+      "type": "SYMBOL_RENAMED — OLD_NAME_HAS_TESTS_NEW_NAME_DOES_NOT",
+      "old_symbol": "CARD_NUMBER_REGEX",
+      "new_symbol": "FULL_CARD_REGEX",
+      "file": "src/types/constants.ts",
+      "tests_for_old_name": [
+        "CARD_NUMBER_REGEX > accepts a properly spaced 19-character card number",
+        "CARD_NUMBER_REGEX > rejects a card number shorter than 17 characters",
+        "CARD_NUMBER_REGEX validates checkout flow input > (3 tests)"
+      ],
+      "tests_for_new_name": 0,
+      "action_required": [
+        "Rename describe('CARD_NUMBER_REGEX') → describe('FULL_CARD_REGEX') in both test files",
+        "Add new test: 'accepts a 16-character card number' (pattern now allows 16-char)",
+        "Update test-manifest.json: replace CARD_NUMBER_REGEX → FULL_CARD_REGEX in symbols[] and describe fields"
+      ]
+    },
+    {
+      "gap_id": "GAP-02",
+      "type": "SYMBOL_DELETED — EXISTING_TEST_NOW_ORPHANED",
+      "symbol": "advertisement",
+      "file": "src/services/api/common/ApiEndPoints.js",
+      "orphaned_test": "endpoints.favourites > advertisement endpoint builder produces a correctly interpolated URL",
+      "severity": "BREAKAGE",
+      "action_required": [
+        "Delete the test — the functionality no longer exists in source",
+        "OR if advertisement was moved to a different file, update @source tag and re-link"
+      ]
+    },
+    {
+      "gap_id": "GAP-03",
+      "type": "NEW_SYMBOL — ZERO_TEST_COVERAGE",
+      "symbol": "getStreamingQuality",
+      "file": "src/helpers/utilities.js",
+      "tests_found": 0,
+      "severity": "UNCOVERED_NEW_FEATURE",
+      "recommended_describe": "getStreamingQuality",
+      "recommended_tests": [
+        "returns 'unknown' for a null or zero bitrate",
+        "returns 'low' for bitrate below 500 Kbps",
+        "returns 'medium' for bitrate between 500 Kbps and 2 Mbps",
+        "returns 'high' for bitrate above 2 Mbps",
+        "returns 'unknown' for a negative bitrate value"
+      ]
+    }
+  ],
+
+  "system_behaviour_guide": {
+    "how_to_handle_RENAME": "When diff shows a line with '-export const FOO' AND '+export const BAR': (1) select all tests where symbols[] contains 'FOO' as CRITICAL, (2) search test-manifest for 'BAR' → not found → emit GAP-01",
+    "how_to_handle_DELETE": "When diff shows only '-export ...' with no matching '+' for the same symbol: (1) select tests as CRITICAL + emit BREAKAGE_WARNING. Tests will fail. Developer must delete them.",
+    "how_to_handle_NEW":    "When diff shows only '+export ...' with no matching '-': (1) search test-manifest for new symbol name → not found → emit COVERAGE_GAP. No test is run. No CRITICAL.",
+    "priority_note":        "GAP-03 (new symbol, no test) is silent in the CRITICAL/HIGH lists — it produces only a gap report. This is a key distinction from RENAME and DELETE where old tests still exist and get selected."
+  },
+
+  "selection_proof": {
+    "standalone_selected":      16,
+    "cross_dependent_selected": 11,
+    "feature_selected":          5,
+    "total_selected":           32,
+    "all_with_BREAKAGE_WARNING": 6,
+    "pure_gaps_no_test_run":     1
+  },
+
+  "summary": {
+    "total_tests":             77,
+    "CRITICAL":                 6,
+    "HIGH":                    34,
+    "LOW":                      0,
+    "SKIP":                    37,
+    "tests_that_will_FAIL":     6,
+    "breakage_warnings":        2,
+    "new_symbol_gaps":          1,
+    "total_action_items":       3
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage -t \"CARD_NUMBER_REGEX|endpoints.favourites|endpoints.payment|EMAIL_REGEX|PASSWORD_REGEX_CHANGE_PASSWORD|CARD_REGEX|PHONE_REGEX|UNIQUE_USERNAME_REGEX|validateEmailOrUsername uses EMAIL_REGEX|generateCardNumber output satisfies CARD_REGEX|storageKeys align with payment flow|checkNull|checkArray|checkWhiteSpace|getTimes|getProgressWidth\""
+}

@@ -1,0 +1,137 @@
+{
+  "_meta": {
+    "total_tests": 77,
+    "categories": {
+      "standalone":       26,
+      "cross-dependent":  26,
+      "feature":          25
+    },
+    "description": "Maps every describe/it block to its source file(s) and symbol(s). The test selection system should use the 'sources' and 'symbols' fields to match against a git diff.",
+    "naming_convention": "functionality — describe() = symbol name, it() = human-readable behaviour"
+  },
+
+  "standalone": {
+    "file": "test_repository/standalone/regex.constants.test.js",
+    "category": "standalone",
+    "tests": [
+      { "describe": "EMAIL_REGEX",                     "it": "accepts a valid .com email address",                                "sources": ["src/types/constants.ts"], "symbols": ["EMAIL_REGEX"] },
+      { "describe": "EMAIL_REGEX",                     "it": "rejects an email address missing the @ symbol",                    "sources": ["src/types/constants.ts"], "symbols": ["EMAIL_REGEX"] },
+      { "describe": "EMAIL_REGEX",                     "it": "rejects a non-.com domain (e.g. .org)",                            "sources": ["src/types/constants.ts"], "symbols": ["EMAIL_REGEX"] },
+      { "describe": "PASSWORD_REGEX_CHANGE_PASSWORD",  "it": "accepts a password meeting all requirements",                      "sources": ["src/types/constants.ts"], "symbols": ["PASSWORD_REGEX_CHANGE_PASSWORD"] },
+      { "describe": "PASSWORD_REGEX_CHANGE_PASSWORD",  "it": "rejects a password without an uppercase letter",                   "sources": ["src/types/constants.ts"], "symbols": ["PASSWORD_REGEX_CHANGE_PASSWORD"] },
+      { "describe": "PASSWORD_REGEX_CHANGE_PASSWORD",  "it": "rejects a password without a special character",                   "sources": ["src/types/constants.ts"], "symbols": ["PASSWORD_REGEX_CHANGE_PASSWORD"] },
+      { "describe": "PASSWORD_REGEX_CHANGE_PASSWORD",  "it": "rejects a password longer than 30 characters",                    "sources": ["src/types/constants.ts"], "symbols": ["PASSWORD_REGEX_CHANGE_PASSWORD"] },
+      { "describe": "CARD_REGEX",                      "it": "accepts a string of digits and spaces",                            "sources": ["src/types/constants.ts"], "symbols": ["CARD_REGEX"] },
+      { "describe": "CARD_REGEX",                      "it": "rejects letters inside a card number",                             "sources": ["src/types/constants.ts"], "symbols": ["CARD_REGEX"] },
+      { "describe": "PHONE_REGEX",                     "it": "accepts a 10-digit phone number",                                  "sources": ["src/types/constants.ts"], "symbols": ["PHONE_REGEX"] },
+      { "describe": "PHONE_REGEX",                     "it": "accepts a phone number with a + country prefix",                   "sources": ["src/types/constants.ts"], "symbols": ["PHONE_REGEX"] },
+      { "describe": "PHONE_REGEX",                     "it": "rejects a phone number shorter than 10 digits",                    "sources": ["src/types/constants.ts"], "symbols": ["PHONE_REGEX"] },
+      { "describe": "UNIQUE_USERNAME_REGEX",           "it": "accepts a valid alphanumeric username with a letter",              "sources": ["src/types/constants.ts"], "symbols": ["UNIQUE_USERNAME_REGEX"] },
+      { "describe": "UNIQUE_USERNAME_REGEX",           "it": "rejects a username made entirely of digits",                       "sources": ["src/types/constants.ts"], "symbols": ["UNIQUE_USERNAME_REGEX"] },
+      { "describe": "CARD_NUMBER_REGEX",               "it": "accepts a properly spaced 19-character card number",               "sources": ["src/types/constants.ts"], "symbols": ["CARD_NUMBER_REGEX"] },
+      { "describe": "CARD_NUMBER_REGEX",               "it": "rejects a card number shorter than 17 characters",                 "sources": ["src/types/constants.ts"], "symbols": ["CARD_NUMBER_REGEX"] }
+    ]
+  },
+
+  "standalone_utilities": {
+    "file": "test_repository/standalone/utilities.pure.test.js",
+    "category": "standalone",
+    "tests": [
+      { "describe": "checkNull",          "it": "returns an empty string when the value is null",              "sources": ["src/helpers/utilities.js"], "symbols": ["checkNull"] },
+      { "describe": "checkNull",          "it": "returns the original value when it is defined and non-null",  "sources": ["src/helpers/utilities.js"], "symbols": ["checkNull"] },
+      { "describe": "checkArray",         "it": "returns an empty array when the input is null",               "sources": ["src/helpers/utilities.js"], "symbols": ["checkArray"] },
+      { "describe": "checkArray",         "it": "returns the original array when it contains items",           "sources": ["src/helpers/utilities.js"], "symbols": ["checkArray"] },
+      { "describe": "checkWhiteSpace",    "it": "returns true for a string that contains a space",             "sources": ["src/helpers/utilities.js"], "symbols": ["checkWhiteSpace"] },
+      { "describe": "checkWhiteSpace",    "it": "returns false for a string with no whitespace",               "sources": ["src/helpers/utilities.js"], "symbols": ["checkWhiteSpace"] },
+      { "describe": "getTimes",           "it": "correctly parses 3661 seconds into 1h 01m 01s",               "sources": ["src/helpers/utilities.js"], "symbols": ["getTimes"] },
+      { "describe": "getTimes",           "it": "returns 0 hours when the duration is under 3600 seconds",     "sources": ["src/helpers/utilities.js"], "symbols": ["getTimes"] },
+      { "describe": "getProgressWidth",   "it": "calculates 50% when value is half of max",                    "sources": ["src/helpers/utilities.js"], "symbols": ["getProgressWidth"] },
+      { "describe": "getProgressWidth",   "it": "returns 0 when the value argument is missing or falsy",       "sources": ["src/helpers/utilities.js"], "symbols": ["getProgressWidth"] }
+    ]
+  },
+
+  "cross_auth_storage": {
+    "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+    "category": "cross-dependent",
+    "tests": [
+      { "describe": "validateEmailOrUsername uses EMAIL_REGEX",              "it": "routes input containing @ to email validation and accepts a valid address",          "sources": ["src/features/auth/hooks/signInFormHook.ts","src/types/constants.ts"],    "symbols": ["validateEmailOrUsername","EMAIL_REGEX"] },
+      { "describe": "validateEmailOrUsername uses EMAIL_REGEX",              "it": "routes plain text input to username validation and accepts a clean username",       "sources": ["src/features/auth/hooks/signInFormHook.ts","src/types/constants.ts"],    "symbols": ["validateEmailOrUsername","EMAIL_REGEX"] },
+      { "describe": "validateEmailOrUsername uses EMAIL_REGEX",              "it": "returns an error message when the email format is invalid via EMAIL_REGEX",         "sources": ["src/features/auth/hooks/signInFormHook.ts","src/types/constants.ts"],    "symbols": ["validateEmailOrUsername","EMAIL_REGEX"] },
+      { "describe": "validateEmailOrUsername uses EMAIL_REGEX",              "it": "returns an error message when the username contains special characters",            "sources": ["src/features/auth/hooks/signInFormHook.ts","src/types/constants.ts"],    "symbols": ["validateEmailOrUsername","UNIQUE_USERNAME_REGEX"] },
+      { "describe": "isUserLoggedIn reads storageKeys.token",               "it": "returns false when no token is stored",                                             "sources": ["src/helpers/utilities.js","src/services/storage.ts"],                    "symbols": ["isUserLoggedIn","storageKeys"] },
+      { "describe": "isUserLoggedIn reads storageKeys.token",               "it": "returns true after a token has been stored under storageKeys.token",               "sources": ["src/helpers/utilities.js","src/services/storage.ts"],                    "symbols": ["isUserLoggedIn","storageKeys"] },
+      { "describe": "updateNewTokenDetails stores values under storageKeys", "it": "saves the access token to localStorage under the TOKEN key",                       "sources": ["src/helpers/utilities.js","src/services/storage.ts"],                    "symbols": ["updateNewTokenDetails","storageKeys"] },
+      { "describe": "updateNewTokenDetails stores values under storageKeys", "it": "saves the refresh token under the REFRESHTOKEN key",                               "sources": ["src/helpers/utilities.js","src/services/storage.ts"],                    "symbols": ["updateNewTokenDetails","storageKeys"] },
+      { "describe": "updateNewTokenDetails stores values under storageKeys", "it": "saves the login time under the LOGGEDINTIME key",                                  "sources": ["src/helpers/utilities.js","src/services/storage.ts"],                    "symbols": ["updateNewTokenDetails","storageKeys"] },
+      { "describe": "generateCardNumber output satisfies CARD_REGEX",       "it": "output of generateCardNumber contains only digits and spaces",                      "sources": ["src/helpers/utilities.js","src/types/constants.ts"],                     "symbols": ["generateCardNumber","CARD_REGEX"] },
+      { "describe": "generateCardNumber output satisfies CARD_REGEX",       "it": "correctly masks middle digits with X characters",                                   "sources": ["src/helpers/utilities.js","src/types/constants.ts"],                     "symbols": ["generateCardNumber","CARD_REGEX"] },
+      { "describe": "capitalizeFirstLetter with checkWhiteSpace",           "it": "capitalizes the first letter of each word in a multi-word string",                  "sources": ["src/helpers/utilities.js"],                                              "symbols": ["capitalizeFirstLetter","checkWhiteSpace"] },
+      { "describe": "capitalizeFirstLetter with checkWhiteSpace",           "it": "capitalizes a single word correctly without whitespace branch",                     "sources": ["src/helpers/utilities.js"],                                              "symbols": ["capitalizeFirstLetter","checkWhiteSpace"] }
+    ]
+  },
+
+  "cross_payment_state": {
+    "file": "test_repository/cross-dependent/payment-state.cross.test.js",
+    "category": "cross-dependent",
+    "tests": [
+      { "describe": "updateUserCards action dispatched into paymentReducer",  "it": "populates userCards in state after dispatch",                                     "sources": ["src/reducer/actions.js","src/reducer/paymentReducer.js"],              "symbols": ["updateUserCards","paymentReducer"] },
+      { "describe": "updateUserCards action dispatched into paymentReducer",  "it": "sets cardsFetched to true when cards are provided",                               "sources": ["src/reducer/actions.js","src/reducer/paymentReducer.js"],              "symbols": ["updateUserCards","paymentReducer"] },
+      { "describe": "updateUserCards action dispatched into paymentReducer",  "it": "clears userCards when dispatched with an empty array",                            "sources": ["src/reducer/actions.js","src/reducer/paymentReducer.js"],              "symbols": ["updateUserCards","paymentReducer"] },
+      { "describe": "updatePaymentPlanDetails action and paymentReducer",     "it": "stores the subscription plan object in paymentPlantDetails",                      "sources": ["src/reducer/actions.js","src/reducer/paymentReducer.js"],              "symbols": ["updatePaymentPlanDetails","paymentReducer"] },
+      { "describe": "updatePaymentPlanDetails action and paymentReducer",     "it": "does not mutate userCards when a plan update is dispatched",                      "sources": ["src/reducer/actions.js","src/reducer/paymentReducer.js"],              "symbols": ["updatePaymentPlanDetails","paymentReducer"] },
+      { "describe": "paymentActions.CLEARCARDS resets payment state",         "it": "resets userCards to an empty array",                                              "sources": ["src/reducer/paymentReducer.js"],                                        "symbols": ["paymentActions","paymentReducer"] },
+      { "describe": "paymentActions.CLEARCARDS resets payment state",         "it": "resets cardsFetched back to false after clearing",                                "sources": ["src/reducer/paymentReducer.js"],                                        "symbols": ["paymentActions","paymentReducer"] },
+      { "describe": "storageKeys align with payment flow expectations",       "it": "storageKeys.stripePaymentDetails equals STRIPEPAYMENTDETAILS",                    "sources": ["src/services/storage.ts","src/types/constants.ts"],                    "symbols": ["storageKeys"] },
+      { "describe": "storageKeys align with payment flow expectations",       "it": "storageKeys.token equals TOKEN",                                                  "sources": ["src/services/storage.ts"],                                             "symbols": ["storageKeys"] },
+      { "describe": "CARD_NUMBER_REGEX validates checkout flow input",        "it": "accepts a standard 19-character card number with spaces",                         "sources": ["src/types/constants.ts","src/reducer/paymentReducer.js"],              "symbols": ["CARD_NUMBER_REGEX","paymentActions"] },
+      { "describe": "CARD_NUMBER_REGEX validates checkout flow input",        "it": "rejects a card number shorter than 17 characters",                                "sources": ["src/types/constants.ts","src/reducer/paymentReducer.js"],              "symbols": ["CARD_NUMBER_REGEX"] },
+      { "describe": "CARD_NUMBER_REGEX validates checkout flow input",        "it": "rejects a card number that contains letters",                                     "sources": ["src/types/constants.ts","src/reducer/paymentReducer.js"],              "symbols": ["CARD_NUMBER_REGEX"] }
+    ]
+  },
+
+  "feature_user_profile": {
+    "file": "test_repository/feature/user-profile.feature.test.js",
+    "category": "feature",
+    "tests": [
+      { "describe": "userDetailsReducer", "it": "initialises with data as an empty array",                                    "sources": ["src/reducer/userDetailsReducer.js","src/reducer/actiotypes.js"], "symbols": ["userDetailsReducer"] },
+      { "describe": "userDetailsReducer", "it": "SUCCESS action populates data and token from the payload",                   "sources": ["src/reducer/userDetailsReducer.js","src/reducer/actiotypes.js"], "symbols": ["userDetailsReducer","SUCCESS"] },
+      { "describe": "userDetailsReducer", "it": "UPDATEREFRESHEDTOKEN updates token and loginTime independently",             "sources": ["src/reducer/userDetailsReducer.js","src/reducer/actiotypes.js"], "symbols": ["userDetailsReducer","UPDATEREFRESHEDTOKEN"] },
+      { "describe": "userDetailsReducer", "it": "ONAUTHENTICATE resets profileAuthSuccess to false",                         "sources": ["src/reducer/userDetailsReducer.js","src/reducer/actiotypes.js"], "symbols": ["userDetailsReducer","ONAUTHENTICATE"] },
+      { "describe": "userDetailsReducer", "it": "SHOWLOGGEDOUTSHEET stores the payload in showLoggedOutSheet",               "sources": ["src/reducer/userDetailsReducer.js","src/reducer/actiotypes.js"], "symbols": ["userDetailsReducer","SHOWLOGGEDOUTSHEET"] },
+      { "describe": "userDetailsReducer", "it": "returns unchanged state for an unknown action type",                        "sources": ["src/reducer/userDetailsReducer.js"],                            "symbols": ["userDetailsReducer"] },
+      { "describe": "profileReducer",     "it": "initialises with an empty profileData array",                               "sources": ["src/reducer/profileReducer.js","src/reducer/actiotypes.js"],   "symbols": ["profileReducer"] },
+      { "describe": "profileReducer",     "it": "PROFILESDETAILS action replaces profileData with the new list",             "sources": ["src/reducer/profileReducer.js","src/reducer/actiotypes.js"],   "symbols": ["profileReducer","PROFILESDETAILS"] },
+      { "describe": "profileReducer",     "it": "SAVESELECTEDPROFILEDETAILS stores the chosen profile",                     "sources": ["src/reducer/profileReducer.js","src/reducer/actiotypes.js"],   "symbols": ["profileReducer","SAVESELECTEDPROFILEDETAILS"] },
+      { "describe": "profileReducer",     "it": "returns current state unchanged for an unrecognised action",                "sources": ["src/reducer/profileReducer.js"],                               "symbols": ["profileReducer"] }
+    ]
+  },
+
+  "feature_favourites_watchlist": {
+    "file": "test_repository/feature/favourites-watchlist.feature.test.js",
+    "category": "feature",
+    "tests": [
+      { "describe": "favouritesReducer", "it": "starts with an empty userFavourites list",                            "sources": ["src/reducer/favouritesReducer.js","src/reducer/actiotypes.js"], "symbols": ["favouritesReducer"] },
+      { "describe": "favouritesReducer", "it": "UPDATEALLFAVOURITIESDETAILS replaces the favourites list",            "sources": ["src/reducer/favouritesReducer.js","src/reducer/actiotypes.js"], "symbols": ["favouritesReducer","favouritesActions"] },
+      { "describe": "favouritesReducer", "it": "sets favouritesFetched to true once the list is loaded",              "sources": ["src/reducer/favouritesReducer.js"],                            "symbols": ["favouritesReducer","favouritesActions"] },
+      { "describe": "favouritesReducer", "it": "returns unchanged state for an unknown action",                       "sources": ["src/reducer/favouritesReducer.js"],                            "symbols": ["favouritesReducer"] },
+      { "describe": "toastReducer",      "it": "initialises with showToast as null",                                  "sources": ["src/reducer/toastReducer.js","src/reducer/actiotypes.js"],     "symbols": ["toastReducer"] },
+      { "describe": "toastReducer",      "it": "TOAST action stores the toast message in showToast",                  "sources": ["src/reducer/toastReducer.js","src/reducer/actiotypes.js"],     "symbols": ["toastReducer","TOAST"] },
+      { "describe": "toastReducer",      "it": "resets showToast to null when null is dispatched",                    "sources": ["src/reducer/toastReducer.js"],                                 "symbols": ["toastReducer","TOAST"] },
+      { "describe": "toastReducer",      "it": "returns unchanged state for an unknown action",                       "sources": ["src/reducer/toastReducer.js"],                                 "symbols": ["toastReducer"] }
+    ]
+  },
+
+  "feature_api_navigation": {
+    "file": "test_repository/feature/api-navigation.feature.test.js",
+    "category": "feature",
+    "tests": [
+      { "describe": "endpoints.payment",    "it": "addCard points to the correct payment creation path",                   "sources": ["src/services/api/common/ApiEndPoints.js"], "symbols": ["endpoints"] },
+      { "describe": "endpoints.payment",    "it": "getAllCards points to the cards listing path",                          "sources": ["src/services/api/common/ApiEndPoints.js"], "symbols": ["endpoints"] },
+      { "describe": "endpoints.payment",    "it": "paymentsCheckout points to the checkout path",                         "sources": ["src/services/api/common/ApiEndPoints.js"], "symbols": ["endpoints"] },
+      { "describe": "endpoints.favourites", "it": "addCardtoFavourite endpoint points to sports favourites add path",     "sources": ["src/services/api/common/ApiEndPoints.js"], "symbols": ["endpoints"] },
+      { "describe": "endpoints.favourites", "it": "advertisement endpoint builder produces a correctly interpolated URL", "sources": ["src/services/api/common/ApiEndPoints.js"], "symbols": ["endpoints","advertisement"] },
+      { "describe": "ApiConstants",         "it": "MAX_IMAGE_UPLOAD_SIZE equals 10 MB expressed in bytes",                "sources": ["src/services/api/common/ApiConstants.js"], "symbols": ["MAX_IMAGE_UPLOAD_SIZE"] },
+      { "describe": "ApiConstants",         "it": "TIMEOUT equals 30 seconds expressed in milliseconds",                  "sources": ["src/services/api/common/ApiConstants.js"], "symbols": ["TIMEOUT"] }
+    ]
+  }
+}

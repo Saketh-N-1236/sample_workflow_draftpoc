@@ -1,0 +1,163 @@
+{
+  "scenario": "14",
+  "category": "STORAGE — NEW storageKeys ENTRY",
+  "title": "storage.ts — sessionId key added to storageKeys",
+  "commit_message": "feat: define SESSION_ID storage key for device session tracking",
+
+  "changed_files": ["src/services/storage.ts"],
+  "changed_symbols": ["storageKeys"],
+
+  "why_storage_keys": {
+    "explanation": "Any change to storageKeys affects every test whose symbols[] includes storageKeys: isUserLoggedIn + updateNewTokenDetails (auth-storage), storageKeys alignment (payment-state). Sibling tests in those files are HIGH. utilities.js-only tests SKIP unless the manifest links them to storage for this run policy.",
+    "key_point": "Typical selection: 7 CRITICAL + 10 HIGH = 17; 60 SKIP — similar footprint to scenario 1’s storage slice without renaming TOKEN."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "symbols[] includes storageKeys",
+      "tests": [
+        {
+          "test": "isUserLoggedIn reads storageKeys.token > returns false when no token is stored",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "isUserLoggedIn reads storageKeys.token > returns true after a token has been stored under storageKeys.token",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "updateNewTokenDetails stores values under storageKeys > saves the access token to localStorage under the TOKEN key",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "updateNewTokenDetails stores values under storageKeys > saves the refresh token under the REFRESHTOKEN key",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "updateNewTokenDetails stores values under storageKeys > saves the login time under the LOGGEDINTIME key",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "storageKeys align with payment flow expectations > storageKeys.stripePaymentDetails equals STRIPEPAYMENTDETAILS",
+          "file": "test_repository/cross-dependent/payment-state.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "storageKeys align with payment flow expectations > storageKeys.token equals TOKEN",
+          "file": "test_repository/cross-dependent/payment-state.cross.test.js",
+          "result": "⚠️  MAY FAIL — if test hardcodes key list and omits sessionId",
+          "category": "cross-dependent"
+        }
+      ],
+      "count": 7
+    },
+
+    "HIGH": {
+      "reason": "Same cross-dependent files — remaining describes that share utilities.js or constants.ts with the CRITICAL rows",
+      "tests": [
+        {
+          "test": "validateEmailOrUsername uses EMAIL_REGEX > routes input containing @ to email validation and accepts a valid address",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "validateEmailOrUsername uses EMAIL_REGEX > routes plain text input to username validation and accepts a clean username",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "validateEmailOrUsername uses EMAIL_REGEX > returns an error message when the email format is invalid via EMAIL_REGEX",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "validateEmailOrUsername uses EMAIL_REGEX > returns an error message when the username contains special characters",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "generateCardNumber output satisfies CARD_REGEX > output of generateCardNumber preserves first and last 4 digits",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "generateCardNumber output satisfies CARD_REGEX > correctly masks middle digits with X characters",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "capitalizeFirstLetter with checkWhiteSpace > capitalizes the first letter of each word in a multi-word string",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "capitalizeFirstLetter with checkWhiteSpace > capitalizes a single word correctly without whitespace branch",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "capitalizeFirstLetter with checkWhiteSpace > returns undefined when given a non-string truthy value after type guard fix",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "updateUserCards action dispatched into paymentReducer > populates userCards in state after dispatch",
+          "file": "test_repository/cross-dependent/payment-state.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "updateUserCards action dispatched into paymentReducer > sets cardsFetched to true when cards are provided",
+          "file": "test_repository/cross-dependent/payment-state.cross.test.js",
+          "category": "cross-dependent"
+        }
+      ],
+      "count": 11
+    },
+
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "storage.ts not in sources[] for standalone regex, utilities-only paths, or feature suites",
+      "skipped_files": [
+        "test_repository/standalone/regex.constants.test.js",
+        "test_repository/standalone/utilities.pure.test.js",
+        "test_repository/feature/user-profile.feature.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js",
+        "test_repository/feature/api-navigation.feature.test.js"
+      ],
+      "count": 59
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "gap_id": "GAP-01",
+      "type": "NEW_KEY_NO_TEST",
+      "symbol": "sessionId",
+      "detail": "Add an assertion that storageKeys.sessionId === 'SESSION_ID' in auth-storage or payment-state tests."
+    }
+  ],
+
+  "selection_proof": {
+    "standalone_selected": 0,
+    "cross_dependent_selected": 18,
+    "feature_selected": 0,
+    "total_selected": 18,
+    "total_skipped": 59
+  },
+
+  "summary": {
+    "total_tests": 77,
+    "CRITICAL": 7,
+    "HIGH": 11,
+    "LOW": 0,
+    "SKIP": 59,
+    "coverage_gaps": 1
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage -t \"isUserLoggedIn|updateNewTokenDetails|validateEmailOrUsername|generateCardNumber output satisfies CARD_REGEX|capitalizeFirstLetter with checkWhiteSpace|storageKeys align with payment flow|updateUserCards\" --verbose"
+}

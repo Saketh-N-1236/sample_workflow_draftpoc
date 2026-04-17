@@ -20,6 +20,11 @@ class OpenAIClient(LLMProvider):
         "gpt4": "gpt-4",
         "gpt4-turbo": "gpt-4-turbo",
     }
+
+    # Model prefixes that require max_completion_tokens instead of max_tokens.
+    # Includes o-series reasoning models (o1/o2/o3/o4) and newer GPT generations
+    # (gpt-4.5, gpt-5.x) which dropped the legacy max_tokens parameter.
+    _COMPLETION_TOKENS_PREFIXES = ("o1", "o2", "o3", "o4", "gpt-4.5", "gpt-5")
     
     def __init__(
         self,
@@ -123,12 +128,17 @@ class OpenAIClient(LLMProvider):
                     # Convert 'model' to 'assistant' for OpenAI
                     messages.append({"role": "assistant", "content": content})
             
+            # Newer OpenAI models (o-series, gpt-4.5+, gpt-5+) require
+            # max_completion_tokens; legacy models use max_tokens.
+            _use_completion_tokens = self._model.startswith(self._COMPLETION_TOKENS_PREFIXES)
+            _token_key = "max_completion_tokens" if _use_completion_tokens else "max_tokens"
+
             # Prepare request
             payload = {
                 "model": self._model,
                 "messages": messages,
                 "temperature": request.temperature,
-                "max_tokens": request.max_tokens,
+                _token_key: request.max_tokens,
             }
             
             if request.top_p is not None:

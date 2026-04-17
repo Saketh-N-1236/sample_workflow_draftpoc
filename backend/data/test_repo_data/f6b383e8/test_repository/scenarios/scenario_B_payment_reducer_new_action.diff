@@ -1,0 +1,14 @@
+diff --git a/src/reducer/paymentReducer.js b/src/reducer/paymentReducer.js
+index 3456789..ab12345 100644
+--- a/src/reducer/paymentReducer.js
++++ b/src/reducer/paymentReducer.js
+@@ -3,2 +3,3 @@
+   UPDATEALLCARDDETAILS: 'UPDATE_STORED_USER_ALL_CARD_DETAILS',
+   UPDATEPAYMENTPLANDETAILS: 'UPDATE_PAYMENT_PLAN_DETAILS',
++  RESETPAYMENT: 'RESET_PAYMENT_STATE',
+ }
+@@ -24,0 +25,7 @@
++    case paymentActions.RESETPAYMENT:
++      return {
++        ...initialState,
++      }

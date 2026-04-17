@@ -126,28 +126,33 @@ def get_settings() -> Settings:
     
     logger = logging.getLogger(__name__)
     
-    # Find project root by looking for .env file or config/ directory
-    # Start from current file location (config/settings.py)
+    # Walk upward from config/settings.py to locate .env, stopping after 6 levels.
+    # This handles layouts where the repo root is several directories above backend/.
     current_file = Path(__file__).resolve()
-    project_root = current_file.parent.parent  # config/ -> project_root/
-    
-    # Look for .env file in project root
-    env_file = project_root / ".env"
-    
-    # If not found in project root, try current working directory
-    if not env_file.exists():
-        cwd_env_file = Path(".env").resolve()
-        if cwd_env_file.exists():
-            env_file = cwd_env_file
-            logger.info(f"Found .env file in current working directory: {env_file}")
-        else:
-            if not _env_warning_logged:
-                _env_warning_logged = True
-                logger.warning(
-                    f".env file not found at project root ({project_root / '.env'}) or current directory ({cwd_env_file}). "
-                    f"Using defaults and environment variables. Project root: {project_root}"
-                )
-            env_file = None
+    env_file: Optional[Path] = None
+    search_dir = current_file.parent  # start at backend/config/
+    for _ in range(6):
+        candidate = search_dir / ".env"
+        if candidate.exists():
+            env_file = candidate
+            break
+        parent = search_dir.parent
+        if parent == search_dir:  # reached filesystem root
+            break
+        search_dir = parent
+
+    # Fall back to CWD if the upward walk didn't find it
+    if env_file is None:
+        cwd_env = Path(".env").resolve()
+        if cwd_env.exists():
+            env_file = cwd_env
+
+    if env_file is None and not _env_warning_logged:
+        _env_warning_logged = True
+        logger.warning(
+            ".env file not found anywhere up the directory tree from config/settings.py. "
+            "Using defaults and environment variables already in os.environ."
+        )
     
     # Load .env file explicitly to ensure it's found regardless of working directory
     if env_file and env_file.exists():

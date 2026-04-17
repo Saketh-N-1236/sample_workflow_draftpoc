@@ -30,7 +30,11 @@ _backend = _det.parent
 sys.path.insert(0, str(_backend))
 sys.path.insert(0, str(_det))
 
-from db_connection import get_connection, test_connection, get_db_config
+import logging
+
+from db_connection import get_connection, test_connection, get_db_config, validate_schema_name
+
+logger = logging.getLogger(__name__)
 from test_analysis.utils.output_formatter import print_header, print_section, print_item
 import os
 from dotenv import load_dotenv
@@ -701,45 +705,58 @@ def create_all_tables_in_schema(conn, schema: str, schema_definition=None):
         schema: Schema name where tables should be created
         schema_definition: Optional SchemaDefinition object with language-specific tables
     """
-    print(f"Creating all tables in schema: {schema}")
-    
+    safe_schema = validate_schema_name(schema)
+    print(f"Creating all tables in schema: {safe_schema}")
+    logger.info("[DDL] Preparing schema %s (CREATE SCHEMA + lock_timeout)", safe_schema)
+
+    # 1) Ensure the namespace exists — without this, CREATE TABLE schema.table fails with
+    #    "schema does not exist" if bind/test-repo creation was skipped or failed.
+    # 2) lock_timeout avoids hanging forever when another session holds a lock on these
+    #    tables (pgAdmin, stuck API worker, previous crashed analysis).
+    with conn.cursor() as cursor:
+        cursor.execute("SET lock_timeout = '120s'")
+        cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {safe_schema}")
+    conn.commit()
+    logger.info("[DDL] Schema ensured; dropping/recreating core tables...")
+
     # Always create core tables
-    create_test_registry_table(conn, schema=schema)
-    create_test_dependencies_table(conn, schema=schema)
-    create_reverse_index_table(conn, schema=schema)
-    create_test_metadata_table(conn, schema=schema)
-    create_test_structure_table(conn, schema=schema)
-    create_test_function_mapping_table(conn, schema=schema)
-    
+    create_test_registry_table(conn, schema=safe_schema)
+    create_test_dependencies_table(conn, schema=safe_schema)
+    create_reverse_index_table(conn, schema=safe_schema)
+    create_test_metadata_table(conn, schema=safe_schema)
+    create_test_structure_table(conn, schema=safe_schema)
+    create_test_function_mapping_table(conn, schema=safe_schema)
+    logger.info("[DDL] Core tables done; language-specific tables next (if any).")
+
     # Create language-specific tables if schema definition is provided
     if schema_definition:
         # Java tables
         if schema_definition.java_tables:
             print(f"Creating {len(schema_definition.java_tables)} Java-specific tables...")
             if 'java_reflection' in schema_definition.java_tables:
-                create_java_reflection_table(conn, schema)
+                create_java_reflection_table(conn, safe_schema)
             if 'java_di_fields' in schema_definition.java_tables:
-                create_java_di_fields_table(conn, schema)
+                create_java_di_fields_table(conn, safe_schema)
             if 'java_annotations' in schema_definition.java_tables:
-                create_java_annotations_table(conn, schema)
+                create_java_annotations_table(conn, safe_schema)
         
         # Python tables
         if schema_definition.python_tables:
             print(f"Creating {len(schema_definition.python_tables)} Python-specific tables...")
             if 'python_fixtures' in schema_definition.python_tables:
-                create_python_fixtures_table(conn, schema)
+                create_python_fixtures_table(conn, safe_schema)
             if 'python_decorators' in schema_definition.python_tables:
-                create_python_decorators_table(conn, schema)
+                create_python_decorators_table(conn, safe_schema)
             if 'python_async_tests' in schema_definition.python_tables:
-                create_python_async_tests_table(conn, schema)
+                create_python_async_tests_table(conn, safe_schema)
         
         # JavaScript tables
         if schema_definition.js_tables:
             print(f"Creating {len(schema_definition.js_tables)} JavaScript-specific tables...")
             if 'js_mocks' in schema_definition.js_tables:
-                create_js_mocks_table(conn, schema)
+                create_js_mocks_table(conn, safe_schema)
             if 'js_async_tests' in schema_definition.js_tables:
-                create_js_async_tests_table(conn, schema)
+                create_js_async_tests_table(conn, safe_schema)
     
     # Note: Vector embeddings are stored in Pinecone, not PostgreSQL
     # No pgvector extension or embedding column needed
@@ -748,7 +765,8 @@ def create_all_tables_in_schema(conn, schema: str, schema_definition=None):
     if schema_definition:
         total_tables += len(schema_definition.java_tables) + len(schema_definition.python_tables) + len(schema_definition.js_tables)
     
-    print(f"[OK] All {total_tables} tables created in schema: {schema}")
+    print(f"[OK] All {total_tables} tables created in schema: {safe_schema}")
+    logger.info("[DDL] Finished creating %s tables in schema %s", total_tables, safe_schema)
 
 
 def verify_tables_created(conn, schema: str = None):

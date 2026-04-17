@@ -1,0 +1,81 @@
+{
+  "scenario": "A",
+  "title": "EMAIL_REGEX broadened to accept all TLDs (not just .com)",
+  "commit_message": "fix: broaden EMAIL_REGEX to accept any valid TLD",
+  "changed_files": ["src/types/constants.ts"],
+  "changed_symbols": ["EMAIL_REGEX"],
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "describe() block label exactly matches changed symbol — direct coverage",
+      "tests": [
+        "EMAIL_REGEX > accepts a valid .com email address",
+        "EMAIL_REGEX > rejects an email address missing the @ symbol",
+        "EMAIL_REGEX > rejects a non-.com domain (e.g. .org)"
+      ],
+      "files": ["test_repository/standalone/regex.constants.test.js"]
+    },
+    "HIGH": {
+      "reason": "Same source file (constants.ts) changed — sibling symbols may be affected",
+      "tests": [
+        "PASSWORD_REGEX_CHANGE_PASSWORD > accepts a password meeting all requirements",
+        "PASSWORD_REGEX_CHANGE_PASSWORD > rejects a password without an uppercase letter",
+        "PASSWORD_REGEX_CHANGE_PASSWORD > rejects a password without a special character",
+        "PASSWORD_REGEX_CHANGE_PASSWORD > rejects a password longer than 30 characters",
+        "CARD_REGEX > accepts a string of digits and spaces",
+        "CARD_REGEX > rejects letters inside a card number",
+        "PHONE_REGEX > accepts a 10-digit phone number",
+        "PHONE_REGEX > accepts a phone number with a + country prefix",
+        "PHONE_REGEX > rejects a phone number shorter than 10 digits",
+        "UNIQUE_USERNAME_REGEX > accepts a valid alphanumeric username with a letter",
+        "UNIQUE_USERNAME_REGEX > rejects a username made entirely of digits",
+        "CARD_NUMBER_REGEX > accepts a properly spaced 19-character card number",
+        "CARD_NUMBER_REGEX > rejects a card number shorter than 17 characters",
+        "validateEmailOrUsername uses EMAIL_REGEX > routes input containing @ to email validation and accepts a valid address",
+        "validateEmailOrUsername uses EMAIL_REGEX > routes plain text input to username validation and accepts a clean username",
+        "validateEmailOrUsername uses EMAIL_REGEX > returns an error message when the email format is invalid via EMAIL_REGEX",
+        "validateEmailOrUsername uses EMAIL_REGEX > returns an error message when the username contains special characters",
+        "generateCardNumber output satisfies CARD_REGEX > output of generateCardNumber contains only digits and spaces",
+        "generateCardNumber output satisfies CARD_REGEX > correctly masks middle digits with X characters",
+        "CARD_NUMBER_REGEX validates checkout flow input > accepts a standard 19-character card number with spaces",
+        "CARD_NUMBER_REGEX validates checkout flow input > rejects a card number shorter than 17 characters",
+        "CARD_NUMBER_REGEX validates checkout flow input > rejects a card number that contains letters"
+      ],
+      "files": [
+        "test_repository/standalone/regex.constants.test.js",
+        "test_repository/cross-dependent/auth-storage.cross.test.js",
+        "test_repository/cross-dependent/payment-state.cross.test.js"
+      ]
+    },
+    "LOW": {
+      "reason": "No loosely related tests for this change",
+      "tests": []
+    },
+    "SKIP": {
+      "reason": "Tests whose sources have no overlap with the changed file",
+      "files": [
+        "test_repository/standalone/utilities.pure.test.js",
+        "test_repository/feature/user-profile.feature.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js",
+        "test_repository/feature/api-navigation.feature.test.js"
+      ]
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "symbol": "EMAIL_REGEX",
+      "note": "The old regex only accepted .com domains. After broadening to all TLDs, the test 'rejects a non-.com domain' will now FAIL — this is intentional and signals that the test itself needs to be updated to reflect new acceptance criteria."
+    }
+  ],
+
+  "summary": {
+    "total_tests": 75,
+    "CRITICAL": 3,
+    "HIGH":      22,
+    "LOW":       0,
+    "SKIP":      50
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage -t \"EMAIL_REGEX|PASSWORD_REGEX_CHANGE_PASSWORD|CARD_REGEX|PHONE_REGEX|UNIQUE_USERNAME_REGEX|CARD_NUMBER_REGEX|validateEmailOrUsername uses EMAIL_REGEX|generateCardNumber output satisfies CARD_REGEX|CARD_NUMBER_REGEX validates checkout flow input\""
+}

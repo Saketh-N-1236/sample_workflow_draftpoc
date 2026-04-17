@@ -6,7 +6,6 @@ import DiffStats from '../components/DiffStats';
 import DiffModal from '../components/DiffModal';
 import ActionButtons from '../components/ActionButtons';
 import ResultsDisplay from '../components/ResultsDisplay';
-import EmbeddingStatus from '../components/EmbeddingStatus';
 import TestSummaryModal from '../components/TestSummaryModal';
 import RiskAnalysisPanel from '../components/RiskAnalysisPanel';
 import TestRepositoryBinding from '../components/TestRepositoryBinding';
@@ -248,10 +247,7 @@ const RepositoryDetail = () => {
         />
       </div>
 
-      {/* Embedding Status - Show before test selection */}
-      <div style={{ marginBottom: '20px', flexShrink: 0 }}>
-        <EmbeddingStatus testRepoId={primaryTestRepoId} />
-      </div>
+      {/* Embedding Status removed from repository page */}
 
       <div className="actions-section" style={{ marginBottom: '20px', flexShrink: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
@@ -436,7 +432,15 @@ const RepositoryDetail = () => {
           </div>
         )}
         {activeTab === 'selection' && (
-          <ResultsDisplay selectionResults={selectionResults} />
+          isSelectionRunning ? (
+            <div className="selection-loading-overlay">
+              <div className="overlay-spinner" />
+              <p className="overlay-label">Running test selection…</p>
+              <p className="overlay-sub">Analysing diff, querying AST index and vector store</p>
+            </div>
+          ) : (
+            <ResultsDisplay selectionResults={selectionResults} />
+          )
         )}
       </div>
 

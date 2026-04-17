@@ -1,0 +1,12 @@
+diff --git a/src/reducer/profileReducer.js b/src/reducer/profileReducer.js
+index 5555555..6666666 100644
+--- a/src/reducer/profileReducer.js
++++ b/src/reducer/profileReducer.js
+@@ -4,7 +4,7 @@ import {
+ } from './actiotypes';
+ 
+ const initialState = {
+-  profileData: [],
++  profileData: null,
+   selectedProfileDetails: [],
+ };

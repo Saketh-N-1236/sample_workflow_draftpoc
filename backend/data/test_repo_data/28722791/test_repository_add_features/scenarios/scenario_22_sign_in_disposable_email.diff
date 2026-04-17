@@ -1,0 +1,26 @@
+diff --git a/src/features/auth/hooks/signInFormHook.ts b/src/features/auth/hooks/signInFormHook.ts
+index a1b2c3d..9e0f1a2 100644
+--- a/src/features/auth/hooks/signInFormHook.ts
++++ b/src/features/auth/hooks/signInFormHook.ts
+@@ -10,12 +10,20 @@ export interface SignInFormValues {
+ const USERNAME_MAX_LENGTH = 'Username must be at least 3 characters long';
+ const INVALID_EMAIL = 'Invalid email.';
+ const INVALID_USERNAME = 'Invalid username.'
++const DISPOSABLE_EMAIL = 'Disposable email addresses are not allowed.';
++
++const DISPOSABLE_DOMAINS = ['mailinator.com', 'tempmail.com', 'guerrillamail.com'];
++
+ const validateEmailOrUsername = (value: string) => {
+ 
+   if (value.includes('@')) {
+     // Validate as email
+     if (!EMAIL_REGEX.test(value)) {
+       return INVALID_EMAIL;
+     }
++    const domain = value.split('@')[1]?.toLowerCase() ?? '';
++    if (DISPOSABLE_DOMAINS.includes(domain)) {
++      return DISPOSABLE_EMAIL;
++    }
+   } else {
+     // Validate as username
+     if (!/^[a-zA-Z0-9_]+$/.test(value)) {

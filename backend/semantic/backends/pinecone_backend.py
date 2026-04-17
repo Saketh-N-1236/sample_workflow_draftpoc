@@ -1,7 +1,7 @@
 """Pinecone backend implementation for vector storage and search."""
 
 import os
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 import logging
 
 logger = logging.getLogger(__name__)
@@ -512,3 +512,78 @@ class PineconeBackend(VectorBackend):
         except Exception as e:
             logger.error(f"Pinecone search failed: {e}")
             return []
+
+    async def query_scores_for_test_ids(
+        self,
+        query_embedding: List[float],
+        test_ids: List[str],
+        test_repo_id: Optional[str] = None,
+        expected_dimensions: Optional[int] = None,
+    ) -> Dict[str, float]:
+        """
+        Cosine similarity of query vs. vectors whose metadata test_id is in test_ids.
+        No minimum-similarity filter (caller uses scores for AST–semantic alignment).
+        """
+        if not self.is_available():
+            return {}
+
+        query_dim = len(query_embedding)
+        if expected_dimensions and query_dim != expected_dimensions:
+            logger.error(
+                "[Pinecone] query_scores_for_test_ids: embedding dimension mismatch "
+                "(%s vs expected %s)",
+                query_dim,
+                expected_dimensions,
+            )
+            return {}
+
+        try:
+            index_stats = self.index.describe_index_stats()
+            index_dimension = index_stats.get("dimension")
+            if index_dimension and query_dim != index_dimension:
+                logger.error(
+                    "[Pinecone] query_scores_for_test_ids: index dimension mismatch"
+                )
+                return {}
+        except Exception as e:
+            logger.warning("[Pinecone] Could not verify index dimensions: %s", e)
+
+        if not test_ids:
+            return {}
+
+        str_ids = [str(t) for t in test_ids if t is not None and str(t).strip()]
+        if not str_ids:
+            return {}
+
+        try:
+            if test_repo_id:
+                filter_dict: Dict[str, Any] = {
+                    "$and": [
+                        {"test_repo_id": {"$eq": str(test_repo_id)}},
+                        {"test_id": {"$in": str_ids}},
+                    ]
+                }
+            else:
+                filter_dict = {"test_id": {"$in": str_ids}}
+
+            top_k = min(max(len(str_ids) * 4, 20), 10000)
+            query_result = self.index.query(
+                vector=query_embedding,
+                top_k=top_k,
+                filter=filter_dict,
+                include_metadata=True,
+            )
+
+            scores: Dict[str, float] = {}
+            for match in query_result.matches or []:
+                md = match.metadata or {}
+                tid = md.get("test_id")
+                if tid is None:
+                    continue
+                key = str(tid)
+                sc = float(match.score or 0.0)
+                scores[key] = max(scores.get(key, 0.0), sc)
+            return scores
+        except Exception as e:
+            logger.error("[Pinecone] query_scores_for_test_ids failed: %s", e)
+            return {}

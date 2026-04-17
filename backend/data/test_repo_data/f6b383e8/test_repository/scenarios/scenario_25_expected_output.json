@@ -1,0 +1,82 @@
+{
+  "scenario": "25",
+  "category": "DEAD ZONE — ZERO TEST COVERAGE",
+  "title": "New analytics module — trackEvent.ts not referenced in test-manifest",
+  "commit_message": "feat: add client-side analytics wrapper with batching",
+
+  "changed_files": [
+    "src/analytics/trackEvent.ts"
+  ],
+  "changed_symbols": [
+    "trackEvent",
+    "flushAnalyticsQueue",
+    "AnalyticsBatch"
+  ],
+
+  "why_dead_zone": {
+    "explanation": "src/analytics/trackEvent.ts does not appear in any test's sources[] entry in test-manifest.json. The test repository was built around reducers, API constants, auth hooks, and utilities — analytics is out of scope. Despite meaningful new behaviour (batching, retry, session correlation), the diff-based selector finds no matching tests.",
+    "contrast_with_actiotypes": "Changing actiotypes.js cascades to many feature tests (see scenario 8 and scenario 24). Adding a brand-new file with no manifest entry produces the opposite: total SKIP.",
+    "system_output": "CRITICAL/HIGH/LOW empty; SKIP = 77; coverage gaps for each new symbol; optional jest command omitted or runs zero tests."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": { "tests": [], "count": 0 },
+    "HIGH": { "tests": [], "count": 0 },
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "src/analytics/trackEvent.ts appears in no sources[] array in test-manifest.json",
+      "skipped_files": [
+        "test_repository/standalone/regex.constants.test.js",
+        "test_repository/standalone/utilities.pure.test.js",
+        "test_repository/cross-dependent/auth-storage.cross.test.js",
+        "test_repository/cross-dependent/payment-state.cross.test.js",
+        "test_repository/feature/user-profile.feature.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js",
+        "test_repository/feature/api-navigation.feature.test.js"
+      ],
+      "count": 77
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "gap_id": "GAP-01",
+      "type": "COMPLETELY_UNTESTED_FILE",
+      "file": "src/analytics/trackEvent.ts",
+      "severity": "HIGH — new module with no automated safety net",
+      "recommended_describe": "trackEvent",
+      "recommended_tests": [
+        "queues events when batching is enabled",
+        "flushAnalyticsQueue sends queued events and clears the queue",
+        "does not throw when navigator.sendBeacon is unavailable"
+      ]
+    },
+    {
+      "gap_id": "GAP-02",
+      "type": "MANIFEST_MISSING_SOURCE",
+      "file": "src/analytics/trackEvent.ts",
+      "action_required": "Add sources[] entries to test-manifest.json (and tests) before this file can participate in diff-based selection."
+    }
+  ],
+
+  "selection_proof": {
+    "standalone_selected": 0,
+    "cross_dependent_selected": 0,
+    "feature_selected": 0,
+    "total_selected": 0,
+    "total_skipped": 77
+  },
+
+  "summary": {
+    "total_tests": 77,
+    "CRITICAL": 0,
+    "HIGH": 0,
+    "LOW": 0,
+    "SKIP": 77,
+    "coverage_gaps": 2
+  },
+
+  "jest_run_command": null,
+  "jest_run_note": "No tests matched — nothing to run. Gap report is the only output."
+}

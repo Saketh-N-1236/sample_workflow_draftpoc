@@ -1,0 +1,32 @@
+diff --git a/src/services/storage.ts b/src/services/storage.ts
+index 1a2b3c4..9d8e7f6 100644
+--- a/src/services/storage.ts
++++ b/src/services/storage.ts
+@@ -10,7 +10,7 @@ export const storageKeys = {
+   username:              'USERNAME',
+-  token:                 'TOKEN',
++  token:                 'ACCESS_TOKEN',
+   userDetails:           'USERDETAILS',
+   loginTime:             'LOGGEDINTIME',
+   refreshToken:          'REFRESHTOKEN',
+   stripePaymentDetails:  'STRIPEPAYMENTDETAILS',
+   phoneVerified:         'PHONE_VERIFIED',
+ };
+
+@@ -22,10 +22,14 @@ const appStorage = {
+-  get: (key: string) => {
+-    const value = localStorage.getItem(key);
+-    return value ? JSON.parse(value) : null;
+-  },
++  get: (key: string) => {
++    try {
++      const value = localStorage.getItem(key);
++      return value ? JSON.parse(value) : null;
++    } catch (e) {
++      console.warn('[appStorage] Failed to parse value for key:', key);
++      return null;
++    }
++  },
+   set: (key: string, value: any) => {
+     localStorage.setItem(key, JSON.stringify(value));
+   },

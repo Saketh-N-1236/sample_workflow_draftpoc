@@ -20,22 +20,30 @@ current_file = Path(__file__).resolve()
 backend_path = current_file.parent.parent  # backend/
 project_root = backend_path.parent         # project_root/ (sample_workflow/)
 
-# Load environment variables from .env file (lives at project root)
-env_path = project_root / ".env"
-if not env_path.exists():
-    env_path = backend_path / ".env"
+# Load environment variables: project root first, then backend/.env without
+# overriding (so tokens only in backend/.env still apply when root .env exists).
+_root_env = project_root / ".env"
+_backend_env = backend_path / ".env"
 
 logger = logging.getLogger(__name__)
 _loaded_env_path = None
-if env_path.exists():
-    load_dotenv(env_path)
-    _loaded_env_path = str(env_path)
-    logger.info(f"Loaded .env from: {env_path}")
-else:
-    # Try loading from current directory
+if _root_env.exists():
+    load_dotenv(_root_env)
+    _loaded_env_path = str(_root_env)
+    logger.info("Loaded .env from: %s", _root_env)
+if _backend_env.exists():
+    load_dotenv(_backend_env, override=False)
+    logger.info("Merged .env (override=False): %s", _backend_env)
+    if not _loaded_env_path:
+        _loaded_env_path = str(_backend_env)
+if not _loaded_env_path:
     load_dotenv()
     _loaded_env_path = "current directory (not found in expected locations)"
-    logger.warning(f".env file not found at {env_path}, trying current directory")
+    logger.warning(
+        ".env not found at %s or %s; trying cwd",
+        _root_env,
+        _backend_env,
+    )
 
 # Add backend/ to sys.path so all packages (services, api, config, llm, etc.) are importable
 if str(backend_path) not in sys.path:

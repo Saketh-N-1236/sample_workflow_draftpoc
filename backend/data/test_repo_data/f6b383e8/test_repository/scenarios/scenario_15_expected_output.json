@@ -1,0 +1,114 @@
+{
+  "scenario": "15",
+  "category": "FEATURE — FAVOURITES + TOAST SUITE",
+  "title": "favouritesReducer.js — initial favouritesFetched changed from false to null",
+  "commit_message": "fix: distinguish unknown fetch state from explicit false",
+
+  "changed_files": ["src/reducer/favouritesReducer.js"],
+  "changed_symbols": ["favouritesReducer", "favouritesActions"],
+
+  "why_single_feature_file": {
+    "explanation": "Only favouritesReducer.js changes. All CRITICAL tests are under describe('favouritesReducer'). toastReducer tests live in the same feature file and are HIGH (same-suite defensive inclusion). No other feature file or cross-dependent suite lists favouritesReducer.js.",
+    "key_point": "4 CRITICAL + 4 HIGH = 8 tests; 69 SKIP — tight scope comparable to scenario 5’s single-file feature isolation."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "symbols[] contains favouritesReducer; sources include favouritesReducer.js",
+      "tests": [
+        {
+          "test": "favouritesReducer > starts with an empty userFavourites list",
+          "file": "test_repository/feature/favourites-watchlist.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test": "favouritesReducer > UPDATEALLFAVOURITIESDETAILS replaces the favourites list",
+          "file": "test_repository/feature/favourites-watchlist.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test": "favouritesReducer > sets favouritesFetched to true once the list is loaded",
+          "file": "test_repository/feature/favourites-watchlist.feature.test.js",
+          "result": "⚠️  MAY FAIL — if test assumes initial favouritesFetched === false",
+          "category": "feature"
+        },
+        {
+          "test": "favouritesReducer > returns unchanged state for an unknown action",
+          "file": "test_repository/feature/favourites-watchlist.feature.test.js",
+          "category": "feature"
+        }
+      ],
+      "count": 4
+    },
+
+    "HIGH": {
+      "reason": "Same feature file (favourites-watchlist.feature.test.js) — toastReducer describes",
+      "tests": [
+        {
+          "test": "toastReducer > initialises with showToast as null",
+          "file": "test_repository/feature/favourites-watchlist.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test": "toastReducer > TOAST action stores the toast message in showToast",
+          "file": "test_repository/feature/favourites-watchlist.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test": "toastReducer > resets showToast to null when null is dispatched",
+          "file": "test_repository/feature/favourites-watchlist.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test": "toastReducer > returns unchanged state for an unknown action",
+          "file": "test_repository/feature/favourites-watchlist.feature.test.js",
+          "category": "feature"
+        }
+      ],
+      "count": 4
+    },
+
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "favouritesReducer.js not in sources[] for other suites",
+      "skipped_files": [
+        "test_repository/standalone/regex.constants.test.js",
+        "test_repository/standalone/utilities.pure.test.js",
+        "test_repository/cross-dependent/auth-storage.cross.test.js",
+        "test_repository/cross-dependent/payment-state.cross.test.js",
+        "test_repository/feature/user-profile.feature.test.js",
+        "test_repository/feature/api-navigation.feature.test.js"
+      ],
+      "count": 69
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "gap_id": "GAP-01",
+      "type": "ASSERTION_UPDATE",
+      "symbol": "favouritesReducer",
+      "detail": "Initial state test should expect favouritesFetched == null (or use toBeNull())."
+    }
+  ],
+
+  "selection_proof": {
+    "standalone_selected": 0,
+    "cross_dependent_selected": 0,
+    "feature_selected": 8,
+    "total_selected": 8,
+    "total_skipped": 69
+  },
+
+  "summary": {
+    "total_tests": 77,
+    "CRITICAL": 4,
+    "HIGH": 4,
+    "LOW": 0,
+    "SKIP": 69,
+    "coverage_gaps": 1
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage -t \"favouritesReducer|toastReducer\" --verbose"
+}

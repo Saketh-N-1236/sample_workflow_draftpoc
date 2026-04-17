@@ -1,0 +1,110 @@
+{
+  "scenario": "18",
+  "category": "FEATURE — API ENDPOINTS ONLY",
+  "title": "ApiEndPoints.js — paymentsCheckout path segment versioned (/v2/)",
+  "commit_message": "fix: bump checkout API path to v2",
+
+  "changed_files": ["src/services/api/common/ApiEndPoints.js"],
+  "changed_symbols": ["endpoints"],
+
+  "why_endpoints_only": {
+    "explanation": "Only ApiEndPoints.js changes. CRITICAL = all describes that list ApiEndPoints.js in sources[] (endpoints.payment ×3, endpoints.favourites ×2). ApiConstants.js is untouched — HIGH pulls in ApiConstants describes from the same feature file as defensive siblings (scenario 5 pattern).",
+    "key_point": "5 CRITICAL + 2 HIGH = 7 selected; 70 SKIP — tight feature isolation comparable to scenario 5 without touching constants."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "sources[] = ['src/services/api/common/ApiEndPoints.js'] for endpoints.* describes",
+      "tests": [
+        {
+          "test": "endpoints.payment > addCard points to the correct payment creation path",
+          "file": "test_repository/feature/api-navigation.feature.test.js",
+          "result": "⚠️  MAY FAIL — if test hardcodes full URL without v2 on sibling paths only",
+          "category": "feature"
+        },
+        {
+          "test": "endpoints.payment > getAllCards points to the cards listing path",
+          "file": "test_repository/feature/api-navigation.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test": "endpoints.payment > paymentsCheckout points to the checkout path",
+          "file": "test_repository/feature/api-navigation.feature.test.js",
+          "result": "⚠️  WILL FAIL — assertion expects pre-v2 string",
+          "category": "feature"
+        },
+        {
+          "test": "endpoints.favourites > addCardtoFavourite endpoint points to sports favourites add path",
+          "file": "test_repository/feature/api-navigation.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test": "endpoints.favourites > advertisement endpoint builder produces a correctly interpolated URL",
+          "file": "test_repository/feature/api-navigation.feature.test.js",
+          "category": "feature"
+        }
+      ],
+      "count": 5
+    },
+
+    "HIGH": {
+      "reason": "Same suite file (api-navigation.feature.test.js) — ApiConstants describes; sources = ApiConstants.js (unchanged) but file has a CRITICAL hit",
+      "tests": [
+        {
+          "test": "ApiConstants > MAX_IMAGE_UPLOAD_SIZE equals 10 MB expressed in bytes",
+          "file": "test_repository/feature/api-navigation.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test": "ApiConstants > TIMEOUT equals 30 seconds expressed in milliseconds",
+          "file": "test_repository/feature/api-navigation.feature.test.js",
+          "category": "feature"
+        }
+      ],
+      "count": 2
+    },
+
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "ApiEndPoints.js does not appear in sources[] for standalone, cross-dependent, or other feature files",
+      "skipped_files": [
+        "test_repository/standalone/regex.constants.test.js",
+        "test_repository/standalone/utilities.pure.test.js",
+        "test_repository/cross-dependent/auth-storage.cross.test.js",
+        "test_repository/cross-dependent/payment-state.cross.test.js",
+        "test_repository/feature/user-profile.feature.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js"
+      ],
+      "count": 70
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "gap_id": "GAP-01",
+      "type": "ASSERTION_WILL_FAIL",
+      "symbol": "endpoints.payment",
+      "detail": "Update expected checkout path substring to include /v2/ where the product now routes."
+    }
+  ],
+
+  "selection_proof": {
+    "standalone_selected": 0,
+    "cross_dependent_selected": 0,
+    "feature_selected": 7,
+    "total_selected": 7,
+    "total_skipped": 70
+  },
+
+  "summary": {
+    "total_tests": 77,
+    "CRITICAL": 5,
+    "HIGH": 2,
+    "LOW": 0,
+    "SKIP": 70,
+    "coverage_gaps": 1
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage -t \"endpoints\\.payment|endpoints\\.favourites|ApiConstants\" --verbose"
+}

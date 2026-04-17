@@ -16,7 +16,12 @@ const ActionButtons = ({
           disabled={isSelectionRunning || disabled}
           title={disabled ? 'Test selection is disabled due to risk threshold being exceeded' : ''}
         >
-          {isSelectionRunning ? 'Selecting Tests...' : disabled ? 'Selection Disabled' : 'Select Tests'}
+          {isSelectionRunning && <span className="btn-spinner" />}
+          {isSelectionRunning
+            ? 'Selecting Tests…'
+            : disabled
+            ? 'Selection Disabled'
+            : 'Select Tests'}
         </button>
       </div>
     </div>

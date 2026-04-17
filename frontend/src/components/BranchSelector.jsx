@@ -56,20 +56,15 @@ const BranchSelector = ({ repoId, selectedBranch, defaultBranch, onBranchChange 
       }}>
         Branch:
       </label>
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+      <div className="branch-selector-row">
         <select
           id="branch-select"
+          className="branch-selector-select"
           value={currentBranch}
           onChange={handleBranchChange}
           disabled={isLoading || branches.length === 0}
           style={{
-            flex: 1,
-            padding: '8px 12px',
-            border: '1px solid #e0e0e0',
-            borderRadius: '6px',
-            fontSize: '14px',
-            background: 'white',
-            cursor: isLoading ? 'not-allowed' : 'pointer'
+            cursor: isLoading ? 'not-allowed' : 'pointer',
           }}
         >
           {isLoading ? (
@@ -85,19 +80,19 @@ const BranchSelector = ({ repoId, selectedBranch, defaultBranch, onBranchChange 
           )}
         </select>
         <button
+          type="button"
+          className={`branch-selector-refresh${isLoading ? ' branch-selector-refresh--loading' : ''}`}
           onClick={loadBranches}
           disabled={isLoading}
           style={{
-            padding: '8px 12px',
-            border: '1px solid #e0e0e0',
-            borderRadius: '6px',
-            background: '#f5f5f5',
             cursor: isLoading ? 'not-allowed' : 'pointer',
-            fontSize: '14px'
           }}
           title="Refresh branches"
         >
-          ↻
+          {isLoading
+            ? <span className="branch-refresh-spinner" />
+            : <span className="branch-refresh-icon">↻</span>
+          }
         </button>
       </div>
       {error && (

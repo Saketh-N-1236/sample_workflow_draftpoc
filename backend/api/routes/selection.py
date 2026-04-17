@@ -97,17 +97,20 @@ async def select_tests(repo_id: str):
                 from services.repository_db import get_test_repository_bindings
                 bound_repos = get_test_repository_bindings(repo_id)
                 if bound_repos:
-                    from deterministic.db_connection import get_connection_with_schema
+                    from deterministic.db_connection import get_connection_with_schema, validate_schema_name
                     for repo in bound_repos:
                         schema_name = repo.get('schema_name')
                         if schema_name:
                             try:
+                                validate_schema_name(schema_name)
                                 with get_connection_with_schema(schema_name) as conn:
                                     with conn.cursor() as cursor:
                                         cursor.execute(f"SELECT COUNT(*) FROM {schema_name}.test_registry")
                                         count = cursor.fetchone()[0]
                                         total_tests_in_db += count
                                         logger.info(f"Threshold exceeded - Schema {schema_name} has {count} tests")
+                            except ValueError as e:
+                                logger.error(f"Rejecting invalid schema name {schema_name!r}: {e}")
                             except Exception as e:
                                 logger.warning(f"Failed to get test count from schema {schema_name}: {e}")
             except Exception as e:
@@ -189,17 +192,20 @@ async def select_tests(repo_id: str):
                 from services.repository_db import get_test_repository_bindings
                 bound_repos = get_test_repository_bindings(repo_id)
                 if bound_repos:
-                    from deterministic.db_connection import get_connection_with_schema
+                    from deterministic.db_connection import get_connection_with_schema, validate_schema_name
                     for repo in bound_repos:
                         schema_name = repo.get('schema_name')
                         if schema_name:
                             try:
+                                validate_schema_name(schema_name)
                                 with get_connection_with_schema(schema_name) as conn:
                                     with conn.cursor() as cursor:
                                         cursor.execute(f"SELECT COUNT(*) FROM {schema_name}.test_registry")
                                         count = cursor.fetchone()[0]
                                         total_tests_in_db += count
                                         logger.info(f"Fallback calculation - Schema {schema_name} has {count} tests")
+                            except ValueError as e:
+                                logger.error(f"Rejecting invalid schema name {schema_name!r}: {e}")
                             except Exception as e:
                                 logger.warning(f"Fallback failed for schema {schema_name}: {e}")
             except Exception as e:
@@ -207,9 +213,11 @@ async def select_tests(repo_id: str):
         
         response = SelectionResponse(
             totalTests=results.get("total_tests", 0),
-            totalTestsInDb=total_tests_in_db,  # Add total tests in database
+            totalTestsInDb=total_tests_in_db,
             astMatches=results.get("ast_matches", 0),
             semanticMatches=results.get("semantic_matches", 0),
+            independentCount=results.get("independent_count", 0),
+            crossDependentCount=results.get("cross_dependent_count", 0),
             selectionFunnel=results.get("selection_funnel"),
             semanticSearchCandidates=results.get("semantic_search_candidates"),
             semanticVectorThreshold=results.get("semantic_vector_threshold"),
@@ -238,17 +246,6 @@ async def select_tests(repo_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Test selection failed: {str(e)}")
-
-
-@router.get("/{repo_id}/results")
-async def get_results(repo_id: str):
-    """Get all results for a repository."""
-    repo = get_repository_by_id(repo_id)
-    if not repo:
-        raise HTTPException(status_code=404, detail="Repository not found")
-    
-    # Returns selection results - analysis results are available via /api/analysis/{repo_id}/results
-    return {"analysis": None, "selection": None}
 
 
 # Semantic search configuration is now handled automatically by the adaptive

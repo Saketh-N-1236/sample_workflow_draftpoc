@@ -1,0 +1,27 @@
+diff --git a/src/features/auth/hooks/signUpFormHook.ts b/src/features/auth/hooks/signUpFormHook.ts
+index 1a2b3c4..5e6f7a8 100644
+--- a/src/features/auth/hooks/signUpFormHook.ts
++++ b/src/features/auth/hooks/signUpFormHook.ts
+@@ -12,3 +12,8 @@
+-  const validateUsername = (value: string) => {
+-    if (!UNIQUE_USERNAME_REGEX.test(value)) return 'Invalid username format';
+-  };
++  const validateUsername = (value: string) => {
++    if (!value || value.trim().length === 0) return 'Username is required';
++    if (value.length < 3) return 'Username must be at least 3 characters';
++    if (!UNIQUE_USERNAME_REGEX.test(value)) return 'Invalid username format';
++    if (value.toLowerCase() === 'admin') return 'Username "admin" is reserved';
++  };
+
+diff --git a/src/features/auth/hooks/useOtpValidationHook.ts b/src/features/auth/hooks/useOtpValidationHook.ts
+index 7b8c9d0..3f4e5a6 100644
+--- a/src/features/auth/hooks/useOtpValidationHook.ts
++++ b/src/features/auth/hooks/useOtpValidationHook.ts
+@@ -8,2 +8,6 @@
+-  otpDigits: { required: 'OTP is required' },
++  otpDigits: {
++    required: 'OTP is required',
++    minLength: { value: 6, message: 'OTP must be 6 digits' },
++    maxLength: { value: 6, message: 'OTP must be 6 digits' },
++    pattern:   { value: /^[0-9]{6}$/, message: 'OTP must contain only digits' },
++  },

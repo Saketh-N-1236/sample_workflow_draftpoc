@@ -112,6 +112,8 @@ class SelectionResponse(BaseModel):
     totalTestsInDb: int = 0  # Total tests in database (for coverage calculation)
     astMatches: int = 0  # In final table: tests with an AST/DB link
     semanticMatches: int = 0  # In final table: tests vector search contributed to
+    independentCount: int = 0   # Tests that directly import/cover the changed code
+    crossDependentCount: int = 0  # Tests indirectly affected (transitive/semantic)
     selectionFunnel: Optional[Dict] = None  # Pipeline explanation + vector vs final counts
     semanticSearchCandidates: Optional[int] = None  # Raw vector hits before filtering
     semanticVectorThreshold: Optional[float] = None  # Min cosine similarity used for vector search

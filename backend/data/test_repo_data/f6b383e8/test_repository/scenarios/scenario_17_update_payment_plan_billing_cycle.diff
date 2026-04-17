@@ -1,0 +1,17 @@
+diff --git a/src/reducer/actions.js b/src/reducer/actions.js
+index a1b2c3d..9e0f1a2 100644
+--- a/src/reducer/actions.js
++++ b/src/reducer/actions.js
+@@ -542,9 +542,10 @@ export function setShowAuthenticator(show) {
+   };
+ }
+ 
+-export function updatePaymentPlanDetails(payload) {
++export function updatePaymentPlanDetails(payload, billingCycle = 'monthly') {
+   return {
+     type: paymentActions.UPDATEPAYMENTPLANDETAILS,
+     payload,
++    billingCycle,
+   };
+ }
+ 

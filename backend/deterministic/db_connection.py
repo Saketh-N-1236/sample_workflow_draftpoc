@@ -162,6 +162,29 @@ def get_connection():
             pool.putconn(conn)
 
 
+def validate_schema_name(name: str) -> str:
+    """
+    Validate that a schema name is safe to interpolate into an SQL statement.
+
+    PostgreSQL identifier rules (applied here as a strict allow-list):
+    - 1–63 characters
+    - Only ASCII letters, digits, and underscores
+
+    Raises ValueError for any name that does not match, so the caller can
+    catch it before the name reaches an f-string SQL query.
+
+    Returns the validated name unchanged so it can be used inline:
+        schema = validate_schema_name(raw_schema)
+    """
+    import re as _re
+    if not name or not _re.fullmatch(r'[a-zA-Z0-9_]{1,63}', name):
+        raise ValueError(
+            f"Invalid schema name {name!r}. "
+            "Schema names must be 1–63 alphanumeric/underscore characters only."
+        )
+    return name
+
+
 def create_schema_if_not_exists(schema_name: str):
     """
     Create a database schema if it doesn't exist.

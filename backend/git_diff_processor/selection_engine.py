@@ -285,11 +285,18 @@ def query_tests_module_pattern(conn, module_pattern: str, prefer_direct: bool = 
                         tr.file_path,
                         ri.reference_type,
                         CASE WHEN ri.production_class = %s THEN 1 ELSE 2 END as exact_match_priority,
-                        CASE WHEN ri.reference_type IN ('direct_import', 'string_ref') THEN 1 ELSE 2 END as ref_type_priority
+                        CASE
+                            WHEN ri.reference_type IN ('direct_import', 'string_ref') THEN 1
+                            WHEN ri.reference_type IN ('transitive_import', 'transitive_normalized') THEN 2
+                            ELSE 3
+                        END as ref_type_priority
                     FROM {target_schema}.reverse_index ri
                     JOIN {target_schema}.test_registry tr ON ri.test_id = tr.test_id
                     WHERE ri.production_class IN ({placeholders})
-                       OR (ri.production_class = %s AND ri.reference_type IN ('direct_import', 'string_ref'))
+                       OR (ri.production_class = %s AND ri.reference_type IN (
+                               'direct_import', 'string_ref',
+                               'transitive_import', 'transitive_normalized',
+                               'source_annotation', 'source_annotation_normalized'))
                     ORDER BY 
                         exact_match_priority,
                         ref_type_priority,
@@ -305,12 +312,18 @@ def query_tests_module_pattern(conn, module_pattern: str, prefer_direct: bool = 
                         tr.file_path,
                         ri.reference_type,
                         CASE WHEN ri.production_class = %s THEN 1 ELSE 2 END as exact_match_priority,
-                        CASE WHEN ri.reference_type IN ('direct_import', 'string_ref') THEN 1 ELSE 2 END as ref_type_priority
+                        CASE
+                            WHEN ri.reference_type IN ('direct_import', 'string_ref') THEN 1
+                            WHEN ri.reference_type IN ('transitive_import', 'transitive_normalized') THEN 2
+                            ELSE 3
+                        END as ref_type_priority
                     FROM {target_schema}.reverse_index ri
                     JOIN {target_schema}.test_registry tr ON ri.test_id = tr.test_id
                     WHERE ri.production_class = %s
-                       OR (ri.production_class LIKE %s 
-                           AND ri.reference_type IN ('direct_import', 'string_ref'))
+                       OR (ri.production_class LIKE %s
+                           AND ri.reference_type IN (
+                               'direct_import', 'string_ref',
+                               'transitive_import', 'transitive_normalized'))
                     ORDER BY 
                         exact_match_priority,
                         ref_type_priority,
@@ -673,7 +686,8 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
             })
         print()
     
-    # Strategy 1.5: Integration tests for changed modules
+    # Strategy 1.5: Integration tests for changed modules (all languages)
+    _PROD_EXT = {'.py', '.js', '.jsx', '.ts', '.tsx', '.java', '.kt', '.go', '.rb', '.cs'}
     if file_changes:
         print_section("Querying database (Integration/e2e tests)...")
 
@@ -686,7 +700,7 @@ def find_affected_tests(conn, search_queries: Dict, file_changes: List[Dict] = N
             if change_type == 'import_only':
                 continue
             
-            if file_path and file_path.endswith('.py'):
+            if file_path and Path(file_path).suffix.lower() in _PROD_EXT:
                 classes = extract_production_classes_from_file(file_path)
                 for module_name in classes[:1]:  # Check first class only
                     integration_tests = find_integration_tests_for_module(conn, module_name, schema=target_schema)
@@ -1084,11 +1098,12 @@ def find_tests_ast_only(conn, search_queries: Dict, file_changes: List[Dict] = N
                 'confidence': 'very_high'
             })
     
-    # Strategy 1.5: Integration tests
+    # Strategy 1.5: Integration tests (all languages, not only Python)
+    _PROD_EXTENSIONS = {'.py', '.js', '.jsx', '.ts', '.tsx', '.java', '.kt', '.go', '.rb', '.cs'}
     if file_changes:
         for file_change in file_changes:
             file_path = file_change.get('file', '')
-            if file_path and file_path.endswith('.py'):
+            if file_path and Path(file_path).suffix.lower() in _PROD_EXTENSIONS:
                 change_type = analyze_file_change_type(file_change)
                 if change_type != 'import_only':
                     classes = extract_production_classes_from_file(file_path)
@@ -1129,9 +1144,14 @@ def find_tests_ast_only(conn, search_queries: Dict, file_changes: List[Dict] = N
     # skip module_matches or AST yields 0 (semantic-only), as in ApiConstants diffs.
     #
     # RULE: If UPPER_CASE constants are in exact_matches BUT Strategy 0–2 found
-    #       nothing, run module_matches anyway, then keep only tests whose names
-    #       mention at least one changed constant (reduces EMAIL_REGEX noise when
-    #       PHONE_REGEX changed, when we *do* have symbol-level hits).
+    #       nothing, run module_matches anyway (force_module_for_constants).
+    #
+    # ADDITIONAL RULE: For constant-only file changes (use_symbol_only=True in
+    # build_search_queries), the module names were demoted to module_matches rather
+    # than exact_matches, so module_exact_matches is empty. In this case, Strategy 3
+    # MUST also run to find cross-file references (e.g. auth-storage/payment-state
+    # tests that import constants.ts). Only tests NOT already in all_tests are added,
+    # so standalone tests already found by Strategy 2 are never duplicated.
     def _is_screaming_constant(name: str) -> bool:
         return bool(name) and name[0].isupper() and name.upper() == name
 
@@ -1143,8 +1163,17 @@ def find_tests_ast_only(conn, search_queries: Dict, file_changes: List[Dict] = N
     tests_before_module = len(all_tests)
     force_module_for_constants = has_constant_symbols and tests_before_module == 0
 
+    # Detect constant-only file changes: module names were demoted to module_matches
+    # (use_symbol_only=True path in build_search_queries) so module_exact_matches is
+    # empty. Running Strategy 3 here finds cross-file importers of the changed file.
+    _symbol_only_modules = (
+        has_constant_symbols
+        and bool(search_queries.get('module_matches'))
+        and not search_queries.get('module_exact_matches')
+    )
+
     if search_queries.get('module_matches') and (
-        not has_constant_symbols or force_module_for_constants
+        not has_constant_symbols or force_module_for_constants or _symbol_only_modules
     ):
         import logging as _log_ast
 
@@ -1797,10 +1826,8 @@ def calculate_confidence_score(
     # Ensure AST score is within valid range
     ast_score = max(0, min(100, score))
     
-    # Calculate Vector Component (30%)
-    # No artificial cap: the similarity score already reflects true relevance.
-    # Capping at 60 previously suppressed valid semantic signals when similarity was
-    # high (e.g. 85%) and caused "Both" matches to be rated only "medium".
+    # Calculate Vector Component
+    # Use similarity (0-100) and allow high values; cap later in weighting if needed.
     vector_score = 0
     for match in match_details:
         if match.get('type') == 'semantic':
@@ -1808,24 +1835,48 @@ def calculate_confidence_score(
             if similarity:
                 vector_score = max(vector_score, int(similarity * 100))  # full range 0-100
     
-    # Calculate LLM Component (20%)
+    # Calculate LLM Component
     llm_component = 0
     if llm_score is not None and llm_score > 0:
         llm_component = int(llm_score * 100)  # Convert 0.0-1.0 to 0-100
     
-    # Calculate Speed Component (10%) - Fixed value
-    speed_component = 10  # Fixed 10% contribution
-    
-    # Weighted combination: 40% AST + 30% Vector + 20% LLM + 10% Speed
-    total_score = (
-        (ast_score * 0.40) +
-        (vector_score * 0.30) +
-        (llm_component * 0.20) +
-        (speed_component * 0.10)
-    )
-    
-    has_semantic_match = vector_score > 0
+    # Ensure a defined speed component (removed from weighting; keep 0 for legacy math paths)
+    speed_component = 0
 
+    # AST-confirmed floor per rubric (direct_file/exact/function_level)
+    has_direct_file = any(m.get('type') in ('direct_file', 'direct_file_match') for m in match_details)
+    if has_exact_match or has_function_level or has_direct_file:
+        ast_score = max(ast_score, 55)
+
+    # Case-aware weighting (requested behavior):
+    # - BOTH (AST + Semantic): use all three → AST 45% + Semantic 30% + LLM 25%
+    # - AST-only:               AST 75% + LLM 25%
+    # - Semantic-only:          Semantic 75% + LLM 25%
+    has_semantic_match = vector_score > 0
+    has_ast_confirmed = (has_exact_match or has_function_level or has_direct_file)
+
+    if has_ast_confirmed and has_semantic_match:
+        total_score = (
+            (ast_score * 0.45) +
+            (vector_score * 0.30) +
+            (llm_component * 0.25)
+        )
+    elif has_ast_confirmed and not has_semantic_match:
+        # AST-only: emphasize structural link, allow LLM to lift borderline cases
+        total_score = (
+            (ast_score * 0.75) +
+            (llm_component * 0.25)
+        )
+    elif (not has_ast_confirmed) and has_semantic_match:
+        # Semantic-only: emphasize vector signal with LLM confirmation
+        total_score = (
+            (vector_score * 0.75) +
+            (llm_component * 0.25)
+        )
+    else:
+        # No evidence — extremely conservative (LLM-only if any)
+        total_score = llm_component * 0.25
+    
     # Dual-confirmation bonus: when BOTH AST (exact/function) and Semantic agree on a
     # test, it is far more likely to be relevant than if only one method found it.
     # Award +15 so the combined score clears the "high" threshold (≥70).
@@ -1836,18 +1887,18 @@ def calculate_confidence_score(
     # high (≥70%), semantic is the only evidence and should drive the score.
     # The standard formula gives (0×0.4 + 95×0.3 + llm×0.2 + 10×0.1) ≈ 39 → "low",
     # which under-values a 95% cosine match. Switch to semantic-primary weighting.
-    if not has_exact_match and ast_score == 0 and vector_score >= 70:
+    if not has_exact_match and not has_function_level and ast_score == 0 and vector_score >= 70:
         semantic_primary = int(
-            vector_score * 0.70 +
-            llm_component * 0.20 +
-            speed_component * 0.10
+            vector_score * 0.75 +
+            llm_component * 0.25
         )
         total_score = max(total_score, semantic_primary)
 
     # IMPORTANT: For AST-only tests (no semantic match), ensure minimum score
     if not has_semantic_match and ast_score > 0:
         if total_score < 50:
-            total_score = max(50, int(ast_score * 0.60 + speed_component * 0.10))
+            # With speed removed, keep a conservative AST-only floor using AST signal only
+            total_score = max(50, int(ast_score * 0.60))
     
     # Ensure final score is within valid range
     total_score = max(0, min(100, int(total_score)))

@@ -143,9 +143,10 @@ class SelectionService:
             total_tests_in_db = 0
             if test_repo_schemas:
                 try:
-                    from deterministic.db_connection import get_connection_with_schema
+                    from deterministic.db_connection import get_connection_with_schema, validate_schema_name
                     for schema_name in test_repo_schemas:
                         try:
+                            validate_schema_name(schema_name)
                             # get_connection_with_schema is already a context manager, no need for double ()
                             with get_connection_with_schema(schema_name) as conn:
                                 with conn.cursor() as cursor:
@@ -153,6 +154,8 @@ class SelectionService:
                                     count = cursor.fetchone()[0]
                                     total_tests_in_db += count
                                     logger.debug(f"Schema {schema_name}: {count} tests in registry")
+                        except ValueError as e:
+                            logger.error(f"Rejecting invalid schema name {schema_name!r}: {e}")
                         except Exception as e:
                             logger.error(f"Failed to get test count from schema {schema_name}: {e}", exc_info=True)
                 except Exception as e:
@@ -181,15 +184,11 @@ class SelectionService:
                 len(enhanced_results.get("tests", [])),
             )
             
-            # Include LLM scores, confidence distribution, test suites, and LLM input/output from results
-            if results.get('llm_scores'):
-                enhanced_results['llm_scores'] = results.get('llm_scores')
+            # Include confidence distribution, test suites from results
             if results.get('confidence_distribution'):
                 enhanced_results['confidence_distribution'] = results.get('confidence_distribution')
             if results.get('test_suites'):
                 enhanced_results['test_suites'] = results.get('test_suites')
-            if results.get('llm_input_output'):
-                enhanced_results['llm_input_output'] = results.get('llm_input_output')
             if results.get('coverage_gaps') is not None:
                 enhanced_results['coverage_gaps'] = results.get('coverage_gaps')
             if results.get('breakage_warnings') is not None:
@@ -234,15 +233,14 @@ class SelectionService:
                                 confidence_distribution['medium'] += 1
                             else:
                                 confidence_distribution['low'] += 1
-                    llm_used = bool(enhanced_results.get('llm_scores'))
                     threshold_exceeded = False  # Threshold exceeded is handled in API route before calling this
-                    
+
                     log_selection_run(
                         repository_id=repository_id,
                         changed_files_count=changed_files_count,
                         selected_tests_count=selected_tests_count,
                         confidence_scores=confidence_distribution,
-                        llm_used=llm_used,
+                        llm_used=False,
                         execution_time_ms=execution_time_ms,
                         threshold_exceeded=threshold_exceeded
                     )
@@ -335,31 +333,39 @@ class SelectionService:
                 if isinstance(test_match_details, list):
                     for match_detail in test_match_details:
                         match_detail_type = match_detail.get('type', '')
-                        if match_detail_type == 'semantic':
+                        if match_detail_type in ('semantic', 'semantic_colocation'):
                             has_semantic_in_details = True
                             # Extract similarity if available
                             if similarity is None:
                                 similarity = match_detail.get('similarity')
                         elif match_detail_type in ['exact', 'module', 'function_level', 'direct_file', 'direct_file_match', 'direct_test_file', 'module_pattern', 'integration']:
                             has_ast_in_details = True
-                
-                # Check if test has semantic match indicators
-                # IMPORTANT: Only mark as semantic if it was ORIGINALLY found by semantic search
-                # Don't rely on similarity value alone, as it might have been added during merging
+
+                # Semantic: found directly by vector search OR co-located from a semantic hit.
+                # 'colocated_from_semantic' match_type and 'semantic_colocation' detail type
+                # are both produced by the SEM-COLOC expansion step — they are semantically
+                # driven, not AST-driven.
                 is_semantic = (
                     has_semantic_in_details or
                     test_id in semantic_results_tests or
                     'semantic' in str(match_type).lower()
                 )
-                
-                # Check if test has AST match indicators
-                # More comprehensive AST detection
+
+                # AST: found by static analysis (reverse_index / test_dependencies).
+                # Explicitly exclude the semantic co-location match type so those tests
+                # are not double-counted as AST.
+                _AST_MATCH_TYPES = {
+                    'exact', 'module', 'function_level', 'direct_file',
+                    'direct_file_match', 'module_pattern', 'direct_test_file',
+                }
                 is_ast = (
                     has_ast_in_details or
-                    match_type in ['exact', 'module', 'function_level', 'direct_file', 'direct_file_match', 'module_pattern'] or
-                    test.get('matched_classes') and len(test.get('matched_classes', [])) > 0 or
-                    (confidence_score >= 70 and match_type != 'semantic') or
-                    (match_type not in ['semantic', 'unknown'] and match_type != '')
+                    match_type in _AST_MATCH_TYPES or
+                    bool(test.get('matched_classes')) or
+                    (
+                        match_type not in {'semantic', 'unknown', 'colocated_from_semantic', ''}
+                        and 'semantic' not in str(match_type).lower()
+                    )
                 )
             
             # Ensure flags are set on test object (update if not already set or if we detected differently)
@@ -367,20 +373,27 @@ class SelectionService:
             test['is_semantic_match'] = is_semantic
             
             if is_semantic:
-                # Use similarity from test, semantic_results, or default
+                # Use similarity from test, semantic_results, or a baseline for co-located tests.
+                # Co-located tests have no direct similarity score but were selected because a
+                # sibling test in the same file scored above the semantic threshold — use the
+                # threshold itself (0.45) as their representative similarity so they are counted
+                # in semantic_test_ids and displayed with the correct match type.
                 final_similarity = 0.0
                 if similarity is not None and isinstance(similarity, (int, float)):
                     final_similarity = float(similarity)
                 elif test_id in semantic_results_tests:
                     final_similarity = float(semantic_results_tests[test_id]['similarity'])
-                
+                elif 'semantic' in str(match_type).lower():
+                    # Co-located from semantic: assign the floor similarity
+                    final_similarity = 0.45
+
                 if final_similarity > 0:
                     semantic_match_details.append(
                         SemanticMatch(
                             test_id=test_id,
                             similarity=final_similarity,
                             confidence='high' if final_similarity >= 0.6 else 'medium' if final_similarity >= 0.4 else 'low',
-                            query_used=None  # Could be extracted from match_details if available
+                            query_used=None
                         )
                     )
                     semantic_test_ids.add(test_id)
@@ -425,6 +438,15 @@ class SelectionService:
         enhanced['overlap_count'] = overlap_count
         enhanced['embedding_status'] = embedding_status
         enhanced['semantic_config'] = semantic_config
+
+        # Recalculate counts from the sets we just built so the summary tiles
+        # match the actual test list (including co-located tests counted as semantic).
+        enhanced['ast_matches'] = len(ast_test_ids)
+        enhanced['semantic_matches'] = len(semantic_test_ids)
+
+        # Pass through dependency classification counts from process_diff result
+        enhanced['independent_count'] = results.get('independent_count', 0)
+        enhanced['cross_dependent_count'] = results.get('cross_dependent_count', 0)
         
         # Ensure total_tests_in_db is preserved if it exists in results
         if 'total_tests_in_db' in results:

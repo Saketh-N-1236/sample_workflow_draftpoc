@@ -1,0 +1,13 @@
+diff --git a/src/services/api/common/ApiEndPoints.js b/src/services/api/common/ApiEndPoints.js
+index a1b2c3d..9e0f1a2 100644
+--- a/src/services/api/common/ApiEndPoints.js
++++ b/src/services/api/common/ApiEndPoints.js
+@@ -66,7 +66,7 @@ const endpoints = {
+     deleteCard: '/api/v2/payments/me?cardId=',
+     preAuth: '/api/v2/payments/me/preauth-verify?',
+     getAllCards: '/api/v2/payments/me',
+     updateCard: '/api/v2/payments/me?',
+-    paymentsCheckout: '/api/v2/payments/checkout'
++    paymentsCheckout: '/api/v2/payments/checkout'
+   },
+   //Fav API

@@ -11,6 +11,28 @@ from services.http_client import get_shared_async_client
 logger = logging.getLogger(__name__)
 
 
+def _normalize_github_token(raw: Optional[str]) -> Optional[str]:
+    """
+    Strip whitespace and surrounding quotes from .env values.
+    Trailing newlines/spaces are a common cause of 401 Bad credentials.
+    """
+    if not raw:
+        return None
+    t = str(raw).strip()
+    if len(t) >= 2 and t[0] == t[-1] and t[0] in ('"', "'"):
+        t = t[1:-1].strip()
+    return t or None
+
+
+def _github_authorization_header(token: str) -> str:
+    """
+    GitHub REST API accepts Bearer for all PAT types. Fine-grained PATs
+    (prefix github_pat_) *require* Bearer — using 'token <pat>' returns 401.
+    Classic PATs (ghp_...) work with both; Bearer is the documented default.
+    """
+    return f"Bearer {token}"
+
+
 class GitHubService:
     """Service for GitHub API operations."""
     
@@ -22,14 +44,15 @@ class GitHubService:
             api_token: GitHub personal access token (from env: GITHUB_API_TOKEN)
             api_url: GitHub API base URL (from env: GITHUB_API_URL, default: https://api.github.com)
         """
-        self.api_token = api_token or os.getenv('GITHUB_API_TOKEN')
-        self.default_api_url = api_url or os.getenv('GITHUB_API_URL', 'https://api.github.com')
+        merged = api_token if api_token is not None else os.getenv('GITHUB_API_TOKEN')
+        self.api_token = _normalize_github_token(merged)
+        self.default_api_url = (api_url or os.getenv('GITHUB_API_URL', 'https://api.github.com')).rstrip('/')
         
         if not self.api_token:
             logger.warning("GITHUB_API_TOKEN not set. GitHub API features will be limited.")
         
         self.headers = {
-            'Authorization': f'token {self.api_token}',
+            'Authorization': _github_authorization_header(self.api_token),
             'Accept': 'application/vnd.github.v3+json',
             'Content-Type': 'application/json'
         } if self.api_token else {

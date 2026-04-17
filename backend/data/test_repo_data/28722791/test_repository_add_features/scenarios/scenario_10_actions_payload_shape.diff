@@ -1,0 +1,15 @@
+diff --git a/src/reducer/actions.js b/src/reducer/actions.js
+index 1111111..2222222 100644
+--- a/src/reducer/actions.js
++++ b/src/reducer/actions.js
+@@ -317,6 +317,9 @@ export function updateUserCards(userCards, cardsFetched = false) {
+   return {
+     type: paymentActions.UPDATEALLCARDDETAILS,
+     userCards,
+     cardsFetched,
++    /** Normalised card list for analytics (optional) */
++    normalisedCards: Array.isArray(userCards)
++      ? userCards.map(c => ({ ...c, last4: String(c?.last4 ?? '') }))
++      : [],
+   };
+ }

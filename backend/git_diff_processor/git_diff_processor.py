@@ -486,6 +486,9 @@ def calculate_confidence_score_with_breakdown(
             elif ref_type == 'string_ref':
                 base_score = max(base_score, 65)
                 has_direct_reference = True
+            elif ref_type in ('transitive_import', 'transitive_normalized'):
+                # 2-3 hop import chain: weaker than direct but above generic
+                base_score = max(base_score, 58)
             else:
                 base_score = max(base_score, 60)
                 
@@ -519,6 +522,8 @@ def calculate_confidence_score_with_breakdown(
             multiplier = max(multiplier, 1.0)
         elif ref_type == 'string_ref':
             multiplier = max(multiplier, 0.9)
+        elif ref_type in ('transitive_import', 'transitive_normalized'):
+            multiplier = max(multiplier, 0.85)
         elif ref_type == 'indirect_import':
             multiplier = max(multiplier, 0.8)
         elif match.get('type') == 'module' and not has_direct_reference:
@@ -557,42 +562,33 @@ def calculate_confidence_score_with_breakdown(
             if similarity:
                 vector_score = max(vector_score, int(similarity * 100))  # full 0-100
     
-    # Calculate LLM Component (20%)
-    llm_component = 0
-    if llm_score is not None and llm_score > 0:
-        llm_component = int(llm_score * 100)
-    
-    # Calculate Speed Component (10%) - Fixed value
-    speed_component = 10
-
     has_semantic_match = vector_score > 0
 
-    # ── Unified formula: AST×50% + Semantic×35% + LLM×10% + Speed×5% ────────
+    # ── Unified formula: AST×60% + Semantic×40% ───────────────────
     #
-    # Rationale for weights:
-    #   • AST (50%)      — structural code link is the strongest signal
-    #   • Semantic (35%) — meaning-based match gets significant weight;
-    #                      semantic-only composites need high similarity + LLM
-    #                      to pass the upstream confidence gate (~42%).
-    #   • LLM (10%)      — AI reasoning provides a confirmation nudge
-    #   • Speed (5%)     — small fixed baseline for all tests
+    # LLM relevance scoring was removed; weights renormalised so the
+    # formula still sums to 100 % and the 42 % confidence gate behaves
+    # identically to the previous 3-component gate.
     #
-    # Score → label mapping (approximate):
-    #   AST=75, Vector=62, LLM=0   → 37.5+21.7+0+0.5 = 59.7  → "medium"  ✓ (was 49 "low")
-    #   AST=75, Vector=0,  LLM=0   → 37.5+0+0+0.5    = 38     → below gate (needs LLM / filter path)
-    #   AST=0,  Vector=65, LLM=60  → 0+22.75+6+0.5   = 29.25  → "low" (borderline)
-    #   AST=85, Vector=70, LLM=80  → 42.5+24.5+8+0.5 = 75.5   → "high"   ✓
+    # Derivation: old weights were AST=0.45, Semantic=0.30, LLM=0.25.
+    # With LLM always 0, effective max was 0.75.  Dividing each by 0.75:
+    #   AST:      0.45 / 0.75 = 0.60
+    #   Semantic: 0.30 / 0.75 = 0.40
+    #
+    # Score → label mapping (no LLM):
+    #   AST=75, Semantic=62  → 45.0 + 24.8 = 69.8  → "medium-high"  ✓
+    #   AST=75, Semantic=0   → 45.0 + 0    = 45.0  → passes 42 % gate ✓
+    #   AST=60, Semantic=0   → 36.0 + 0    = 36.0  → FAILS gate (barrel) ✓
+    #   AST=85, Semantic=70  → 51.0 + 28.0 = 79.0  → "high"  ✓
+    #   AST=0,  Semantic=65  → 0    + 26.0 = 26.0  → "low" (semantic-only) ✓
     total_score = (
-        ast_score     * 0.50 +
-        vector_score  * 0.35 +
-        llm_component * 0.10 +
-        speed_component * 0.05
+        ast_score    * 0.60 +
+        vector_score * 0.40
     )
 
     # Co-located siblings (`direct_file`, incl. semantic_colocated_file) often have
-    # ast_score≈50 and no vector hit → raw composite ~25, below the filter gate.
-    # Floor at 45 keeps them as "low" but still selected (e.g. CARD_NUMBER_REGEX
-    # in the same file as paymentReducer tests).
+    # ast_score≈50 and no vector hit → raw composite ~30, below the filter gate.
+    # Floor at 45 keeps them as "low" but still selected.
     _has_direct_file_match = any(
         m.get("type") == "direct_file" for m in match_details
     )
@@ -602,16 +598,16 @@ def calculate_confidence_score_with_breakdown(
     # Ensure final score is within valid range
     total_score = max(0, min(100, int(total_score)))
 
-    # Calculate percentage contributions (using actual formula weights)
+    # Calculate percentage contributions
     breakdown = {
         'ast_score': ast_score,
         'vector_score': vector_score,
-        'llm_component': llm_component,
-        'speed_component': speed_component,
-        'ast_percentage': round((ast_score * 0.50), 1),
-        'semantic_percentage': round((vector_score * 0.35), 1),
-        'llm_percentage': round((llm_component * 0.10), 1),
-        'speed_percentage': round((speed_component * 0.05), 1)
+        'llm_component': 0,
+        'speed_component': 0,
+        'ast_percentage': round((ast_score * 0.60), 1),
+        'semantic_percentage': round((vector_score * 0.40), 1),
+        'llm_percentage': 0,
+        'speed_percentage': 0
     }
     
     return total_score, breakdown

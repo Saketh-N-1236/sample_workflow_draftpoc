@@ -344,44 +344,231 @@ class JavaScriptAnalyzer(BaseAnalyzer):
             return 'e2e'
         return 'unit'
     
+    # ── Import-chain traversal helpers ────────────────────────────────────
+    _IMPORT_RE = re.compile(
+        r"""(?:import|require)\s*(?:\([^)]*\))?\s*\(?['"`](\.{1,2}/[^'"`\s]+)['"`]""",
+        re.MULTILINE,
+    )
+
+    # Matches JSDoc @source annotations that explicitly declare which production
+    # file a test covers — used when the test inlines rather than imports source.
+    # Examples handled:
+    #   @source src/services/api/common/ApiEndPoints.js
+    #   * @sources src/foo.js, src/bar.ts
+    #   @source  ./components/MyComp.jsx
+    _SOURCE_ANNOTATION_RE = re.compile(
+        r"@sources?\s+([\w./,\s\-]+)",
+        re.IGNORECASE,
+    )
+    _JS_EXTS = ('.js', '.ts', '.jsx', '.tsx', '.mjs', '.cjs')
+    _EXCLUDE_CHAIN = frozenset(
+        ['node_modules', '.git', 'dist', 'build', '.next', '.nuxt', '__pycache__']
+    )
+
+    def _resolve_import(self, source: Path, raw: str, repo_path: Path) -> Optional[str]:
+        """
+        Resolve a relative import string (starts with ./ or ../) to an absolute
+        path string that exists on disk, staying within repo_path.
+        Returns None if unresolvable.
+        """
+        try:
+            base = (source.parent / raw).resolve()
+            candidates = (
+                [base]
+                + [base.with_suffix(ext) for ext in self._JS_EXTS]
+                + [base / f"index{ext}" for ext in self._JS_EXTS]
+            )
+            for c in candidates:
+                if c.is_file():
+                    c.relative_to(repo_path)   # raises ValueError if outside repo
+                    return str(c)
+        except Exception:
+            pass
+        return None
+
+    def _build_production_import_graph(
+        self, repo_path: Path
+    ) -> Dict[str, Set[str]]:
+        """
+        Walk every JS/TS file in the repo (excluding test files and node_modules)
+        and build a map:  resolved_path → {resolved_paths it imports}.
+
+        Only relative imports are followed because those are the only ones
+        resolvable without running the Node module resolver.
+        """
+        graph: Dict[str, Set[str]] = {}
+        for fp in repo_path.rglob('*'):
+            if not fp.is_file():
+                continue
+            if any(ex in fp.parts for ex in self._EXCLUDE_CHAIN):
+                continue
+            if fp.suffix.lower() not in self._JS_EXTS:
+                continue
+            try:
+                content = fp.read_text(encoding='utf-8', errors='replace')
+            except Exception:
+                continue
+            key = str(fp.resolve())
+            graph.setdefault(key, set())
+            for m in self._IMPORT_RE.finditer(content):
+                resolved = self._resolve_import(fp, m.group(1), repo_path)
+                if resolved:
+                    graph[key].add(resolved)
+        return graph
+
+    def _transitive_imports(
+        self,
+        direct_abs: List[str],
+        graph: Dict[str, Set[str]],
+        max_depth: int = 3,
+    ) -> Set[str]:
+        """
+        BFS from direct_abs through the production import graph.
+        Returns every reachable file within max_depth hops (including direct_abs).
+        """
+        visited: Set[str] = set(direct_abs)
+        frontier: Set[str] = set(direct_abs)
+        for _ in range(max_depth):
+            nxt: Set[str] = set()
+            for node in frontier:
+                for neighbor in graph.get(node, set()):
+                    if neighbor not in visited:
+                        visited.add(neighbor)
+                        nxt.add(neighbor)
+            frontier = nxt
+            if not frontier:
+                break
+        return visited
+
+    # ──────────────────────────────────────────────────────────────────────
+
     def _extract_dependencies(
         self, test_files: List[Path], tests: List[Dict], repo_path: Path
     ) -> List[Dict]:
-        """Extract dependencies.
-        
-        FIX: A file can contain many tests.  The old code used a file→single-test
-        dict which silently discarded every test except the last one per file.
-        We now build file→[all tests] so that import dependencies are associated
-        with every test that lives in that file.
         """
+        Extract direct AND transitive import dependencies for every test.
+
+        Direct imports  → reference_type 'direct_import'
+        Transitive hops → reference_type 'transitive_import'
+
+        Both are stored in referenced_classes / reference_types and end up
+        in the reverse_index so that AST selection can find tests even when
+        the changed production file is 2–3 hops away from the test file.
+        """
+        # ── Build the whole-repo import graph (cached per analyze() call) ──
+        if not hasattr(self, '_import_graph_cache'):
+            self._import_graph_cache = None
+            self._import_graph_repo = None
+
+        if self._import_graph_repo != str(repo_path):
+            logger.info("[JS] Building production import graph for %s", repo_path)
+            self._import_graph_cache = self._build_production_import_graph(repo_path)
+            self._import_graph_repo = str(repo_path)
+            logger.info(
+                "[JS] Import graph: %d files indexed", len(self._import_graph_cache)
+            )
+
+        import_graph = self._import_graph_cache
+
         dependencies = []
         # Build file → list-of-tests mapping (one file can have many tests)
         tests_by_file: Dict[str, List[Dict]] = {}
         for t in tests:
             tests_by_file.setdefault(t['file_path'], []).append(t)
-        
+
+        import_pattern = re.compile(
+            r"(?:import|require)\s*(?:\([^)]*\))?\s*\(?['\"`]([@\w./\-]+)['\"`]",
+            re.MULTILINE,
+        )
+        _FW_SKIP = frozenset(
+            ['jest', 'mocha', 'jasmine', 'vitest', 'chai', 'sinon', 'enzyme',
+             'testing-library', 'react-dom/test-utils']
+        )
+
         for filepath in test_files:
             file_tests = tests_by_file.get(str(filepath))
             if not file_tests:
                 continue
-            
+
             try:
                 content = filepath.read_text(encoding='utf-8', errors='replace')
-                
-                # Extract imports
-                import_pattern = re.compile(
-                    r"(?:import|require)\s*(?:\([^)]*\))?\s*\(?['\"`]([@\w./\-]+)['\"`]",
-                    re.MULTILINE
-                )
-                
-                imports = []
+
+                # ── Direct imports ─────────────────────────────────────────
+                raw_imports: List[str] = []
                 for match in import_pattern.finditer(content):
                     imp = match.group(1)
-                    # Filter out test frameworks
-                    if not any(fw in imp.lower() for fw in ['jest', 'mocha', 'jasmine', 'vitest', 'chai', 'sinon']):
-                        imports.append(imp)
-                
-                unique_imports = sorted(set(imports))
+                    if not any(fw in imp.lower() for fw in _FW_SKIP):
+                        raw_imports.append(imp)
+                direct_imports = sorted(set(raw_imports))
+
+                # ── Resolve relative imports to absolute paths ─────────────
+                direct_abs: List[str] = []
+                for imp in direct_imports:
+                    if imp.startswith(('.', '/')):
+                        resolved = self._resolve_import(filepath, imp, repo_path)
+                        if resolved:
+                            direct_abs.append(resolved)
+
+                # ── Transitive expansion (BFS, max 3 hops) ────────────────
+                transitive_abs = self._transitive_imports(direct_abs, import_graph, max_depth=3)
+                # Only the hops beyond direct
+                indirect_abs = transitive_abs - set(direct_abs)
+
+                # Convert absolute paths back to repo-relative stems for the
+                # reverse_index key (same format as direct imports use).
+                def _to_rel(abs_path: str) -> str:
+                    try:
+                        rel = Path(abs_path).relative_to(repo_path)
+                        return str(rel).replace('\\', '/')
+                    except ValueError:
+                        return abs_path
+
+                indirect_imports = sorted(_to_rel(p) for p in indirect_abs)
+
+                # ── Merge into reference_types dict ───────────────────────
+                reference_types: Dict[str, str] = {
+                    imp: 'direct_import' for imp in direct_imports
+                }
+                for imp in indirect_imports:
+                    if imp not in reference_types:
+                        reference_types[imp] = 'transitive_import'
+
+                all_imports = sorted(set(direct_imports) | set(indirect_imports))
+
+                # ── @source JSDoc annotations ─────────────────────────────
+                # Some test files INLINE production code instead of importing
+                # it (e.g. api-navigation.feature.test.js copies ApiEndPoints).
+                # The @source annotation explicitly declares the covered file:
+                #   @source src/services/api/common/ApiEndPoints.js
+                # We add these as 'source_annotation' references so the
+                # reverse_index can find the test when that file changes.
+                source_annotated: List[str] = []
+                for m in self._SOURCE_ANNOTATION_RE.finditer(content):
+                    raw_sources = m.group(1)
+                    for raw_src in re.split(r'[,\s]+', raw_sources.strip()):
+                        raw_src = raw_src.strip().rstrip(',')
+                        if raw_src and not raw_src.startswith('//'):
+                            source_annotated.append(raw_src)
+
+                # Merge source annotations into reference_types dict
+                for src in source_annotated:
+                    if src not in reference_types:
+                        reference_types[src] = 'source_annotation'
+                        if src not in all_imports:
+                            all_imports = sorted(set(all_imports) | {src})
+
+                if source_annotated:
+                    logger.debug(
+                        "[JS] %s: %d @source annotation(s): %s",
+                        filepath.name, len(source_annotated), source_annotated,
+                    )
+
+                if indirect_imports:
+                    logger.debug(
+                        "[JS] %s: %d direct + %d transitive import(s)",
+                        filepath.name, len(direct_imports), len(indirect_imports),
+                    )
+
                 # Create one dependency entry per test in this file
                 for test in file_tests:
                     dependencies.append({
@@ -389,13 +576,14 @@ class JavaScriptAnalyzer(BaseAnalyzer):
                         'file_path': str(filepath),
                         'class_name': test.get('class_name', ''),
                         'method_name': test['method_name'],
-                        'referenced_classes': unique_imports,
-                        'reference_types': {imp: 'direct_import' for imp in unique_imports},
-                        'import_count': len(unique_imports),
+                        'referenced_classes': all_imports,
+                        'reference_types': reference_types,
+                        'import_count': len(direct_imports),
+                        'transitive_count': len(indirect_imports),
                     })
             except Exception as e:
                 logger.warning(f"Error extracting dependencies from {filepath}: {e}")
-        
+
         return dependencies
     
     def _extract_function_calls(
@@ -877,40 +1065,43 @@ class JavaScriptAnalyzer(BaseAnalyzer):
     ) -> Dict[str, List[Dict]]:
         """Build reverse index.
 
-        Four sources are merged:
-        1. File-level imports (dependencies.referenced_classes) — raw path e.g. '../helpers/utilities'
-        1b. Normalized stem of Source 1 — e.g. 'utilities'
-        2. Method calls (function_calls.module_name) — e.g. 'localStorage'
-        3. describe-label extraction from class_name — e.g. 'capitalizeFirstLetter'
+        Five sources are merged:
+        1.  File-level direct imports   — raw path  e.g. '../helpers/utilities'
+        1b. Normalized stem of Source 1 — file stem e.g. 'utilities'
+        1c. Transitive imports          — raw repo-relative path (2-3 hops away)
+        1d. Normalized stem of Source 1c
+        2.  Method calls (function_calls.module_name)
+        3.  describe-label extraction from class_name
 
-        Sources 1 and 1b together ensure that both the raw import path (for
-        backward-compat with any old DB rows) and the file stem (what
-        build_search_queries generates as exact_matches) are indexed.
-
-        Source 3 is critical for JS/TS tests: production functions are usually
-        called without dot-notation so the obj.method() regex (Source 2) misses
-        them.  The Jest describe() block name IS the production symbol under
-        test, so we extract and index each test under that symbol.
+        Sources 1c/1d are NEW — they index tests that transitively import a
+        changed production file, enabling AST selection to find tests even when
+        the import chain is 2-3 hops deep (the main JS/TS false-negative gap).
         """
         reverse_index = defaultdict(list)
-        
+
         for dep in dependencies:
             for ref_class in dep.get('referenced_classes', []):
+                ref_type = dep['reference_types'].get(ref_class, 'direct_import')
                 entry = {
                     'test_id': dep['test_id'],
                     'file_path': dep['file_path'],
                     'class_name': dep.get('class_name', ''),
                     'method_name': dep['method_name'],
-                    'reference_type': dep['reference_types'].get(ref_class, 'direct_import'),
+                    'reference_type': ref_type,
                 }
-                # Source 1: raw import path (e.g. '../helpers/utilities')
+                # Source 1 / 1c: raw import path
                 reverse_index[ref_class].append(entry)
-                # Source 1b: normalized file stem (e.g. 'utilities')
-                # This makes reverse_index queries by stem (produced by
-                # build_search_queries / extract_production_modules_from_file) work.
+                # Source 1b / 1d: normalized file stem
                 normalized = self._normalize_import_to_stem(ref_class)
                 if normalized:
-                    reverse_index[normalized].append({**entry, 'reference_type': 'normalized_import'})
+                    norm_type = (
+                        'transitive_normalized'
+                        if ref_type == 'transitive_import'
+                        else 'source_annotation_normalized'
+                        if ref_type == 'source_annotation'
+                        else 'normalized_import'
+                    )
+                    reverse_index[normalized].append({**entry, 'reference_type': norm_type})
         
         for call in function_calls:
             if call.get('module_name'):

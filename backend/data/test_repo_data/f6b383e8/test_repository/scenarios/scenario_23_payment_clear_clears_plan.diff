@@ -1,0 +1,15 @@
+diff --git a/src/reducer/paymentReducer.js b/src/reducer/paymentReducer.js
+index a1b2c3d..9e0f1a2 100644
+--- a/src/reducer/paymentReducer.js
++++ b/src/reducer/paymentReducer.js
+@@ -28,10 +28,11 @@ function paymentReducer(state = initialState, action) {
+       }
+     case paymentActions.CLEARCARDS:
+       return {
+         ...state,
+         userCards: [],
+         cardsFetched: false,
++        paymentPlantDetails: undefined,
+       }
+     default:
+       return state

@@ -1,0 +1,108 @@
+{
+  "scenario": "29",
+  "title": "Toast Duration — add SHORT / NORMAL / LONG auto-dismiss levels to toast notifications",
+  "commit_message": "feat: add TOAST_DURATION constant and duration field to setToast and toastReducer",
+
+  "changed_files": [
+    "src/reducer/actiotypes.js",
+    "src/reducer/actions.js",
+    "src/reducer/toastReducer.js"
+  ],
+
+  "changed_symbols": [
+    "TOAST_DURATION (new constant — { SHORT: 2000, NORMAL: 3000, LONG: 5000 })",
+    "setToast (modified — now accepts toastType and duration params; duration defaults to TOAST_DURATION.NORMAL)",
+    "toastReducer (modified — initial state gains duration: 3000; TOAST case stores action.duration)"
+  ],
+
+  "what_the_diff_does": {
+    "before": "setToast(toast) dispatches only the toast message object. toastReducer stores showToast, toastType, toastQueue. No duration information is tracked — the UI cannot vary dismiss timing.",
+    "after": "setToast(toast, toastType, duration) now forwards all three values. toastReducer stores duration in state (default 3000 ms). The UI layer can read state.toastReducer.duration to control how long the toast is shown. TOAST_DURATION.SHORT (2 s) suits success confirmations; TOAST_DURATION.LONG (5 s) suits error messages.",
+    "visible_change": "Success toasts dismiss after 2 s, normal informational toasts after 3 s, and error toasts after 5 s — instead of all toasts sharing the same fixed timing.",
+    "compile_safe": true,
+    "compile_note": "setToast is backward-compatible: callers that pass only toast continue to work because toastType and duration have defaults (undefined falls back to state.toastType; duration defaults to TOAST_DURATION.NORMAL)."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "Two files contribute CRITICAL tests: (1) favourites-watchlist.feature.test.js — describe('toastReducer') matches the changed symbol, 12 tests CRITICAL. (2) toast-duration.pure.test.js — declares toastReducer.js, actions.js, and actiotypes.js as sources and contains describe('TOAST_DURATION') 5 tests, describe('setToast') 5 tests, describe('toastReducer — duration') 5 tests — all 15 are CRITICAL. Total CRITICAL: 27.",
+      "tests": [
+        "toastReducer > initialises with showToast as null",
+        "toastReducer > initialises with the default toastType as warning",
+        "toastReducer > initialises with an empty toastQueue array",
+        "toastReducer > TOAST action stores the toast message object in showToast",
+        "toastReducer > TOAST action updates toastType when a new type is provided",
+        "toastReducer > TOAST action retains the previous toastType when none is provided",
+        "toastReducer > TOAST action stores a queue when a queue is provided",
+        "toastReducer > CLEARTOAST action resets showToast back to null",
+        "toastReducer > CLEARTOAST does not change toastType or toastQueue",
+        "toastReducer > TOAST action with null toast stores null in showToast",
+        "toastReducer > returns unchanged state for an unknown action type",
+        "toastReducer > accumulates multiple TOAST dispatches with the latest message"
+      ],
+      "files": [
+        "test_repository/feature/favourites-watchlist.feature.test.js",
+        "test_repository/standalone/toast-duration.pure.test.js"
+      ],
+      "count": 27
+    },
+
+    "HIGH": {
+      "reason": "Two files qualify as HIGH: (1) action-creators.pure.test.js declares src/reducer/actions.js as a source — actions.js is changed. (2) The 12 non-CRITICAL tests in favourites-watchlist.feature.test.js (the favouritesReducer describe block) share the file whose sources include both toastReducer.js and actiotypes.js — both changed.",
+      "files": [
+        "test_repository/standalone/action-creators.pure.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js"
+      ],
+      "count": 52
+    },
+
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "All remaining test files do not declare actiotypes.js, actions.js, or toastReducer.js as a source.",
+      "count": 537
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "id": "GAP-01",
+      "symbol": "TOAST_DURATION",
+      "source": "src/reducer/actiotypes.js",
+      "gap": "Covered by 5 tests in describe('TOAST_DURATION') in toast-duration.pure.test.js.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/standalone/toast-duration.pure.test.js"
+    },
+    {
+      "id": "GAP-02",
+      "symbol": "setToast (duration parameter)",
+      "source": "src/reducer/actions.js",
+      "gap": "Covered by 5 tests in describe('setToast') in toast-duration.pure.test.js.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/standalone/toast-duration.pure.test.js"
+    },
+    {
+      "id": "GAP-03",
+      "symbol": "toastReducer — duration field",
+      "source": "src/reducer/toastReducer.js",
+      "gap": "Covered by 5 tests in describe('toastReducer — duration') in toast-duration.pure.test.js.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/standalone/toast-duration.pure.test.js"
+    }
+  ],
+
+  "summary": {
+    "total_tests": 616,
+    "test_files": 21,
+    "CRITICAL": 27,
+    "HIGH": 52,
+    "LOW": 0,
+    "SKIP": 537,
+    "coverage_gaps": 3,
+    "gaps_closed": 3,
+    "gaps_remaining": 0
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage test_repository/standalone/toast-duration.pure.test.js test_repository/feature/favourites-watchlist.feature.test.js test_repository/standalone/action-creators.pure.test.js",
+  "jest_run_note": "toast-duration.pure.test.js runs 15 CRITICAL tests. favourites-watchlist.feature.test.js runs 12 CRITICAL + 12 HIGH tests. action-creators.pure.test.js adds 40 HIGH tests. All 3 gaps closed."
+}

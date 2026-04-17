@@ -2,10 +2,11 @@
 Summarize git diff for use as the original query in semantic search.
 
 Flow:
-1. Embed the **entire** diff (embedding model) — aligns with validation / vector pipeline.
-2. Pass the **entire** diff to the chat LLM for a search-oriented summary.
+1. Embed a **truncated** prefix of the diff (embedding APIs max ~8192 tokens; see
+   semantic/embedding_limits.py and EMBEDDING_INPUT_MAX_CHARS / DIFF_SUMMARY_EMBED_MAX_CHARS).
+2. Pass the (optionally DIFF_SUMMARY_MAX_CHARS–capped) diff to the chat LLM for a summary.
 
-Optional: DIFF_SUMMARY_MAX_CHARS caps text for both steps if set (positive int).
+Optional: DIFF_SUMMARY_MAX_CHARS caps text for the LLM step if set (positive int).
 Optional: DIFF_SUMMARY_MAX_TOKENS for chat completion (default 4096).
 """
 
@@ -22,6 +23,7 @@ if str(project_root) not in sys.path:
 from llm.factory import LLMFactory
 from llm.models import LLMRequest, EmbeddingRequest
 from config.settings import get_settings
+from semantic.embedding_limits import truncate_for_embedding_api
 
 logger = logging.getLogger(__name__)
 
@@ -43,8 +45,8 @@ def _full_diff_for_pipeline(diff_content: str) -> Tuple[str, bool]:
 
 async def summarize_git_diff(diff_content: Optional[str]) -> Optional[str]:
     """
-    1) Embed entire diff (best-effort; failure does not block summarization).
-    2) Send entire diff to chat LLM; return summary text.
+    1) Embed a token-safe slice of the diff (best-effort; failure does not block summarization).
+    2) Send capped/full diff text to chat LLM; return summary text.
     """
     if not diff_content or not diff_content.strip():
         return None
@@ -63,10 +65,29 @@ async def summarize_git_diff(diff_content: Optional[str]) -> Optional[str]:
 
     settings = get_settings()
 
-    # Step 1: Embed entire diff first
+    # Step 1: Embed a *bounded* slice of the diff (embedding APIs max ~8192 tokens).
+    embed_cap: Optional[int] = None
+    cap_s = os.environ.get("DIFF_SUMMARY_EMBED_MAX_CHARS", "").strip()
+    if cap_s:
+        try:
+            embed_cap = int(cap_s)
+        except ValueError:
+            pass
+    embed_slice, embed_truncated = truncate_for_embedding_api(
+        diff_text, max_chars=embed_cap
+    )
+    if embed_truncated:
+        logger.info(
+            "[DIFF_SUMMARY] Embedding truncated to %s chars (of %s) for API token limit; "
+            "set DIFF_SUMMARY_EMBED_MAX_CHARS or EMBEDDING_INPUT_MAX_CHARS to adjust",
+            len(embed_slice),
+            n,
+        )
     try:
         embed_provider = LLMFactory.create_embedding_provider(settings)
-        emb_resp = await embed_provider.get_embeddings(EmbeddingRequest(texts=[diff_text]))
+        emb_resp = await embed_provider.get_embeddings(
+            EmbeddingRequest(texts=[embed_slice])
+        )
         vec = emb_resp.embeddings[0] if emb_resp.embeddings else []
         logger.info(
             f"[DIFF_SUMMARY] Diff embedded first | dim={len(vec)} | provider={getattr(emb_resp, 'provider', '')}"

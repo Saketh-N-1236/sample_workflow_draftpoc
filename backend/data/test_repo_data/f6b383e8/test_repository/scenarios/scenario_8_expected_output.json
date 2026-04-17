@@ -1,0 +1,205 @@
+{
+  "scenario": "8",
+  "category": "ACTION TYPE CASCADE",
+  "title": "actiotypes.js — UPDATEREFRESHEDTOKEN string value renamed + SESSION_EXPIRED action added",
+  "commit_message": "refactor: rename UPDATEREFRESHEDTOKEN string to REFRESH_TOKEN_UPDATE; add SESSION_EXPIRED action type",
+
+  "changed_files": ["src/reducer/actiotypes.js"],
+  "changed_symbols": ["UPDATEREFRESHEDTOKEN", "SESSION_EXPIRED"],
+
+  "why_cascade": {
+    "explanation": "actiotypes.js is a shared action-type constants file imported by every reducer. Changing one value (UPDATEREFRESHEDTOKEN) causes ALL tests whose sources[] include actiotypes.js to be selected — even if they don't directly test UPDATEREFRESHEDTOKEN. This is the 'shared constants file cascade' pattern.",
+    "cascade_map": {
+      "UPDATEREFRESHEDTOKEN renamed": [
+        "CRITICAL → feature/user-profile.feature.test.js (userDetailsReducer describe has UPDATEREFRESHEDTOKEN in symbols)",
+        "HIGH    → feature/user-profile.feature.test.js  (all other userDetailsReducer + profileReducer tests with actiotypes.js in sources)",
+        "HIGH    → feature/favourites-watchlist.feature.test.js (all tests with actiotypes.js in sources)"
+      ],
+      "SESSION_EXPIRED added": [
+        "GAP reported — no describe('SESSION_EXPIRED') found in test-manifest.json",
+        "No additional tests selected (NEW_SYMBOL rule)"
+      ]
+    },
+    "key_runtime_failure": "userDetailsReducer dispatches action type 'UPDATE_REFRESHED_TOKEN'. After rename, the reducer will no longer respond to that type. The test 'UPDATEREFRESHEDTOKEN updates token and loginTime independently' will FAIL because the reducer returns unchanged state."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "symbols[] contains 'UPDATEREFRESHEDTOKEN' which is the directly renamed symbol",
+      "tests": [
+        {
+          "test":     "userDetailsReducer > UPDATEREFRESHEDTOKEN updates token and loginTime independently",
+          "file":     "test_repository/feature/user-profile.feature.test.js",
+          "why":      "symbols = ['userDetailsReducer', 'UPDATEREFRESHEDTOKEN']; UPDATEREFRESHEDTOKEN is the renamed symbol",
+          "result":   "⚠️  WILL FAIL — reducer still uses old string 'UPDATE_REFRESHED_TOKEN' as switch case; dispatch with new value is a no-op",
+          "category": "feature"
+        }
+      ],
+      "count": 1
+    },
+
+    "HIGH": {
+      "reason": "actiotypes.js in sources[] — shared dependency changed; all co-dependent reducer tests defensively selected",
+      "tests": [
+        {
+          "test":  "userDetailsReducer > initialises with data as an empty array",
+          "file":  "test_repository/feature/user-profile.feature.test.js",
+          "why":   "sources = [userDetailsReducer.js, actiotypes.js]; actiotypes.js changed",
+          "category": "feature"
+        },
+        {
+          "test":  "userDetailsReducer > SUCCESS action populates data and token from the payload",
+          "file":  "test_repository/feature/user-profile.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test":  "userDetailsReducer > ONAUTHENTICATE resets profileAuthSuccess to false",
+          "file":  "test_repository/feature/user-profile.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test":  "userDetailsReducer > SHOWLOGGEDOUTSHEET stores the payload in showLoggedOutSheet",
+          "file":  "test_repository/feature/user-profile.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test":  "userDetailsReducer > returns unchanged state for an unknown action type",
+          "file":  "test_repository/feature/user-profile.feature.test.js",
+          "why":   "sources = [userDetailsReducer.js] only — but same suite file has CRITICAL test; conservative inclusion",
+          "category": "feature"
+        },
+        {
+          "test":  "profileReducer > initialises with an empty profileData array",
+          "file":  "test_repository/feature/user-profile.feature.test.js",
+          "why":   "sources = [profileReducer.js, actiotypes.js]; actiotypes.js changed",
+          "category": "feature"
+        },
+        {
+          "test":  "profileReducer > PROFILESDETAILS action replaces profileData with the new list",
+          "file":  "test_repository/feature/user-profile.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test":  "profileReducer > SAVESELECTEDPROFILEDETAILS stores the chosen profile",
+          "file":  "test_repository/feature/user-profile.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test":  "profileReducer > returns current state unchanged for an unrecognised action",
+          "file":  "test_repository/feature/user-profile.feature.test.js",
+          "why":   "sources = [profileReducer.js] only — same suite file conservative inclusion",
+          "category": "feature"
+        },
+        {
+          "test":  "favouritesReducer > starts with an empty userFavourites list",
+          "file":  "test_repository/feature/favourites-watchlist.feature.test.js",
+          "why":   "sources = [favouritesReducer.js, actiotypes.js]; actiotypes.js changed",
+          "category": "feature"
+        },
+        {
+          "test":  "favouritesReducer > UPDATEALLFAVOURITIESDETAILS replaces the favourites list",
+          "file":  "test_repository/feature/favourites-watchlist.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test":  "favouritesReducer > sets favouritesFetched to true once the list is loaded",
+          "file":  "test_repository/feature/favourites-watchlist.feature.test.js",
+          "why":   "sources = [favouritesReducer.js] only — conservative same-suite inclusion",
+          "category": "feature"
+        },
+        {
+          "test":  "favouritesReducer > returns unchanged state for an unknown action",
+          "file":  "test_repository/feature/favourites-watchlist.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test":  "toastReducer > initialises with showToast as null",
+          "file":  "test_repository/feature/favourites-watchlist.feature.test.js",
+          "why":   "sources = [toastReducer.js, actiotypes.js]; actiotypes.js changed",
+          "category": "feature"
+        },
+        {
+          "test":  "toastReducer > TOAST action stores the toast message in showToast",
+          "file":  "test_repository/feature/favourites-watchlist.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test":  "toastReducer > resets showToast to null when null is dispatched",
+          "file":  "test_repository/feature/favourites-watchlist.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test":  "toastReducer > returns unchanged state for an unknown action",
+          "file":  "test_repository/feature/favourites-watchlist.feature.test.js",
+          "category": "feature"
+        }
+      ],
+      "count": 17,
+      "breakdown": {
+        "standalone":      0,
+        "cross-dependent": 0,
+        "feature":        17
+      }
+    },
+
+    "LOW":  { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "actiotypes.js not in sources[] for these test files",
+      "skipped_files": [
+        "test_repository/standalone/regex.constants.test.js          (sources: constants.ts)",
+        "test_repository/standalone/utilities.pure.test.js           (sources: utilities.js)",
+        "test_repository/cross-dependent/auth-storage.cross.test.js  (sources: signInFormHook.ts, constants.ts, utilities.js, storage.ts)",
+        "test_repository/cross-dependent/payment-state.cross.test.js (sources: paymentReducer.js, actions.js, storage.ts, constants.ts)"
+      ],
+      "count": 59,
+      "note": "All 4 non-feature suites skipped — actiotypes.js is a pure feature-layer concern"
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "gap_id": "GAP-01",
+      "type": "SYMBOL_RENAMED — RUNTIME_BREAKAGE",
+      "symbol": "UPDATEREFRESHEDTOKEN",
+      "old_value": "UPDATE_REFRESHED_TOKEN",
+      "new_value": "REFRESH_TOKEN_UPDATE",
+      "file": "src/reducer/actiotypes.js",
+      "severity": "CRITICAL RUNTIME BREAKAGE",
+      "explanation": "The string value 'UPDATE_REFRESHED_TOKEN' is what reducers match in switch/case. After rename, any dispatched UPDATEREFRESHEDTOKEN action will not match the old case string in the reducer unless the reducer is also updated.",
+      "action_required": "Update the switch-case in userDetailsReducer.js: case 'REFRESH_TOKEN_UPDATE' (or import UPDATEREFRESHEDTOKEN constant — do not hardcode string)"
+    },
+    {
+      "gap_id": "GAP-02",
+      "type": "NEW_ACTION_NO_TEST",
+      "symbol": "SESSION_EXPIRED",
+      "file": "src/reducer/actiotypes.js",
+      "detail": "SESSION_EXPIRED action type added — no reducer handles it yet, and no test covers it",
+      "recommended_tests": [
+        "userDetailsReducer > SESSION_EXPIRED action clears user session data",
+        "toastReducer > SESSION_EXPIRED action shows a session expiry toast"
+      ]
+    }
+  ],
+
+  "selection_proof": {
+    "standalone_selected":      0,
+    "cross_dependent_selected": 0,
+    "feature_selected":        18,
+    "total_selected":          18,
+    "total_skipped":           59,
+    "key_point": "Only FEATURE tests selected. Zero standalone or cross-dependent. The cascade is entirely within the feature layer — actiotypes.js is a pure feature-reducer concern."
+  },
+
+  "summary": {
+    "total_tests":        77,
+    "CRITICAL":            1,
+    "HIGH":               17,
+    "LOW":                 0,
+    "SKIP":               59,
+    "assertion_failures":  1,
+    "coverage_gaps":       2
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage -t \"UPDATEREFRESHEDTOKEN|userDetailsReducer|profileReducer|favouritesReducer|toastReducer\" --verbose"
+}

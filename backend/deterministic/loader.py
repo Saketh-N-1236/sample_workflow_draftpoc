@@ -61,6 +61,7 @@ def load_to_db(conn, result: AnalysisResult, schema: str) -> Dict[str, int]:
 
     # Step 1: Ensure tables exist
     _ensure_tables(conn, schema, result.detected_languages)
+    logger.info("[loader] DDL complete; inserting rows into core tables...")
 
     # Step 2: Core tables (always)
     stats["test_registry"] = _load_test_registry(conn, result, schema)
@@ -138,7 +139,11 @@ def _ensure_tables(conn, schema: str, detected_languages: List[str]) -> None:
                     js_tables=js_tables,
                 )
                 mod.create_all_tables_in_schema(conn, schema, schema_def)
-                logger.info(f"[loader] Tables ensured in schema '{schema}' (languages={detected_languages})")
+                logger.info(
+                    "[loader] Tables ensured in schema '%s' (languages=%s)",
+                    schema,
+                    detected_languages,
+                )
                 return
     except Exception as exc:
         logger.warning(f"[loader] Could not call create_all_tables_in_schema: {exc} — assuming tables exist")

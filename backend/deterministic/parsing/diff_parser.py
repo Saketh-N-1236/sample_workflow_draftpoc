@@ -1065,11 +1065,23 @@ def extract_test_file_candidates(
             except Exception:
                 pass
     
-    # Fallback to Python patterns if not found
+    # Fallback patterns when no parser_registry is available — language-aware
     if not test_patterns:
-        if not file_path.endswith('.py'):
+        ext = filepath.suffix.lower()
+        if ext == '.py':
+            test_patterns = ['test_*.py', '*_test.py']
+        elif ext in ('.js', '.jsx'):
+            test_patterns = ['*.test.js', '*.spec.js', '*.test.jsx', '*.spec.jsx']
+        elif ext in ('.ts', '.tsx'):
+            test_patterns = ['*.test.ts', '*.spec.ts', '*.test.tsx', '*.spec.tsx']
+        elif ext == '.java':
+            test_patterns = ['*Test.java', '*Tests.java', '*Spec.java']
+        elif ext == '.go':
+            test_patterns = ['*_test.go']
+        elif ext == '.rb':
+            test_patterns = ['*_spec.rb', '*_test.rb']
+        else:
             return []
-        test_patterns = ['test_*.py', '*_test.py']
     
     # Get file name without extension
     file_stem = filepath.stem  # e.g., 'agent_pool'

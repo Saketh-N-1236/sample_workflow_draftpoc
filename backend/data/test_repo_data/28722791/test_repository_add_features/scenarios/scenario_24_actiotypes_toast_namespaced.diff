@@ -1,0 +1,12 @@
+diff --git a/src/reducer/actiotypes.js b/src/reducer/actiotypes.js
+index a1b2c3d..9e0f1a2 100644
+--- a/src/reducer/actiotypes.js
++++ b/src/reducer/actiotypes.js
+@@ -9,7 +9,7 @@ export const USERTOKEN = 'USERTOKEN';
+ export const LOGINUSERNAME = 'LOGINUSERNAME';
+ export const LOGINSUCCESS = 'LOGINSUCCESS';
+-export const TOAST = 'TOAST';
++export const TOAST = 'FEATURE_TOAST';
+ export const UPDATEACTIVESCREEN = 'UPDATEACTIVESCREEN';
+ export const SPINNER = 'SPINNER';
+ export const GLOBALSEARCH = 'GLOBALSEARCH';

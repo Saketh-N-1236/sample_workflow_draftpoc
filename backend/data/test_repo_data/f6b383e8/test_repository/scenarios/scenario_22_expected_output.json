@@ -1,0 +1,139 @@
+{
+  "scenario": "22",
+  "category": "CROSS-DEPENDENT — AUTH HOOK",
+  "title": "signInFormHook.ts — validateEmailOrUsername rejects disposable email subdomains",
+  "commit_message": "fix: block common disposable domains in sign-in validation",
+
+  "changed_files": ["src/features/auth/hooks/signInFormHook.ts"],
+  "changed_symbols": ["validateEmailOrUsername"],
+
+  "why_auth_hook": {
+    "explanation": "signInFormHook.ts is listed in sources[] only for the four 'validateEmailOrUsername uses EMAIL_REGEX' tests in auth-storage.cross.test.js. Those are CRITICAL. Every other describe in the same file is HIGH (sibling inclusion after a CRITICAL hit) — isUserLoggedIn, updateNewTokenDetails, generateCardNumber, capitalizeFirstLetter — mirroring the blast pattern of scenario 9’s cross-dependent slice.",
+    "key_point": "4 CRITICAL + 9 HIGH = 13 selected; 63 SKIP — no standalone suite lists signInFormHook.ts without also listing constants.ts for a different describe."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "symbols[] contains validateEmailOrUsername; sources include signInFormHook.ts",
+      "tests": [
+        {
+          "test": "validateEmailOrUsername uses EMAIL_REGEX > routes input containing @ to email validation and accepts a valid address",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "result": "⚠️  MAY FAIL — disposable-domain list may reject previously valid addresses",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "validateEmailOrUsername uses EMAIL_REGEX > routes plain text input to username validation and accepts a clean username",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "validateEmailOrUsername uses EMAIL_REGEX > returns an error message when the email format is invalid via EMAIL_REGEX",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "validateEmailOrUsername uses EMAIL_REGEX > returns an error message when the username contains special characters",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        }
+      ],
+      "count": 4
+    },
+
+    "HIGH": {
+      "reason": "Same cross-dependent file — sibling describe blocks",
+      "tests": [
+        {
+          "test": "isUserLoggedIn reads storageKeys.token > returns false when no token is stored",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "isUserLoggedIn reads storageKeys.token > returns true after a token has been stored under storageKeys.token",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "updateNewTokenDetails stores values under storageKeys > saves the access token to localStorage under the TOKEN key",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "updateNewTokenDetails stores values under storageKeys > saves the refresh token under the REFRESHTOKEN key",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "updateNewTokenDetails stores values under storageKeys > saves the login time under the LOGGEDINTIME key",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "generateCardNumber output satisfies CARD_REGEX > output of generateCardNumber contains only digits and spaces",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "generateCardNumber output satisfies CARD_REGEX > correctly masks middle digits with X characters",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "capitalizeFirstLetter with checkWhiteSpace > capitalizes the first letter of each word in a multi-word string",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "capitalizeFirstLetter with checkWhiteSpace > capitalizes a single word correctly without whitespace branch",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        }
+      ],
+      "count": 9
+    },
+
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "signInFormHook.ts not in sources[] for standalone, payment, or feature suites",
+      "skipped_files": [
+        "test_repository/standalone/regex.constants.test.js",
+        "test_repository/standalone/utilities.pure.test.js",
+        "test_repository/cross-dependent/payment-state.cross.test.js",
+        "test_repository/feature/user-profile.feature.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js",
+        "test_repository/feature/api-navigation.feature.test.js"
+      ],
+      "count": 63
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "gap_id": "GAP-01",
+      "type": "NEW_BEHAVIOUR_NO_TEST",
+      "symbol": "validateEmailOrUsername",
+      "detail": "Add tests for disposable domains (e.g. mailinator.com) returning a validation error."
+    }
+  ],
+
+  "selection_proof": {
+    "standalone_selected": 0,
+    "cross_dependent_selected": 13,
+    "feature_selected": 0,
+    "total_selected": 13,
+    "total_skipped": 63
+  },
+
+  "summary": {
+    "total_tests": 77,
+    "CRITICAL": 4,
+    "HIGH": 9,
+    "LOW": 0,
+    "SKIP": 63,
+    "coverage_gaps": 1
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage -t \"validateEmailOrUsername uses EMAIL_REGEX|isUserLoggedIn reads storageKeys.token|updateNewTokenDetails stores values under storageKeys|generateCardNumber output satisfies CARD_REGEX|capitalizeFirstLetter with checkWhiteSpace\" --verbose"
+}

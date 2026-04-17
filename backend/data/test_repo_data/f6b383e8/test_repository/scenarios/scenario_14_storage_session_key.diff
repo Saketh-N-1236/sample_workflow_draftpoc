@@ -1,0 +1,12 @@
+diff --git a/src/services/storage.ts b/src/services/storage.ts
+index aaaaaaa..bbbbbbb 100644
+--- a/src/services/storage.ts
++++ b/src/services/storage.ts
+@@ -12,6 +12,7 @@ export const storageKeys = {
+   refreshToken:          'REFRESHTOKEN',
+   stripePaymentDetails:  'STRIPEPAYMENTDETAILS',
+   phoneVerified:         'PHONE_VERIFIED',
++  sessionId:             'SESSION_ID',
+ };
+ 
+ export default appStorage;

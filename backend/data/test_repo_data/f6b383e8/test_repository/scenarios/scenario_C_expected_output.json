@@ -1,0 +1,73 @@
+{
+  "scenario": "C",
+  "title": "userDetailsReducer — initial data changed to null + ONAUTHENTICATE clears profileToken",
+  "commit_message": "fix: initialise data as null and clear profileToken on ONAUTHENTICATE",
+  "changed_files": ["src/reducer/userDetailsReducer.js"],
+  "changed_symbols": ["userDetailsReducer", "ONAUTHENTICATE"],
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "describe() block label exactly matches changed symbol — userDetailsReducer directly modified",
+      "tests": [
+        "userDetailsReducer > initialises with data as an empty array",
+        "userDetailsReducer > SUCCESS action populates data and token from the payload",
+        "userDetailsReducer > UPDATEREFRESHEDTOKEN updates token and loginTime independently",
+        "userDetailsReducer > ONAUTHENTICATE resets profileAuthSuccess to false",
+        "userDetailsReducer > SHOWLOGGEDOUTSHEET stores the payload in showLoggedOutSheet",
+        "userDetailsReducer > returns unchanged state for an unknown action type"
+      ],
+      "files": ["test_repository/feature/user-profile.feature.test.js"]
+    },
+    "HIGH": {
+      "reason": "actiotypes.js changed symbols (ONAUTHENTICATE) shared with profileReducer in same suite",
+      "tests": [
+        "profileReducer > initialises with an empty profileData array",
+        "profileReducer > PROFILESDETAILS action replaces profileData with the new list",
+        "profileReducer > SAVESELECTEDPROFILEDETAILS stores the chosen profile",
+        "profileReducer > returns current state unchanged for an unrecognised action"
+      ],
+      "files": ["test_repository/feature/user-profile.feature.test.js"]
+    },
+    "LOW": {
+      "reason": "No loosely connected tests referencing userDetailsReducer",
+      "tests": []
+    },
+    "SKIP": {
+      "reason": "Sources have zero overlap with userDetailsReducer.js",
+      "files": [
+        "test_repository/standalone/regex.constants.test.js",
+        "test_repository/standalone/utilities.pure.test.js",
+        "test_repository/cross-dependent/auth-storage.cross.test.js",
+        "test_repository/cross-dependent/payment-state.cross.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js",
+        "test_repository/feature/api-navigation.feature.test.js"
+      ]
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "symbol": "userDetailsReducer",
+      "file": "src/reducer/userDetailsReducer.js",
+      "note": "initialises with data as an empty array — after this change, data is null. The test 'initialises with data as an empty array' will FAIL and must be updated to expect(state.data).toBeNull()"
+    },
+    {
+      "symbol": "ONAUTHENTICATE",
+      "file": "src/reducer/userDetailsReducer.js",
+      "type": "new_behaviour_no_test",
+      "recommended_describe": "userDetailsReducer",
+      "recommended_test": "ONAUTHENTICATE also clears profileToken to undefined"
+    }
+  ],
+
+  "summary": {
+    "total_tests": 75,
+    "CRITICAL": 6,
+    "HIGH":      4,
+    "LOW":       0,
+    "SKIP":      65,
+    "gaps":      1
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage -t \"userDetailsReducer|profileReducer\""
+}

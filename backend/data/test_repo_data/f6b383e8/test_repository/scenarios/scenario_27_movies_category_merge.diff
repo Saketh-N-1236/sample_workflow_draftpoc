@@ -1,0 +1,57 @@
+diff --git a/src/navigation/constants.js b/src/navigation/constants.js
+index a1b2c3d..d4e5f6g 100644
+--- a/src/navigation/constants.js
++++ b/src/navigation/constants.js
+@@ -30,7 +30,8 @@
+ export const carousaTypes = {
+   isHighlightContent: 'Highlight Content',
+   isSportsHighlightContent: 'Sports Highlight Content',
+   Sports: 'Sports',
+   Shows: 'Shows',
+   Players: 'Players',
++  Movies: 'MOVIES',
+ };
+ 
++export const MY_MOVIES_TITLE = 'My Movies';
++
+ export const noDataFound = {
+
+diff --git a/src/screens/home/HomeIntroPage.js b/src/screens/home/HomeIntroPage.js
+index 7c8d9e0..1f2a3b4 100644
+--- a/src/screens/home/HomeIntroPage.js
++++ b/src/screens/home/HomeIntroPage.js
+@@ -35,7 +35,7 @@
+-import {carousaTypes, onPending, screenNames} from '../../navigation/constants';
++import {carousaTypes, MY_MOVIES_TITLE, onPending, screenNames} from '../../navigation/constants';
+ 
+@@ -281,8 +281,23 @@
+         dispatch(
+           setFocussedCarousal(
+             intialBannerData,
+             sectionData[0]?.title ? sectionData[0]?.title : '',
+           ),
+         );
+-        dispatch(updateHomeScreenData({bannerData, data: filteredSectionData}));
++        const isMoviesTab =
++          ComposerData?.name?.toUpperCase?.() === carousaTypes.Movies;
++        if (isMoviesTab) {
++          const mergedCards = filteredSectionData.flatMap(
++            section => section?.cardsData ?? [],
++          );
++          const mergedSection = {
++            Component: Streaming,
++            NoDataFound: 'No streaming Videos',
++            showHeader: true,
++            viewMoreScreenName: '',
++            title: MY_MOVIES_TITLE,
++            page: 1,
++            contenttype: '',
++            staticCarouselValue: false,
++            search: false,
++            cardsData: mergedCards,
++          };
++          dispatch(updateHomeScreenData({bannerData, data: [mergedSection]}));
++        } else {
++          dispatch(updateHomeScreenData({bannerData, data: filteredSectionData}));
++        }
+         dispatch(setActiveSportsCarousal(''));

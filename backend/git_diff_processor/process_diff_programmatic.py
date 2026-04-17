@@ -5,6 +5,7 @@ This module provides functions that can be called from other services
 without printing to console.
 """
 
+import re
 import sys
 from pathlib import Path
 from typing import Dict, List, Any, Optional
@@ -19,7 +20,7 @@ _git_diff_processor_dir = Path(__file__).parent
 if str(_git_diff_processor_dir) not in sys.path:
     sys.path.insert(0, str(_git_diff_processor_dir))
 
-from deterministic.db_connection import get_connection, DB_SCHEMA
+from deterministic.db_connection import get_connection, DB_SCHEMA, validate_schema_name
 
 from deterministic.parsing.diff_parser import parse_git_diff, build_search_queries
 
@@ -275,6 +276,7 @@ async def process_diff_and_select_tests(
         with conn.cursor() as cursor:
             for _sch in schemas_resolved:
                 try:
+                    validate_schema_name(_sch)
                     cursor.execute(f"SELECT COUNT(*) FROM {_sch}.test_registry")
                     test_count = cursor.fetchone()[0]
                     cursor.execute(f"SELECT COUNT(*) FROM {_sch}.reverse_index")
@@ -285,6 +287,9 @@ async def process_diff_and_select_tests(
                         f"[{_sch}] Database stats - Tests: {test_count}, "
                         f"Reverse index: {reverse_count}, Function mappings: {func_count}"
                     )
+                except ValueError as e:
+                    logger.error("[SQL] Rejecting schema %r: %s", _sch, e)
+                    continue
                 except Exception as e:
                     logger.warning(f"[{_sch}] Could not query database stats: {e}")
 
@@ -301,7 +306,12 @@ async def process_diff_and_select_tests(
                 schema=_sch,
             )
             ast_results = _merge_ast_results(ast_results, partial, _sch)
-        assert ast_results is not None
+        if ast_results is None:
+            logger.error(
+                "[AST] _merge_ast_results returned None for schemas %s — using empty result",
+                schemas_resolved,
+            )
+            ast_results = {"tests": [], "match_details": {}, "total_tests": 0}
         logger.info(f"[AST] Found {ast_results.get('total_tests', 0)} test(s) (merged)")
         if ast_results.get("total_tests", 0) == 0:
             logger.warning(f"[AST] No matches in any of {schemas_resolved}")
@@ -387,6 +397,9 @@ async def process_diff_and_select_tests(
         semantic_config["_vector_threshold_source_note"] = _th_src
         # ────────────────────────────────────────────────────────────────────────
 
+        # Prepare shared LLM service handle (reused across classification and post-merge reasoning)
+        llm_service = None
+
         # Get semantic results if enabled
         semantic_results = {'total_tests': 0, 'tests': []}
         if use_semantic:
@@ -416,6 +429,111 @@ async def process_diff_and_select_tests(
                     diff_content=diff_content,
                 )
                 logger.info(f"[SEMANTIC] Found {semantic_results.get('total_tests', 0)} test(s)")
+
+                # ── New: LLM classification of semantic results (Critical|High|NonRelevant) ──
+                # Classify and prune NonRelevant BEFORE merging with AST. No numeric thresholds.
+                # Snapshot lets us restore rows for tests AST already matched (structural truth).
+                _sem_pre_classify = {
+                    str(t.get("test_id")): dict(t)
+                    for t in (semantic_results.get("tests") or [])
+                    if t.get("test_id") is not None
+                }
+                try:
+                    from services.llm_reasoning_service import LLMReasoningService
+                    if llm_service is None:
+                        llm_service = LLMReasoningService()
+                    sem_tests = list(semantic_results.get("tests") or [])
+                    if sem_tests:
+                        classifications = await llm_service.classify_semantic_candidates(
+                            diff_content or "",
+                            sem_tests,
+                        )
+                        if classifications:
+                            by_id = {
+                                str(c["test_id"]): c
+                                for c in classifications
+                                if c.get("test_id") is not None
+                            }
+                            kept, dropped = 0, 0
+                            pruned_tests = []
+                            for t in sem_tests:
+                                tid = t.get("test_id")
+                                c = by_id.get(str(tid)) if tid is not None else None
+                                if not c:
+                                    # If missing classification, fail open: keep
+                                    pruned_tests.append(t)
+                                    continue
+                                label = c.get("label")
+                                reason = c.get("reason", "")
+                                if label == "NonRelevant":
+                                    dropped += 1
+                                    continue
+                                # Keep Critical/High and annotate
+                                t["semanticLabel"] = label
+                                t["semanticReason"] = reason
+                                pruned_tests.append(t)
+                                kept += 1
+                            if dropped > 0 or kept > 0:
+                                logger.info("[SEMANTIC] Classification kept=%s dropped=%s", kept, dropped)
+                            # Do not drop vector evidence for tests AST already selected.
+                            _ast_ids_class = {
+                                str(t.get("test_id"))
+                                for t in ast_results.get("tests", [])
+                                if t.get("test_id") is not None
+                            }
+                            _pruned_ids = {
+                                str(t.get("test_id"))
+                                for t in pruned_tests
+                                if t.get("test_id") is not None
+                            }
+                            _restored = 0
+                            for _sid, row in _sem_pre_classify.items():
+                                if _sid in _ast_ids_class and _sid not in _pruned_ids:
+                                    pruned_tests.append(row)
+                                    _restored += 1
+                            if _restored:
+                                logger.info(
+                                    "[SEMANTIC] Restored %s AST-linked vector hit(s) "
+                                    "the classifier had marked NonRelevant",
+                                    _restored,
+                                )
+                            semantic_results["tests"] = pruned_tests
+                            semantic_results["total_tests"] = len(pruned_tests)
+                except Exception as _cls_err:
+                    logger.warning("Semantic classification step skipped (error): %s", _cls_err)
+
+                # ── AST–semantic supplement: cosine(diff query, test vector) without global threshold ──
+                # When AST is strong, adaptive threshold (e.g. 0.45) hides moderate similarity for
+                # tests AST already found; LLM relevance can still be high. Score those tests here.
+                try:
+                    from semantic.retrieval.ast_semantic_supplement import (
+                        merge_supplement_into_semantic_results,
+                        supplement_semantic_hits_for_ast_tests,
+                    )
+
+                    _diag = (semantic_config or {}).get("_rag_diagnostics") or {}
+                    _qlist = _diag.get("queries_used_strings") or []
+                    _primary_q = (_qlist[0] or "").strip() if _qlist else ""
+                    if _primary_q and ast_results.get("tests"):
+                        _sup_map = await supplement_semantic_hits_for_ast_tests(
+                            conn,
+                            ast_results,
+                            _primary_q,
+                            _resolved_tr,
+                        )
+                        if isinstance(semantic_config, dict):
+                            semantic_config["_ast_semantic_supplement_scores"] = _sup_map
+                        merge_supplement_into_semantic_results(
+                            semantic_results,
+                            ast_results,
+                            _sup_map,
+                        )
+                        logger.info(
+                            "[SEMANTIC] After AST supplement, semantic candidate count=%s",
+                            semantic_results.get("total_tests", 0),
+                        )
+                except Exception as _sup_err:
+                    logger.warning("[SEMANTIC] AST supplement step skipped: %s", _sup_err)
             except Exception as e:
                 logger.warning(f"Semantic search failed: {e}")
                 semantic_results = {'total_tests': 0, 'tests': [], 'error': str(e)}
@@ -424,14 +542,36 @@ async def process_diff_and_select_tests(
         # find_tests_ast_only already runs all AST strategies (0-4a), including the
         # new Strategy 4 (file stem-based sibling test lookup), so it produces a
         # richer result set than find_affected_tests (which lacks Strategy 4).
-        # Reusing ast_results avoids a redundant second DB round-trip.
-        logger.info("Using AST results as base for combining with semantic results...")
-        # IMPORTANT: Save the AST count BEFORE combined_results gets mutated by semantic merge.
-        # Since combined_results = ast_results (same dict reference), merging semantic into
-        # combined_results would also update ast_results['total_tests'].
+        # Bug 4 fix: copy instead of alias so mutations to combined_results do not
+        # silently mutate ast_results (the supplement step above still reads the
+        # original ast_results safely because this copy is made after that step).
         ast_count_snapshot = ast_results.get('total_tests', 0)
-        combined_results = ast_results
-        logger.info(f"[MERGE] AST base: {ast_count_snapshot} test(s)")
+        combined_results = dict(ast_results)
+        combined_results['tests'] = list(ast_results.get('tests', []))
+        combined_results['match_details'] = dict(ast_results.get('match_details', {}))
+
+        _sem_rows = semantic_results.get('tests') or []
+        _ast_ids_pre = {t.get('test_id') for t in combined_results.get('tests', []) if t.get('test_id')}
+        _sem_ids_pre = {t.get('test_id') for t in _sem_rows if t.get('test_id')}
+        _overlap_pre = len(_ast_ids_pre & _sem_ids_pre)
+        _semantic_only_pre = len(_sem_ids_pre - _ast_ids_pre)
+        if not _sem_rows:
+            logger.info(
+                "[MERGE] Single combined result set: %s test_id(s) from AST only (no semantic rows).",
+                ast_count_snapshot,
+            )
+        else:
+            logger.info(
+                "[MERGE] Single combined result set (not additive): AST base %s test_id(s); "
+                "merging %s semantic retrieval row(s) → %s test_id(s) overlap AST (enriched), "
+                "%s test_id(s) semantic-only — final count is not %s+%s.",
+                ast_count_snapshot,
+                len(_sem_rows),
+                _overlap_pre,
+                _semantic_only_pre,
+                ast_count_snapshot,
+                len(_sem_rows),
+            )
 
         # IMPORTANT: Preserve AST match information from match_details BEFORE any filtering
         # Store which tests came from AST (from match_details) so we can mark them correctly later
@@ -455,7 +595,6 @@ async def process_diff_and_select_tests(
         semantic_tests_dict = {}
         original_semantic_test_ids = set()
         if semantic_results.get('tests'):
-            logger.info(f"[MERGE] Adding {len(semantic_results.get('tests', []))} semantic result(s) to combined set")
             semantic_tests_dict = {t.get('test_id'): t for t in semantic_results.get('tests', [])}
             original_semantic_test_ids = set(semantic_tests_dict.keys())
             combined_tests_dict = {t.get('test_id'): t for t in combined_results.get('tests', [])}
@@ -511,50 +650,138 @@ async def process_diff_and_select_tests(
             combined_results['total_tests'] = len(combined_tests_dict)
 
         # ── Semantic co-location expansion ────────────────────────────────────
-        # When semantic search finds tests in a file with high confidence
-        # (similarity >= 0.50), also include ALL other tests in that file.
-        # Rationale: if any test in a file is strongly confirmed by the vector
-        # search, the whole file likely covers the changed production code —
-        # sibling tests (e.g. isUserLoggedIn co-located with capitalizeFirstLetter
-        # tests) are relevant even if their individual descriptions don't surface
-        # through vector search.
+        # When a test file has been confirmed by semantic OR AST search, expand
+        # to include other tests in the same file whose describe label shares at
+        # least one whole-word token with the changed symbols.
         #
-        # Guard: only expand from hits with similarity >= 0.50 to avoid pulling
-        # in siblings from borderline false-positive matches.
-        _SEM_COLOC_MIN_SIM = 0.50
+        # Two sources seed the confirmed-file set:
+        #   A) Semantic results with similarity >= _SEM_COLOC_MIN_SIM
+        #   B) AST-matched test file paths — important for cross-dependent files
+        #      where AST finds some tests (via reverse_index) but not siblings
+        #      in the same file that are equally relevant (e.g. generateCardNumber
+        #      in auth-storage.cross.test.js alongside validateEmailOrUsername).
+        #
+        # The whole-word token filter (_coloc_class_is_relevant) then acts as the
+        # quality gate: it keeps only tests whose describe label contains at least
+        # one symbol-level token from the diff (e.g. "card", "regex"), preventing
+        # unrelated describes in the same file from being pulled in.
+        _SEM_COLOC_MIN_SIM = 0.45
         _sem_confirmed_file_paths: set = set()
+
+        # Source A: semantic hits
         for _sem_t in semantic_results.get('tests', []):
             if (_sem_t.get('similarity') or 0) >= _SEM_COLOC_MIN_SIM:
                 _fp = _sem_t.get('test_file_path') or _sem_t.get('file_path', '')
                 if _fp:
                     _sem_confirmed_file_paths.add(_fp)
 
-        # Build a lowercase set of "relevant" class-name tokens from the diff.
-        # Co-located tests whose describe label (class_name) has NO token overlap
-        # with this set are skipped — they test a different domain in the same
-        # cross-test file (e.g. 'profileReducer' in payment-state.cross.test.js
-        # when the diff only changes paymentReducer/paymentActions).
+        # Source B: AST-matched test file paths already in combined_tests_dict
+        for _ast_t in combined_tests_dict.values():
+            _fp = _ast_t.get('test_file_path') or _ast_t.get('file_path', '')
+            if _fp:
+                _sem_confirmed_file_paths.add(_fp)
+
+        # ── Build the allowed token set from the diff (changed symbols / files) ──
+        # Sources: exact symbol names, module-level patterns, changed class/method names,
+        # and the FIRST SEGMENT of dotted class names of confirmed tests (see below).
+        #
+        # Deliberately excluded:
+        #   - File stems (e.g. "MyFavourites" → "favourites"): too generic; causes
+        #     unrelated reducer suites named "favouritesReducer" to pass the filter.
+        #   - Full class name tokens of confirmed tests: prose-style describes like
+        #     "action creators — wishlist and favourites" contribute generic words
+        #     ("action", "creators") that match every other "action creators — X"
+        #     describe group in the same file, flooding results with unrelated tests.
         _diff_class_tokens: set = set()
+
+        def _tokenise_symbol(text: str) -> set:
+            """Split a symbol/name into lowercase whole-word tokens (min 3 chars)."""
+            s = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
+            s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", s)
+            return {p.lower() for p in re.split(r"[^a-zA-Z0-9]+", s) if len(p) >= 3}
+
+        def _tokenise_symbol4(text: str) -> set:
+            """Same as _tokenise_symbol but requires min 4 chars.
+
+            Used for the semantic-only precision filter: short tokens like 'api',
+            'get', 'all' appear in almost every API test and cause false matches
+            against unrelated files that also happen to mention APIs.
+            """
+            s = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)
+            s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", s)
+            return {p.lower() for p in re.split(r"[^a-zA-Z0-9]+", s) if len(p) >= 4}
+
         for _ec in search_queries.get('exact_matches', []):
-            _diff_class_tokens.update(_ec.lower().split('.'))
+            _diff_class_tokens |= _tokenise_symbol(_ec)
+        for _ec in search_queries.get('module_matches', []):
+            _diff_class_tokens |= _tokenise_symbol(_ec.rstrip('.*'))
         for _fc in parsed_diff.get('changed_classes', []):
             if _fc:
-                _diff_class_tokens.add(_fc.lower())
+                _diff_class_tokens |= _tokenise_symbol(_fc)
         for _mf in parsed_diff.get('changed_methods', []):
             if _mf:
-                _diff_class_tokens.add(_mf.lower())
-        # Also add the file stem(s) of changed production files.
-        for _chf in parsed_diff.get('changed_files', []):
-            from pathlib import Path as _PPath
-            _diff_class_tokens.add(_PPath(_chf).stem.lower())
+                _diff_class_tokens |= _tokenise_symbol(_mf)
+
+        # ── Specific-symbol tokens (4-char minimum) — used to filter semantic-only
+        # results that have no AST match. Restricted to identifiers that actually
+        # changed (classes, methods, added/deleted symbols) — NOT module names like
+        # "ApiEndPoints" or "services" that are too generic to be discriminating.
+        _specific_diff_tokens4: set = set()
+        for _fc in parsed_diff.get('changed_classes', []):
+            if _fc:
+                _specific_diff_tokens4 |= _tokenise_symbol4(_fc)
+        for _mf in parsed_diff.get('changed_methods', []):
+            if _mf:
+                _specific_diff_tokens4 |= _tokenise_symbol4(_mf)
+        for _sym in search_queries.get('added_symbols', []):
+            if _sym:
+                _specific_diff_tokens4 |= _tokenise_symbol4(_sym)
+        for _sym in search_queries.get('deleted_symbols', []):
+            if _sym:
+                _specific_diff_tokens4 |= _tokenise_symbol4(_sym)
+
+        # Seed the FIRST SEGMENT of dotted class names from confirmed tests.
+        # Only dotted names are considered — prevents prose-style describes like
+        # "action creators — wishlist and favourites" from contributing generic
+        # words such as "action" or "creators".
+        for _ct in combined_tests_dict.values():
+            _cls = (_ct.get('class_name') or '').strip()
+            if _cls and '.' in _cls:
+                _first_seg = _cls.split('.')[0].strip()
+                if len(_first_seg) >= 3:
+                    _diff_class_tokens |= _tokenise_symbol(_first_seg)
 
         def _coloc_class_is_relevant(class_name: Optional[str]) -> bool:
-            """True if the test's describe label shares at least one token with the diff."""
+            """True when the describe label shares at least one whole-word token with the diff.
+
+            Uses whole-word token intersection (not substring) so that a diff token
+            "card" (from CARD_REGEX) does NOT match "updateUserCards" or "CLEARCARDS".
+            """
             if not class_name:
                 return True  # unknown describe → keep (benefit of the doubt)
-            _cn_lower = class_name.lower()
-            # Direct substring match against any diff token
-            return any(tok and tok in _cn_lower for tok in _diff_class_tokens)
+            _cn_tokens = _tokenise_symbol(class_name)
+            return bool(_cn_tokens & _diff_class_tokens)
+
+        def _sem_only_is_relevant(class_name: Optional[str]) -> bool:
+            """Precision gate for semantic-only results (no AST confirmation).
+
+            A semantic-only test is KEPT only when its describe label shares at
+            least one 4+-char token with the specific changed symbols/methods.
+            Generic tokens like 'api', 'get', 'all' (< 4 chars) are excluded to
+            prevent every API-related test from matching any API file change.
+
+            Returns True (keep) when:
+            - class_name is unknown (benefit of the doubt)
+            - _specific_diff_tokens4 is empty (diff has no named symbols, e.g.
+              config-only change) — fall back to the broader co-location filter
+            - overlap exists between class_name tokens and specific diff symbols
+            """
+            if not class_name:
+                return True
+            if not _specific_diff_tokens4:
+                return _coloc_class_is_relevant(class_name)
+            _cn_tokens4 = _tokenise_symbol4(class_name)
+            return bool(_cn_tokens4 & _specific_diff_tokens4)
 
         if _sem_confirmed_file_paths:
             _coloc_added = 0
@@ -602,7 +829,7 @@ async def process_diff_and_select_tests(
                                     )
                                     if not _already:
                                         combined_match_details.setdefault(_tid, []).append({
-                                            'type': 'direct_file',
+                                            'type': 'semantic_colocation',
                                             'test_file': _fpath,
                                             'match_strategy': 'semantic_colocated_file',
                                             'confidence': 'medium',
@@ -646,193 +873,18 @@ async def process_diff_and_select_tests(
         except Exception as _co_err:
             logger.warning(f"[COCHANGE] Tight suite step skipped: {_co_err}")
 
-        # LLM Reasoning Step (optional) - AFTER merging semantic results
-        # This ensures LLM can assess all candidates (AST + semantic)
-        llm_scores_map = {}
-        try:
-            # Check if LLM reasoning is enabled (can be configured via environment or parameter)
-            import os
-            use_llm_reasoning = os.getenv('USE_LLM_REASONING', 'true').lower() == 'true'
-            
-            if use_llm_reasoning:
-                logger.info("[LLM] Running LLM reasoning on top candidates...")
-                # Import LLM reasoning service
-                # backend/git_diff_processor/ -> parent = backend/
-                _backend = Path(__file__).parent.parent
-                if str(_backend) not in sys.path:
-                    sys.path.insert(0, str(_backend))
-                
-                try:
-                    from services.llm_reasoning_service import LLMReasoningService
-                    llm_service = LLMReasoningService()
-                except ImportError as e:
-                    logger.warning(f"Failed to import LLM reasoning service: {e}. LLM reasoning will be skipped.")
-                    llm_service = None
-                
-                if llm_service:
-                    _llm_top = 40
-                    try:
-                        _llm_top = int(os.getenv("LLM_ASSESS_TOP_N", "40"))
-                    except ValueError:
-                        logger.warning(
-                            "Ignoring invalid LLM_ASSESS_TOP_N; using default 40"
-                        )
-                    _llm_top = max(20, min(80, _llm_top))
-                    # Widen pool vs legacy 20 so borderline AST hits below the fold get scored
-                    top_candidates = sorted(
-                        combined_results.get("tests", []),
-                        key=lambda t: t.get("confidence_score", 0),
-                        reverse=True,
-                    )[:_llm_top]
-                    
-                    if top_candidates:
-                        # Prepare test candidates with match reasons
-                        test_candidates = []
-                        match_details_dict = combined_results.get('match_details', {})
-                        def _match_reason_hint(m: Dict) -> str:
-                            """Compact hint for LLM: type + key fields (semantic gets similarity)."""
-                            mt = m.get("type", "") or "unknown"
-                            if mt == "semantic":
-                                sim = m.get("similarity")
-                                if sim is not None:
-                                    return f"semantic(sim={float(sim):.3f})"
-                                return "semantic"
-                            for key in (
-                                "symbol",
-                                "reference",
-                                "module",
-                                "file",
-                                "file_path",
-                                "pattern",
-                            ):
-                                v = m.get(key)
-                                if v:
-                                    return f"{mt}({key}={v})"
-                            return mt
-
-                        for test in top_candidates:
-                            test_id = test.get('test_id')
-                            match_reasons = []
-                            if test_id in match_details_dict:
-                                for match in match_details_dict[test_id][:6]:
-                                    match_reasons.append(_match_reason_hint(match))
-                            
-                            test_candidates.append({
-                                'test_id': test_id,
-                                'class_name': test.get('class_name'),
-                                'method_name': test.get('method_name'),
-                                'test_file_path': test.get('test_file_path') or test.get('file_path', ''),
-                                'match_reasons': match_reasons
-                            })
-                        
-                        # Build LLM prompt (input) for storage
-                        llm_input_prompt = llm_service._build_relevance_prompt(diff_content, test_candidates)
-                        
-                        # Assess relevance with LLM
-                        llm_results = await llm_service.assess_test_relevance(
-                            diff_content=diff_content,
-                            test_candidates=test_candidates,
-                            top_n=_llm_top,
-                        )
-                        
-                        # Store LLM input and output
-                        llm_raw_response = None
-                        if llm_results and len(llm_results) > 0:
-                            # Get raw response from first result (all have same raw_response)
-                            llm_raw_response = llm_results[0].get('raw_response', '')
-                        
-                        llm_input_output = {
-                            'input': llm_input_prompt,
-                            'output': llm_raw_response or 'No response available',
-                            'assessed_tests_count': len(llm_results)
-                        }
-                        
-                        # Create map of test_id -> llm_score
-                        for result in llm_results:
-                            test_id = result.get('test_id')
-                            if test_id:
-                                llm_scores_map[test_id] = {
-                                    'llm_score': result.get('llm_score', 0.0),
-                                    'llm_explanation': result.get('llm_explanation', '')
-                                }
-                        
-                        logger.info(f"[LLM] Assessed {len(llm_scores_map)} test(s)")
-                    else:
-                        logger.info("[LLM] No candidates to assess")
-                else:
-                    logger.info("[LLM] Service not available, skipping")
-            else:
-                logger.info("[LLM] Reasoning disabled via USE_LLM_REASONING=false")
-        except Exception as e:
-            logger.warning(f"LLM reasoning failed: {e}. Continuing without LLM scores.", exc_info=True)
-            llm_scores_map = {}
-        
-        # Recalculate confidence scores with LLM component and get breakdown
-        if llm_scores_map:
-            logger.info("[SCORE] Recalculating confidence scores with LLM component")
-            for test in combined_results.get('tests', []):
-                test_id = test.get('test_id')
-                matches = combined_results.get('match_details', {}).get(test_id, [])
-                test_type = test.get('test_type')
-                
-                if test_id in llm_scores_map:
-                    llm_data = llm_scores_map[test_id]
-                    # Recalculate with LLM score and get breakdown
-                    from git_diff_processor.git_diff_processor import calculate_confidence_score_with_breakdown
-                    new_score, breakdown = calculate_confidence_score_with_breakdown(
-                        matches,
-                        test_type,
-                        llm_score=llm_data['llm_score']
-                    )
-                    test['confidence_score'] = new_score
-                    test['llm_score'] = llm_data['llm_score']
-                    test['llm_explanation'] = llm_data['llm_explanation']
-                    # Add breakdown to test
-                    test['confidence_breakdown'] = breakdown
-                else:
-                    # No LLM score, but still calculate breakdown
-                    from git_diff_processor.git_diff_processor import calculate_confidence_score_with_breakdown
-                    new_score, breakdown = calculate_confidence_score_with_breakdown(
-                        matches,
-                        test_type,
-                        llm_score=None
-                    )
-                    test['confidence_score'] = new_score
-                    test['confidence_breakdown'] = breakdown
-            
-            # Re-sort by new confidence scores
-            combined_results['tests'] = sorted(
-                combined_results.get('tests', []),
-                key=lambda t: t.get('confidence_score', 0),
-                reverse=True
+        # Recalculate confidence scores (AST + Semantic only — no LLM scoring step)
+        from git_diff_processor.git_diff_processor import calculate_confidence_score_with_breakdown
+        for test in combined_results.get('tests', []):
+            test_id = test.get('test_id')
+            matches = combined_results.get('match_details', {}).get(test_id, [])
+            test_type = test.get('test_type')
+            new_score, _ = calculate_confidence_score_with_breakdown(
+                matches,
+                test_type,
+                llm_score=None
             )
-        else:
-            # No LLM scores — recalculate composite score for all tests using the
-            # weighted formula (50% AST + 35% Vector + 10% LLM + 5% Speed).
-            # IMPORTANT: previously the score returned by calculate_confidence_score_with_breakdown
-            # was discarded ("_") and only the breakdown dict was stored.  That left
-            # confidence_score as int(similarity * 60) from rag_pipeline.py (line 131),
-            # which at 41–43% similarity equals 24–26 — slightly below or near 40.
-            # Storing the proper composite score ensures the filter works correctly.
-            from git_diff_processor.git_diff_processor import calculate_confidence_score_with_breakdown
-            for test in combined_results.get('tests', []):
-                test_id = test.get('test_id')
-                matches = combined_results.get('match_details', {}).get(test_id, [])
-                test_type = test.get('test_type')
-                new_score, breakdown = calculate_confidence_score_with_breakdown(
-                    matches,
-                    test_type,
-                    llm_score=None
-                )
-                test['confidence_score'] = new_score   # ← actually persist the score
-                test['confidence_breakdown'] = breakdown
-        
-        # Store LLM input/output in results if available
-        try:
-            if 'llm_input_output' in locals():
-                combined_results['llm_input_output'] = llm_input_output
-        except:
-            pass
+            test['confidence_score'] = new_score
         
         # Confidence filter (default: on — composite gate MIN_CONFIDENCE_THRESHOLD, default 42%).
         # Set SELECTION_APPLY_CONFIDENCE_FILTER=false to disable and return full merged set.
@@ -886,39 +938,17 @@ async def process_diff_and_select_tests(
             test_id = test.get('test_id')
             confidence_score = test.get('confidence_score', 0)
             
-            # LLM score checks — two thresholds:
-            #
-            # has_llm_score        (score > 0)    : LLM evaluated and gave any positive
-            #                                       verdict.  Used as a pass bypass for
-            #                                       Both-match tests where the composite
-            #                                       needs a small LLM nudge.
-            #
-            # has_strong_llm_score (score > 0.30) : LLM gave a MEANINGFUL positive verdict.
-            #                                       Required for SEMANTIC-ONLY tests.
-            #                                       Reason: semantic-only tests at 55-60%
-            #                                       similarity that share only vocabulary
-            #                                       (e.g. "reducer", "state") can get a
-            #                                       tiny LLM score (0.05-0.15) that pushes
-            #                                       the composite above the gate.  A 0.30
-            #                                       floor (≈ "weak but meaningful") weeds
-            #                                       out profileReducer/userDetailsReducer
-            #                                       false positives without affecting tests
-            #                                       the LLM genuinely confirms (0.6-0.9).
-            _llm_score_val = test.get('llm_score')
-            _llm_score_in_map = llm_scores_map.get(test_id, {}).get('llm_score', 0) if test_id in llm_scores_map else 0
-            _effective_llm = max(
-                _llm_score_val if _llm_score_val is not None else 0,
-                _llm_score_in_map,
-            )
-            has_llm_score = _effective_llm > 0
-            has_strong_llm_score = _effective_llm > 0.30
-            
             # Check if test has semantic match
             # IMPORTANT: Only mark as semantic if it was ORIGINALLY found by semantic search
-            # Don't rely on similarity value alone, as it might have been added during merging
+            # Don't rely on similarity value alone, as it might have been added during merging.
+            # 'semantic_colocation' is also a semantic signal — tests pulled in because a
+            # sibling in the same file had a high vector hit.
             has_semantic = (
                 test_id in original_semantic_test_ids or
-                any(m.get('type') == 'semantic' for m in combined_match_details.get(test_id, []))
+                any(
+                    m.get('type') in ('semantic', 'semantic_colocation')
+                    for m in combined_match_details.get(test_id, [])
+                )
             )
             
             # Check if test has AST match (from match_details or was in original AST results)
@@ -927,6 +957,14 @@ async def process_diff_and_select_tests(
                 test_id in original_ast_test_ids or
                 any(m.get('type') in ['exact', 'module', 'function_level', 'direct_file', 'direct_file_match', 'direct_test_file', 'module_pattern', 'integration', 'cochanged_test_suite'] 
                     for m in combined_match_details.get(test_id, []))
+            )
+
+            # Same-file siblings of a strong semantic hit (see SEM-COLOC above). They are
+            # not type==semantic, so has_semantic is False — but composite can sit below
+            # 42 % and they would be wrongly dropped unless we treat them like vetted suite members.
+            _has_sem_coloc_flag = any(
+                m.get('match_strategy') == 'semantic_colocated_file'
+                for m in combined_match_details.get(test_id, [])
             )
             
             # ── Pass conditions ────────────────────────────────────────────────
@@ -942,33 +980,21 @@ async def process_diff_and_select_tests(
             #      checkArray/getProgressWidth) that sit at 33-37 % because the
             #      composite weights-down a high-similarity semantic signal.
             #
-            #    • MIN_CONFIDENCE_THRESHOLD when AST-ONLY, no semantic, weak LLM.
-            #
-            #    • AST-only but strong LLM — lenient 30 % floor.
-            #
-            # 3. llm_bypass
-            #    • Semantic-only: strong LLM (> 0.30).
-            #    • AST-only:      strong LLM only — tiny scores must not rescue
-            #      borderline barrel matches that fail passes_threshold.
-            #    • Both:          any positive LLM (edge cases).
+            #    • MIN_CONFIDENCE_THRESHOLD when AST-ONLY, no semantic signal.
             passes_threshold = (confidence_score / 100.0) >= MIN_CONFIDENCE_THRESHOLD
 
             _composite_ratio = confidence_score / 100.0
             if has_ast and has_semantic:
                 # "Both" — use lenient 30 % floor (semantic already vouches for it).
                 is_ast_any = _composite_ratio >= 0.30
-            elif has_ast and not has_semantic and not has_strong_llm_score:
+            elif _has_sem_coloc_flag:
+                # Included because another test in this file had high vector similarity;
+                # do not require 42 % composite (often AST-only scoring for this row).
+                is_ast_any = True
+            elif has_ast and not has_semantic:
                 is_ast_any = _composite_ratio >= MIN_CONFIDENCE_THRESHOLD
             else:
-                # AST-only but LLM confirmed (> 0.30) — trust the LLM; use 30 %.
-                is_ast_any = has_ast and _composite_ratio >= 0.30
-
-            if has_semantic and not has_ast:
-                llm_bypass = has_strong_llm_score
-            elif has_ast and not has_semantic:
-                llm_bypass = has_strong_llm_score
-            else:
-                llm_bypass = has_llm_score
+                is_ast_any = False
 
             # ── Co-location-only gate ─────────────────────────────────────────
             # Two co-location strategies exist:
@@ -1008,9 +1034,38 @@ async def process_diff_and_select_tests(
                     "[FILTER] Dropped AST-colocated-only (no semantic): %s", test_id
                 )
                 continue
+
+            # ── Semantic-only precision gate ─────────────────────────────────
+            # Tests that have NO AST match and came only from the semantic RAG
+            # pipeline are checked for vocabulary alignment with the diff's actual
+            # changed symbols (4-char minimum token, to exclude generic words like
+            # 'api', 'get', 'all' that appear in virtually every API test).
+            #
+            # Reason: A diff that adds `unifiedSearchAPI` in ApiEndPoints.js
+            # produces a summary that mentions "unified", "search", "ApiClient",
+            # "types=0,2".  Watchlist tests whose names contain "types=0" or
+            # "unified watchlistApi URL" can score 0.45+ on cosine similarity —
+            # above the 0.42 threshold — despite having nothing to do with the
+            # change.  Requiring a 4-char token overlap with the specific changed
+            # identifiers (unifiedSearchAPI, getSeaarchResults, …) drops them.
+            #
+            # Tests that DO share vocabulary (e.g. "unifiedSearchApi > contains
+            # types=0,2 …") keep their 4-char overlap on "unified"/"search" and pass.
+            if has_semantic and not has_ast and not _has_sem_coloc_flag:
+                _test_class = (
+                    test.get('class_name')
+                    or test.get('test_class')
+                    or ''
+                )
+                if not _sem_only_is_relevant(_test_class):
+                    logger.debug(
+                        "[FILTER] Dropped semantic-only (no symbol overlap): %s [%s]",
+                        test_id, _test_class,
+                    )
+                    continue
             # ─────────────────────────────────────────────────────────────────
 
-            if passes_threshold or llm_bypass or is_ast_any:
+            if passes_threshold or is_ast_any:
                 # Set explicit flags based on match_details and original sources
                 test['is_ast_match'] = has_ast
                 test['is_semantic_match'] = has_semantic
@@ -1083,6 +1138,40 @@ async def process_diff_and_select_tests(
                     overlap = any(stem and stem in test_path for stem in changed_stems)
                     if not overlap:
                         semantic_only_no_overlap = True
+                # ── Rule-based dependency hint (fast, no LLM) ────────────
+                # This produces a rule_hint that is:
+                #   a) passed to the LLM as context so it can skip obvious cases
+                #   b) used as a fallback when LLM is unavailable or times out
+                #
+                # Rules:
+                #   independent    — direct_import / source_annotation /
+                #                    describe_label / function_level match
+                #   cross_dependent — semantic-only, transitive import,
+                #                     co-location, module-stem-only match
+                _DIRECT_REF_TYPES = frozenset({
+                    'direct_import', 'source_annotation',
+                    'source_annotation_normalized', 'describe_label',
+                })
+                _rule_hint = 'cross_dependent'   # conservative default
+                if is_ast:
+                    _ast_refs = {
+                        m.get('reference_type', '')
+                        for m in test_matches
+                        if m.get('type') not in ('semantic',)
+                    }
+                    _ast_mtypes = {
+                        m.get('type', '')
+                        for m in test_matches
+                        if m.get('type') not in ('semantic',)
+                    }
+                    if (
+                        _ast_refs & _DIRECT_REF_TYPES
+                        or 'function_level' in _ast_mtypes
+                        or (is_ast and not is_semantic and 'exact' in _ast_mtypes)
+                    ):
+                        _rule_hint = 'independent'
+                # Semantic-only → cross_dependent (already default)
+
                 test_dict = {
                     'test_id': test_id,
                     'class_name': test.get('class_name'),
@@ -1091,25 +1180,89 @@ async def process_diff_and_select_tests(
                     'test_type': test.get('test_type'),
                     'confidence': 'high' if test.get('confidence_score', 0) >= 70 else 'medium' if test.get('confidence_score', 0) >= 50 else 'low',
                     'confidence_score': test.get('confidence_score', 0),
-                    'match_type': match_type,  # Use determined match_type
+                    'match_type': match_type,
                     'matched_classes': matched_classes,
-                    'similarity': similarity,  # Add similarity for semantic matches
-                    'is_ast_match': is_ast,  # Preserve AST flag
-                    'is_semantic_match': is_semantic,  # Preserve semantic flag
-                    'semantic_only_no_overlap': semantic_only_no_overlap,  # True if semantic-only and no changed-file overlap
+                    'similarity': similarity,
+                    'is_ast_match': is_ast,
+                    'is_semantic_match': is_semantic,
+                    'semantic_only_no_overlap': semantic_only_no_overlap,
+                    # dependency_type starts as rule_hint; overwritten by LLM below
+                    'dependency_type': _rule_hint,
+                    'dependency_reason': None,
+                    'dependency_confidence': None,
+                    'dependency_source': 'rule',   # updated to 'llm' after LLM pass
+                    'rule_hint': _rule_hint,        # kept so LLM prompt can use it
+                    # Pass-through of semantic retrieval LLM label/reason when present
+                    'semanticLabel': test.get('semanticLabel'),
+                    'semanticReason': test.get('semanticReason'),
                 }
-                
-                # Add confidence breakdown if available
-                if test.get('confidence_breakdown'):
-                    test_dict['confidence_breakdown'] = test.get('confidence_breakdown')
-                
-                # Add LLM scores if available
-                if test.get('llm_score') is not None:
-                    test_dict['llm_score'] = test.get('llm_score')
-                    test_dict['llm_explanation'] = test.get('llm_explanation', '')
                 
                 all_tests.append(test_dict)
         
+        # ── LLM Dependency Classification ────────────────────────────────────
+        # After all tests are collected, ask the LLM to verify/override the
+        # fast rule-based dependency_type for each test.
+        #
+        # Why here (not inside the per-test loop)?
+        #   The LLM call is ASYNC and BATCHED — doing it per-test would mean
+        #   one LLM call per test (very slow).  Doing it once on the full list
+        #   costs 2-4 LLM calls for a typical 30-test run.
+        #
+        # Fallback contract:
+        #   If LLM is unavailable, times out, or returns bad JSON,
+        #   each test already has dependency_type = rule_hint, so the UI
+        #   still shows a reasonable classification.
+        if all_tests:
+            try:
+                from services.llm_reasoning_service import LLMReasoningService
+                if llm_service is None:
+                    llm_service = LLMReasoningService()
+
+                dep_classifications = await llm_service.classify_dependency_type(
+                    diff_content or "",
+                    all_tests,          # each has rule_hint, class_name, method_name, match_type
+                )
+
+                if dep_classifications:
+                    # Build a quick lookup: test_id → classification result
+                    dep_by_id = {str(c["test_id"]): c for c in dep_classifications}
+                    llm_applied = 0
+                    for t in all_tests:
+                        tid = str(t.get("test_id", ""))
+                        c   = dep_by_id.get(tid)
+                        if not c:
+                            # LLM didn't classify this test → keep rule_hint
+                            continue
+                        # Map LLM label → internal snake_case key
+                        llm_label = c.get("label", "")
+                        t["dependency_type"] = (
+                            "independent"
+                            if llm_label == "Independent"
+                            else "cross_dependent"
+                        )
+                        t["dependency_reason"]     = c.get("reason", "")
+                        t["dependency_confidence"] = c.get("confidence", "low")
+                        t["dependency_source"]     = "llm"
+                        llm_applied += 1
+
+                    logger.info(
+                        "[DEP_CLASSIFY] Applied LLM classification to %d/%d test(s)",
+                        llm_applied, len(all_tests),
+                    )
+                else:
+                    logger.info("[DEP_CLASSIFY] LLM returned no results — using rule_hint for all tests")
+
+            except Exception as _dep_err:
+                logger.warning(
+                    "[DEP_CLASSIFY] Dependency classification failed (%s) — rule_hint kept",
+                    _dep_err,
+                )
+
+        # Strip internal rule_hint field before sending response (not needed by client)
+        for t in all_tests:
+            t.pop("rule_hint", None)
+        # ─────────────────────────────────────────────────────────────────────
+
         # Build diagnostic information
         diagnostics = {
             'parsed_files': len(parsed_diff.get('changed_files', [])),
@@ -1127,6 +1280,11 @@ async def process_diff_and_select_tests(
             with conn.cursor() as cursor:
                 ri_sum = tr_sum = tf_sum = 0
                 for _sch in schemas_resolved:
+                    try:
+                        validate_schema_name(_sch)
+                    except ValueError as e:
+                        logger.error("[SQL] Skipping invalid schema %r in diagnostics: %s", _sch, e)
+                        continue
                     cursor.execute(f"SELECT COUNT(*) FROM {_sch}.reverse_index")
                     ri_sum += int(cursor.fetchone()[0] or 0)
                     cursor.execute(f"SELECT COUNT(*) FROM {_sch}.test_registry")
@@ -1179,15 +1337,6 @@ async def process_diff_and_select_tests(
             else:
                 confidence_distribution['low'] += 1
         
-        # Extract LLM scores for response
-        llm_scores_list = []
-        for test in all_tests:
-            if test.get('llm_score') is not None:
-                llm_scores_list.append({
-                    'test_id': test.get('test_id'),
-                    'llm_score': test.get('llm_score'),
-                    'llm_explanation': test.get('llm_explanation', '')
-                })
         
         # Diff impact: coverage_gaps, breakage_warnings, per-test will_fail_reason
         coverage_gaps = []
@@ -1365,15 +1514,23 @@ async def process_diff_and_select_tests(
                 "treat semantic-only rows with extra scrutiny."
             )
 
+        # Counts computed after LLM pass so they reflect final labels
+        _independent_count = sum(1 for t in all_tests if t.get('dependency_type') == 'independent')
+        _cross_dep_count   = sum(1 for t in all_tests if t.get('dependency_type') == 'cross_dependent')
+        logger.info(
+            "[DEP_CLASSIFY] Final: independent=%d cross_dependent=%d",
+            _independent_count, _cross_dep_count,
+        )
+
         return {
             'total_tests': len(all_tests),
             'ast_matches': ast_in_final,
             'semantic_matches': semantic_in_final,
+            'independent_count': _independent_count,
+            'cross_dependent_count': _cross_dep_count,
             'tests': all_tests,
             'semantic_results': semantic_results,  # Include semantic results for enhancement
             'match_details': combined_results.get('match_details', {}),  # Include match_details for better match type detection
-            'llm_scores': llm_scores_list if llm_scores_list else None,  # LLM scores if available
-            'llm_input_output': combined_results.get('llm_input_output'),  # LLM input prompt and output
             'confidence_distribution': confidence_distribution,  # Confidence score distribution
             'test_suites': test_suites,  # Tests grouped by suite (optional, for UI organization)
             'parsed_diff': {

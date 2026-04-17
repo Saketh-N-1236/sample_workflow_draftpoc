@@ -1,0 +1,202 @@
+{
+  "scenario": "9",
+  "category": "SINGLE-SYMBOL MICRO-HOTFIX",
+  "title": "utilities.js — checkWhiteSpace hardened with explicit null/undefined guard",
+  "commit_message": "fix: prevent checkWhiteSpace from crashing on null/undefined input",
+
+  "changed_files": ["src/helpers/utilities.js"],
+  "changed_symbols": ["checkWhiteSpace"],
+
+  "why_micro_hotfix": {
+    "explanation": "Only one symbol changed in one file. The change is a defensive null guard — not a behaviour change for valid inputs. Yet the ripple is measurable: 2 CRITICAL (direct tests), 3 more CRITICAL (capitalizeFirstLetter depends on checkWhiteSpace and has checkWhiteSpace in its symbols[]), and 12 HIGH (sibling utilities + cross-dependent tests that list utilities.js as a source).",
+    "key_insight": "A 3-line hotfix generates 5 CRITICAL + 12 HIGH = 17 selected tests. This is the minimal realistic selection — enough to confirm no regressions without running all 77."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "describe() label = 'checkWhiteSpace' (direct match) OR symbols[] contains 'checkWhiteSpace' (indirect match via capitalizeFirstLetter)",
+      "tests": [
+        {
+          "test":     "checkWhiteSpace > returns true for a string that contains a space",
+          "file":     "test_repository/standalone/utilities.pure.test.js",
+          "why":      "describe label = 'checkWhiteSpace'; sources = [utilities.js]; symbol = [checkWhiteSpace]",
+          "category": "standalone"
+        },
+        {
+          "test":     "checkWhiteSpace > returns false for a string with no whitespace",
+          "file":     "test_repository/standalone/utilities.pure.test.js",
+          "why":      "Same describe block",
+          "category": "standalone"
+        },
+        {
+          "test":     "capitalizeFirstLetter with checkWhiteSpace > capitalizes the first letter of each word in a multi-word string",
+          "file":     "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "why":      "describe = 'capitalizeFirstLetter with checkWhiteSpace'; symbols includes 'checkWhiteSpace' — changed symbol; sources = [utilities.js]",
+          "category": "cross-dependent"
+        },
+        {
+          "test":     "capitalizeFirstLetter with checkWhiteSpace > capitalizes a single word correctly without whitespace branch",
+          "file":     "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test":     "capitalizeFirstLetter with checkWhiteSpace > returns undefined when given a non-string truthy value after type guard fix",
+          "file":     "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        }
+      ],
+      "count": 5,
+      "breakdown": {
+        "standalone":       2,
+        "cross-dependent":  3,
+        "feature":          0
+      }
+    },
+
+    "HIGH": {
+      "reason": "Same source file (utilities.js) changed — sibling symbols selected defensively",
+      "tests": [
+        {
+          "test":  "checkNull > returns an empty string when the value is null",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "why":   "sources = [utilities.js]; sibling symbol in same file",
+          "category": "standalone"
+        },
+        {
+          "test":  "checkNull > returns the original value when it is defined and non-null",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "checkArray > returns an empty array when the input is null",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "checkArray > returns the original array when it contains items",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "getTimes > correctly parses 3661 seconds into 1h 01m 01s",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "getTimes > returns 0 hours when the duration is under 3600 seconds",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "getProgressWidth > calculates 50% when value is half of max",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "getProgressWidth > returns 0 when the value argument is missing or falsy",
+          "file":  "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test":  "isUserLoggedIn reads storageKeys.token > returns false when no token is stored",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "why":   "sources = [utilities.js, storage.ts]; utilities.js changed",
+          "category": "cross-dependent"
+        },
+        {
+          "test":  "isUserLoggedIn reads storageKeys.token > returns true after a token has been stored under storageKeys.token",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test":  "updateNewTokenDetails stores values under storageKeys > saves the access token to localStorage under the TOKEN key",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "why":   "sources = [utilities.js, storage.ts]; utilities.js changed",
+          "category": "cross-dependent"
+        },
+        {
+          "test":  "updateNewTokenDetails stores values under storageKeys > saves the refresh token under the REFRESHTOKEN key",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test":  "updateNewTokenDetails stores values under storageKeys > saves the login time under the LOGGEDINTIME key",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test":  "generateCardNumber output satisfies CARD_REGEX > output of generateCardNumber preserves first and last 4 digits",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "why":   "sources = [utilities.js, constants.ts]; utilities.js changed",
+          "category": "cross-dependent"
+        },
+        {
+          "test":  "generateCardNumber output satisfies CARD_REGEX > correctly masks middle digits with X characters",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        }
+      ],
+      "count": 15,
+      "breakdown": {
+        "standalone":       8,
+        "cross-dependent":  7,
+        "feature":          0
+      }
+    },
+
+    "LOW":  { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "No source overlap with utilities.js",
+      "skipped_files": [
+        "test_repository/standalone/regex.constants.test.js          (sources: constants.ts — 16 tests SKIP)",
+        "test_repository/cross-dependent/auth-storage.cross.test.js  → validateEmailOrUsername (4 tests) — sources: signInFormHook.ts + constants.ts only, utilities.js NOT listed",
+        "test_repository/cross-dependent/payment-state.cross.test.js (sources: paymentReducer.js, actions.js, storage.ts, constants.ts — 12 tests SKIP)",
+        "test_repository/feature/user-profile.feature.test.js        (sources: userDetailsReducer.js, profileReducer.js, actiotypes.js — 10 tests SKIP)",
+        "test_repository/feature/favourites-watchlist.feature.test.js (sources: favouritesReducer.js, toastReducer.js, actiotypes.js — 8 tests SKIP)",
+        "test_repository/feature/api-navigation.feature.test.js      (sources: ApiEndPoints.js, ApiConstants.js — 7 tests SKIP)"
+      ],
+      "count": 57
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "gap_id": "GAP-01",
+      "type": "NEW_BEHAVIOUR_NO_TEST",
+      "symbol": "checkWhiteSpace",
+      "detail": "Explicit null/undefined guard added. Two new behaviours exist that have no test:",
+      "new_behaviours": [
+        "checkWhiteSpace(null)      → returns false (previously: ternary coerced null to '' → also false, so behaviour unchanged)",
+        "checkWhiteSpace(undefined) → returns false (previously: ternary coerced undefined to '' → also false, so behaviour unchanged)"
+      ],
+      "severity": "LOW — behaviour did not actually change for null/undefined (ternary fallback was already handling it). The change is purely defensive. However, explicit tests would document the contract.",
+      "recommended_tests": [
+        "checkWhiteSpace > returns false for a null input without throwing",
+        "checkWhiteSpace > returns false for an undefined input without throwing",
+        "checkWhiteSpace > returns false for an empty string"
+      ]
+    }
+  ],
+
+  "selection_proof": {
+    "standalone_selected":      10,
+    "cross_dependent_selected":  7,
+    "feature_selected":          0,
+    "total_selected":           17,
+    "total_skipped":            57,
+    "wait_validateEmail_note":  "4 validateEmailOrUsername tests in auth-storage.cross.test.js are NOT selected — their sources only list signInFormHook.ts and constants.ts, NOT utilities.js. This is intentional: even though signInFormHook calls validateEmailOrUsername which might internally call capitalizeFirstLetter, the manifest only captures direct dependencies.",
+    "key_point": "3-line null guard → 17/77 tests selected. Tight, surgical selection that still catches the direct callers of checkWhiteSpace."
+  },
+
+  "summary": {
+    "total_tests":   77,
+    "CRITICAL":       5,
+    "HIGH":          15,
+    "LOW":            0,
+    "SKIP":          57,
+    "coverage_gaps":  1
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage -t \"checkWhiteSpace|capitalizeFirstLetter with checkWhiteSpace|checkNull|checkArray|getTimes|getProgressWidth|isUserLoggedIn reads storageKeys\\.token|updateNewTokenDetails stores values under storageKeys|generateCardNumber output satisfies CARD_REGEX\" --verbose"
+}

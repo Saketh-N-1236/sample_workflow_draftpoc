@@ -1,0 +1,14 @@
+diff --git a/src/reducer/userDetailsReducer.js b/src/reducer/userDetailsReducer.js
+index 1234abc..9876fed 100644
+--- a/src/reducer/userDetailsReducer.js
++++ b/src/reducer/userDetailsReducer.js
+@@ -9,1 +9,1 @@
+-  data: [],
++  data: null,
+@@ -32,2 +32,3 @@
+     case ONAUTHENTICATE:
+       return {
+         ...state,
+         profileAuthSuccess: false,
++        profileToken: undefined,
+       };

@@ -1,0 +1,28 @@
+diff --git a/src/helpers/utilities.js b/src/helpers/utilities.js
+index a1b2c3d..9e0f1a2 100644
+--- a/src/helpers/utilities.js
++++ b/src/helpers/utilities.js
+@@ -211,8 +211,8 @@ export const preloadImage = (src, callback) => {
+ };
+ 
+ export const checkNull = str => {
+-  return str !== null && str !== undefined ? str : '';
++  return str != null ? str : '';
+ };
+ export const checkArray = arr => {
+   return arr !== null && arr !== undefined && arr.length > 0 ? arr : [];
+ };
+diff --git a/src/reducer/toastReducer.js b/src/reducer/toastReducer.js
+index a1b2c3d..9e0f1a2 100644
+--- a/src/reducer/toastReducer.js
++++ b/src/reducer/toastReducer.js
+@@ -1,7 +1,7 @@
+ import {TOAST} from './actiotypes';
+ 
+ const initialState = {
+   showToast:  null,
+-  toastType:  'info',
++  toastType:  'warning',
+   toastQueue: [],
+ };
+ 

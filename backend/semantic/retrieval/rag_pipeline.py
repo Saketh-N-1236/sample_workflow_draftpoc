@@ -76,7 +76,8 @@ async def _vector_search_queries(
         expected_dimensions = embedding_provider.get_embedding_dimensions()
 
     all_results: List[Dict[str, Any]] = []
-    seen_test_ids = set()
+    # O(1) lookup dict so duplicate test_id updates don't require a linear scan (Bug 5 fix)
+    seen: Dict[str, Dict[str, Any]] = {}
 
     for i, query in enumerate(queries):
         if not query or not query.strip():
@@ -98,25 +99,26 @@ async def _vector_search_queries(
             weight = 1.0 if i == 0 else 0.9
             for result in results:
                 test_id = result.get("test_id")
-                if test_id not in seen_test_ids:
+                if test_id not in seen:
                     result["query_weight"] = weight
                     all_results.append(result)
-                    seen_test_ids.add(test_id)
+                    seen[test_id] = result
                 else:
-                    for existing in all_results:
-                        if existing.get("test_id") == test_id:
-                            existing["query_weight"] = max(
-                                existing.get("query_weight", 1.0), weight
-                            )
-                            existing["similarity"] = max(
-                                existing.get("similarity", 0),
-                                result.get("similarity", 0),
-                            )
-                            break
+                    existing = seen[test_id]
+                    existing["query_weight"] = max(
+                        existing.get("query_weight", 1.0), weight
+                    )
+                    existing["similarity"] = max(
+                        existing.get("similarity", 0),
+                        result.get("similarity", 0),
+                    )
         except Exception as e:
             logger.warning("[RAG] Failed query variation %s: %s", i + 1, e)
             continue
 
+    # Sort by weighted_similarity (first-query hits rank higher) then strip the helper
+    # fields — Bug 1 fix: the old code re-sorted by raw similarity immediately after,
+    # which discarded the query-weight ranking entirely.
     for result in all_results:
         w = result.get("query_weight", 1.0)
         result["weighted_similarity"] = result.get("similarity", 0) * w
@@ -124,7 +126,7 @@ async def _vector_search_queries(
     for result in all_results:
         result.pop("query_weight", None)
         result.pop("weighted_similarity", None)
-    all_results.sort(key=lambda x: x.get("similarity", 0), reverse=True)
+    # No second sort — the weighted order is the correct final order.
     for result in all_results:
         orig = result.get("similarity", 0)
         result["confidence_score"] = int(orig * 60)
@@ -153,13 +155,23 @@ async def run_semantic_rag(
     """
     Run the unified RAG pipeline.
 
+    diff_content is required. If empty/missing, returns [] immediately (stage: "no_inputs").
+    Canonical query source: Path A (validated LLM summary) → Path B (diff-anchor text).
+
     Returns:
         (tests, rag_diagnostics) — diagnostics always populated; on success includes pipeline metadata.
     """
     empty_diag: Dict[str, Any] = {"ok": False, "stage": "init"}
 
-    if not changed_functions and not file_changes and not diff_content:
-        return [], {**empty_diag, "stage": "no_inputs", "reason": "no functions, files, or diff"}
+    # Diff content is required — without it there is nothing to embed or summarise.
+    dc = (diff_content or "").strip()
+    if not dc:
+        return [], {
+            **empty_diag,
+            "stage": "no_inputs",
+            "reason": "diff_content is empty or missing",
+            "queries_used_strings": [],
+        }
 
     ds, ads, rns = _resolve_symbols(
         deleted_symbols, added_symbols, renamed_symbols, diff_content
@@ -170,55 +182,51 @@ async def run_semantic_rag(
     canonical = ""
     summary_meta: Dict[str, Any] = {}
 
-    dc = (diff_content or "").strip()
-    if dc:
-        try:
-            summary = await summarize_git_diff(diff_content)
-            if summary and summary.strip():
-                metrics = await validate_llm_extraction(dc, [summary.strip()])
-                avg_sim = float(metrics.get("avg_similarity", 0.0))
-                summary_meta = {
-                    "summary_validation_avg_similarity": avg_sim,
-                    "threshold": GIT_DIFF_SUMMARY_VALIDATION_THRESHOLD,
-                }
-                if avg_sim >= GIT_DIFF_SUMMARY_VALIDATION_THRESHOLD:
-                    canonical = summary.strip()
-                    logger.info(
-                        "[RAG] Using LLM diff summary (cosine=%.3f >= %.3f)",
-                        avg_sim,
-                        GIT_DIFF_SUMMARY_VALIDATION_THRESHOLD,
-                    )
-                else:
-                    hint = rich[:800] if rich else None
-                    canonical = build_diff_anchor_text(
-                        dc, hint, RAG_DIFF_ANCHOR_MAX_CHARS
-                    )
-                    summary_meta["canonical_source"] = "diff_anchor"
-                    logger.info(
-                        "[RAG] Summary rejected (cosine=%.3f); using diff-anchor text",
-                        avg_sim,
-                    )
+    try:
+        summary = await summarize_git_diff(diff_content)
+        if summary and summary.strip():
+            metrics = await validate_llm_extraction(dc, [summary.strip()])
+            avg_sim = float(metrics.get("avg_similarity", 0.0))
+            summary_meta = {
+                "summary_validation_avg_similarity": avg_sim,
+                "threshold": GIT_DIFF_SUMMARY_VALIDATION_THRESHOLD,
+            }
+            if avg_sim >= GIT_DIFF_SUMMARY_VALIDATION_THRESHOLD:
+                canonical = summary.strip()
+                logger.info(
+                    "[RAG] Using LLM diff summary (cosine=%.3f >= %.3f)",
+                    avg_sim,
+                    GIT_DIFF_SUMMARY_VALIDATION_THRESHOLD,
+                )
             else:
+                hint = rich[:800] if rich else None
                 canonical = build_diff_anchor_text(
-                    dc, rich[:800] if rich else None, RAG_DIFF_ANCHOR_MAX_CHARS
+                    dc, hint, RAG_DIFF_ANCHOR_MAX_CHARS
                 )
                 summary_meta["canonical_source"] = "diff_anchor"
-        except Exception as e:
-            logger.warning("[RAG] Summary step failed: %s", e)
+                logger.info(
+                    "[RAG] Summary rejected (cosine=%.3f); using diff-anchor text",
+                    avg_sim,
+                )
+        else:
             canonical = build_diff_anchor_text(
                 dc, rich[:800] if rich else None, RAG_DIFF_ANCHOR_MAX_CHARS
             )
             summary_meta["canonical_source"] = "diff_anchor"
-            summary_meta["summary_error"] = str(e)
-    else:
-        canonical = rich or ""
-        summary_meta["canonical_source"] = "rich_description_only"
+    except Exception as e:
+        logger.warning("[RAG] Summary step failed: %s", e)
+        canonical = build_diff_anchor_text(
+            dc, rich[:800] if rich else None, RAG_DIFF_ANCHOR_MAX_CHARS
+        )
+        summary_meta["canonical_source"] = "diff_anchor"
+        summary_meta["summary_error"] = str(e)
 
     if not (canonical or "").strip():
         return [], {
             **empty_diag,
             "stage": "no_canonical_text",
             "reason": "empty canonical after build",
+            "queries_used_strings": [],
             **summary_meta,
         }
 
@@ -269,8 +277,9 @@ async def run_semantic_rag(
                 "ok": True,
                 "recovered_via": "RAG_LENIENT_FALLBACK",
                 "after_rewrite_failure": True,
+                "queries_used_strings": [original_query.strip()],
             }
-        return [], diag
+        return [], {**diag, "queries_used_strings": []}
 
     # Rewrites are derived from original_query; no post-rewrite embedding validation.
     queries_for_search = [q.strip() for q in queries if q and q.strip()]
@@ -280,6 +289,7 @@ async def run_semantic_rag(
             "stage": "rewrite",
             "reason": "all rewriter outputs empty after strip",
             "query_count": len(queries),
+            "queries_used_strings": [],
             **summary_meta,
         }
 
@@ -298,5 +308,6 @@ async def run_semantic_rag(
         "stage": "complete",
         "post_rewrite_validation": "skipped",
         "queries_used": len(queries_for_search),
+        "queries_used_strings": list(queries_for_search),
         **summary_meta,
     }

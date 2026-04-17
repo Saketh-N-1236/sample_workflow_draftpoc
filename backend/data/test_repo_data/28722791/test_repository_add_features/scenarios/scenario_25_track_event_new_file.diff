@@ -1,0 +1,21 @@
+diff --git a/src/analytics/trackEvent.ts b/src/analytics/trackEvent.ts
+new file mode 100644
+index 0000000..a1b2c3d
+--- /dev/null
++++ b/src/analytics/trackEvent.ts
+@@ -0,0 +1,18 @@
++type AnalyticsPayload = Record<string, string | number | boolean>;
++
++const queue: AnalyticsPayload[] = [];
++
++export function trackEvent(name: string, payload: AnalyticsPayload = {}) {
++  queue.push({event: name, ...payload});
++}
++
++export function flushAnalyticsQueue() {
++  const batch = queue.splice(0, queue.length);
++  return batch;
++}
++
++export type AnalyticsBatch = AnalyticsPayload[];
++

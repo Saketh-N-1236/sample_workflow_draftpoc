@@ -1,0 +1,129 @@
+{
+  "scenario": "7",
+  "category": "DEAD ZONE — ZERO TEST COVERAGE",
+  "title": "2-file commit touching auth hook files that have no tests in the repository",
+  "commit_message": "feat: strengthen username validation in signUpForm; add OTP digit constraints",
+
+  "changed_files": [
+    "src/features/auth/hooks/signUpFormHook.ts",
+    "src/features/auth/hooks/useOtpValidationHook.ts"
+  ],
+  "changed_symbols": [
+    "validateUsername",
+    "useSignUpForm",
+    "useOTPValidationForm",
+    "otpDigits"
+  ],
+
+  "why_dead_zone": {
+    "explanation": "Neither src/features/auth/hooks/signUpFormHook.ts nor src/features/auth/hooks/useOtpValidationHook.ts appears in any test's sources[] array in test-manifest.json. The test repository has zero coverage of the signup flow and OTP validation hook. Despite real business-logic changes (new empty check, min-length, reserved word guard, 6-digit OTP constraint), the system finds NO matching tests.",
+    "contrast_with_signInFormHook": "signInFormHook.ts IS covered — the 4 'validateEmailOrUsername' tests in auth-storage.cross.test.js list it in sources[]. signUpFormHook.ts and useOtpValidationHook.ts were never added to the manifest.",
+    "system_output": "ALL SKIP + 4 COVERAGE GAPS emitted. No test run command is generated."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": { "tests": [], "count": 0 },
+    "HIGH":     { "tests": [], "count": 0 },
+    "LOW":      { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "Neither changed file appears in any sources[] entry in test-manifest.json",
+      "skipped_files": [
+        "test_repository/standalone/regex.constants.test.js          (sources: constants.ts only)",
+        "test_repository/standalone/utilities.pure.test.js           (sources: utilities.js only)",
+        "test_repository/cross-dependent/auth-storage.cross.test.js  (sources: signInFormHook.ts + constants.ts + utilities.js + storage.ts — signUpFormHook NOT listed)",
+        "test_repository/cross-dependent/payment-state.cross.test.js (sources: paymentReducer.js + actions.js + storage.ts + constants.ts)",
+        "test_repository/feature/user-profile.feature.test.js        (sources: userDetailsReducer.js + profileReducer.js + actiotypes.js)",
+        "test_repository/feature/favourites-watchlist.feature.test.js (sources: favouritesReducer.js + toastReducer.js + actiotypes.js)",
+        "test_repository/feature/api-navigation.feature.test.js      (sources: ApiEndPoints.js + ApiConstants.js)"
+      ],
+      "count": 77
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "gap_id": "GAP-01",
+      "type": "COMPLETELY_UNTESTED_SYMBOL",
+      "symbol": "validateUsername",
+      "file": "src/features/auth/hooks/signUpFormHook.ts",
+      "severity": "HIGH — business logic change with no safety net",
+      "new_behaviours_added": [
+        "Empty / whitespace-only username now returns 'Username is required'",
+        "Username shorter than 3 chars returns 'Username must be at least 3 characters'",
+        "Username 'admin' (case-insensitive) is now a reserved word"
+      ],
+      "recommended_describe": "validateUsername in useSignUpForm",
+      "recommended_tests": [
+        "returns error for an empty username string",
+        "returns error for a whitespace-only username",
+        "returns error for a username shorter than 3 characters",
+        "returns error for the reserved username 'admin'",
+        "returns error for the reserved username 'ADMIN' (case-insensitive)",
+        "returns error when UNIQUE_USERNAME_REGEX fails",
+        "returns undefined for a valid username"
+      ]
+    },
+    {
+      "gap_id": "GAP-02",
+      "type": "COMPLETELY_UNTESTED_SYMBOL",
+      "symbol": "useOTPValidationForm",
+      "file": "src/features/auth/hooks/useOtpValidationHook.ts",
+      "severity": "HIGH — validation constraints tightened with no test coverage",
+      "new_behaviours_added": [
+        "minLength: 6 — OTP shorter than 6 digits now triggers an error",
+        "maxLength: 6 — OTP longer than 6 digits now triggers an error",
+        "pattern: /^[0-9]{6}$/ — non-numeric OTP now triggers an error"
+      ],
+      "recommended_describe": "useOTPValidationForm validation rules",
+      "recommended_tests": [
+        "OTP field accepts exactly 6 numeric digits",
+        "OTP field rejects input shorter than 6 digits",
+        "OTP field rejects input longer than 6 digits",
+        "OTP field rejects a non-numeric input like 'abc123'",
+        "OTP field returns 'OTP is required' when empty"
+      ]
+    },
+    {
+      "gap_id": "GAP-03",
+      "type": "MANIFEST_MISSING_SOURCE",
+      "file": "src/features/auth/hooks/signUpFormHook.ts",
+      "action_required": "Add signUpFormHook.ts to sources[] in test-manifest.json for any future signup-related tests"
+    },
+    {
+      "gap_id": "GAP-04",
+      "type": "MANIFEST_MISSING_SOURCE",
+      "file": "src/features/auth/hooks/useOtpValidationHook.ts",
+      "action_required": "Add useOtpValidationHook.ts to sources[] in test-manifest.json for any future OTP-related tests"
+    }
+  ],
+
+  "system_behaviour_guide": {
+    "what_system_emits": "SELECT: [] | SKIP: ALL 77 | GAPS: 4",
+    "no_jest_run": "Because CRITICAL + HIGH + LOW = 0, the jest run command is empty. No tests are executed.",
+    "critical_insight": "A passing test run does NOT mean the commit is safe. In this scenario, 0 tests run but 2 functions with real validation logic changed. The gap report is the only signal the system can produce.",
+    "recommendation": "Before merging, the gap report must be reviewed. The 4 recommended test suites must be written and added to the test repository with correct sources[] entries."
+  },
+
+  "selection_proof": {
+    "standalone_selected":      0,
+    "cross_dependent_selected": 0,
+    "feature_selected":         0,
+    "total_selected":           0,
+    "total_skipped":           77,
+    "gaps_emitted":             4
+  },
+
+  "summary": {
+    "total_tests":   77,
+    "CRITICAL":       0,
+    "HIGH":           0,
+    "LOW":            0,
+    "SKIP":          77,
+    "gaps_emitted":   4,
+    "tests_run":      0
+  },
+
+  "jest_run_command": null,
+  "jest_run_note": "No tests matched — nothing to run. Gap report is the only output."
+}

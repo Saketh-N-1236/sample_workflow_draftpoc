@@ -1,0 +1,141 @@
+{
+  "scenario": "1",
+  "category": "FULLY CROSS-DEPENDENT",
+  "title": "storageKeys.token renamed + appStorage.get hardened with try/catch",
+  "commit_message": "feat: rename token storage key to ACCESS_TOKEN and add parse error guard",
+
+  "changed_files": [
+    "src/services/storage.ts"
+  ],
+  "changed_symbols": [
+    "storageKeys",
+    "appStorage"
+  ],
+
+  "why_fully_cross_dependent": {
+    "explanation": "src/services/storage.ts is never a primary source in standalone or feature test files. Every test that references storageKeys or appStorage lives in cross-dependent suites because it crosses at least two files: utilities.js (reads/writes via appStorage) + storage.ts (defines the keys). No pure standalone or feature test has storage.ts in its sources[].",
+    "pattern": "changed_file  →  only cross-dependent tests match  →  zero standalone, zero feature selected"
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "describe() label contains changed symbol (storageKeys / appStorage) AND src/services/storage.ts is listed in sources[]",
+      "tests": [
+        {
+          "test":   "isUserLoggedIn reads storageKeys.token > returns false when no token is stored",
+          "file":   "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "why":    "sources=[utilities.js, storage.ts], symbols=[isUserLoggedIn, storageKeys] — both files touched"
+        },
+        {
+          "test":   "isUserLoggedIn reads storageKeys.token > returns true after a token has been stored under storageKeys.token",
+          "file":   "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "why":    "Same cross-dependency; appStorage.get path now wrapped in try/catch"
+        },
+        {
+          "test":   "updateNewTokenDetails stores values under storageKeys > saves the access token to localStorage under the TOKEN key",
+          "file":   "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "why":    "Token key was 'TOKEN', now 'ACCESS_TOKEN' — test assertion will FAIL"
+        },
+        {
+          "test":   "updateNewTokenDetails stores values under storageKeys > saves the refresh token under the REFRESHTOKEN key",
+          "file":   "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "why":    "Same set; secondary storageKey also verified in this describe"
+        },
+        {
+          "test":   "updateNewTokenDetails stores values under storageKeys > saves the login time under the LOGGEDINTIME key",
+          "file":   "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "why":    "Same set; covers the full token-details write path"
+        },
+        {
+          "test":   "storageKeys align with payment flow expectations > storageKeys.stripePaymentDetails equals STRIPEPAYMENTDETAILS",
+          "file":   "test_repository/cross-dependent/payment-state.cross.test.js",
+          "why":    "sources=[storage.ts, constants.ts]; describes storageKeys contract for payment screens"
+        },
+        {
+          "test":   "storageKeys align with payment flow expectations > storageKeys.token equals TOKEN",
+          "file":   "test_repository/cross-dependent/payment-state.cross.test.js",
+          "why":    "sources=[storage.ts]; asserts token key = 'TOKEN' — WILL FAIL after rename to 'ACCESS_TOKEN'"
+        }
+      ],
+      "count": 7,
+      "all_from_category": "cross-dependent"
+    },
+
+    "HIGH": {
+      "reason": "No other tests have src/services/storage.ts in their sources[] but are not yet CRITICAL",
+      "tests": [],
+      "count": 0,
+      "note": "This is what makes this scenario 'fully cross-dependent' — the changed file only appears in cross-dependent test sources"
+    },
+
+    "LOW": {
+      "reason": "No loosely connected tests",
+      "tests": [],
+      "count": 0
+    },
+
+    "SKIP": {
+      "reason": "src/services/storage.ts does not appear in sources[] for any of these tests",
+      "skipped_files": [
+        "test_repository/standalone/regex.constants.test.js      (sources: constants.ts only)",
+        "test_repository/standalone/utilities.pure.test.js       (sources: utilities.js only)",
+        "test_repository/cross-dependent/auth-storage.cross.test.js  (validateEmailOrUsername, generateCardNumber, capitalizeFirstLetter describes — storage.ts not in their sources[])",
+        "test_repository/cross-dependent/payment-state.cross.test.js (updateUserCards, updatePaymentPlanDetails, CLEARCARDS, CARD_NUMBER_REGEX describes — storage.ts not in sources[])",
+        "test_repository/feature/user-profile.feature.test.js    (sources: userDetailsReducer.js, actiotypes.js only — storage logic inlined in test)",
+        "test_repository/feature/favourites-watchlist.feature.test.js",
+        "test_repository/feature/api-navigation.feature.test.js"
+      ],
+      "count": 70
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "type": "ASSERTION_WILL_FAIL",
+      "symbol": "storageKeys.token",
+      "file": "src/services/storage.ts",
+      "test": "storageKeys align with payment flow expectations > storageKeys.token equals TOKEN",
+      "reason": "Test asserts value is 'TOKEN' but diff renames it to 'ACCESS_TOKEN'",
+      "action_required": "Update test assertion: expect(storageKeys.token).toBe('ACCESS_TOKEN')"
+    },
+    {
+      "type": "ASSERTION_WILL_FAIL",
+      "symbol": "storageKeys.token",
+      "file": "src/services/storage.ts",
+      "test": "updateNewTokenDetails stores values under storageKeys > saves the access token to localStorage under the TOKEN key",
+      "reason": "The key written to localStorage is now 'ACCESS_TOKEN' not 'TOKEN'",
+      "action_required": "Update test to read from storageKeys.token which is now 'ACCESS_TOKEN'"
+    },
+    {
+      "type": "NO_TEST_FOR_NEW_BEHAVIOUR",
+      "symbol": "appStorage.get",
+      "file": "src/services/storage.ts",
+      "reason": "try/catch error-handling path in appStorage.get has no test — corrupted JSON in localStorage now returns null silently",
+      "recommended_describe": "appStorage.get error resilience",
+      "recommended_tests": [
+        "returns null when localStorage contains malformed JSON for the given key",
+        "does not throw when JSON.parse fails"
+      ]
+    }
+  ],
+
+  "selection_proof": {
+    "standalone_selected":       0,
+    "cross_dependent_selected":  7,
+    "feature_selected":          0,
+    "total_selected":            7,
+    "total_skipped":             70
+  },
+
+  "summary": {
+    "total_tests":          77,
+    "CRITICAL":              7,
+    "HIGH":                  0,
+    "LOW":                   0,
+    "SKIP":                 70,
+    "assertion_failures":    2,
+    "coverage_gaps":         1
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage -t \"isUserLoggedIn reads storageKeys.token|updateNewTokenDetails stores values under storageKeys|storageKeys align with payment flow expectations\""
+}

@@ -1,0 +1,336 @@
+{
+  "scenario": "26",
+  "title": "Wishlist Functionality — merge Movies and TV Shows into a single unified category",
+  "commit_message": "feat: merge wishlist categories — remove Movies/TV Shows split, display all items under one 'My Watchlist' section",
+
+  "changed_files": [
+    "src/services/api/common/ApiEndPoints.js",
+    "src/services/api/common/moviesDetails/movieDetails.js",
+    "src/services/api/common/watchList/WatchList.js",
+    "src/screens/MyFavourites/MyFavourites.js",
+    "src/screens/movieSubPage/movieSubPage.js",
+    "src/screens/movieSubPage/TvShowDetails.js"
+  ],
+
+  "changed_symbols": [
+    "moviesWatchlistApi (removed)",
+    "TVShowsWatchlistApi (removed)",
+    "watchlistApi (new)",
+    "getAllWatchlistMoviesApi (removed)",
+    "getAllWatchlistTVShowsApi (removed)",
+    "getAllWatchlistApi (new)",
+    "addWishListsMovies (removed — callers updated to addToWishlist(Id, 0))",
+    "removeWishListsMovies (removed — callers updated to removeFromWishlist(Id, 0))",
+    "addWishListsTVShow (removed — callers updated to addToWishlist(Id, 2))",
+    "removeWishListsTVShow (removed — callers updated to removeFromWishlist(Id, 2))",
+    "addToWishlist (new unified function — type param selects movie=0 or TV show=2)",
+    "removeFromWishlist (new unified function — type param selects movie=0 or TV show=2)",
+    "titles (removed — replaced by WATCHLIST_TITLE constant)",
+    "getAllWatchlist (logic replaced — single API call instead of Promise.allSettled over two)"
+  ],
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "describe() block labels in wishlist.feature.test.js exactly match the removed/changed symbol names (moviesWatchlistApi, TVShowsWatchlistApi, getAllWatchlistMoviesApi, getAllWatchlistTVShowsApi, addWishListsMovies, addWishListsTVShow). These tests were added specifically so that this diff is never invisible to the test selector.",
+      "tests": [
+        "moviesWatchlistApi > is replaced by watchlistApi which still covers movies via types=0 in the combined query",
+        "moviesWatchlistApi > the old movies-only path (/movie/composer/content with types=0 alone) is no longer used as a standalone endpoint",
+        "TVShowsWatchlistApi > is replaced by watchlistApi which still covers TV shows via types=2 in the combined query",
+        "TVShowsWatchlistApi > the old TV-shows-only route (/tvshows/composer/content) is no longer used — unified endpoint uses /movie/composer/content",
+        "getAllWatchlistMoviesApi > is replaced by getAllWatchlistApi which calls the unified watchlistApi URL covering both movies and TV shows",
+        "getAllWatchlistMoviesApi > one call to getAllWatchlistApi replaces the need for a separate getAllWatchlistMoviesApi call",
+        "getAllWatchlistTVShowsApi > is replaced by getAllWatchlistApi which calls the unified watchlistApi URL covering both movies and TV shows",
+        "getAllWatchlistTVShowsApi > one call to getAllWatchlistApi replaces the need for a separate getAllWatchlistTVShowsApi call",
+        "addWishListsMovies > addToWishlist(Id, 0) sends SingleEventVod model — replicating the exact POST body addWishListsMovies sent",
+        "addWishListsMovies > addToWishlist defaults to type=0 preserving backward-compatible behaviour of addWishListsMovies when no type is passed",
+        "addWishListsMovies > removeFromWishlist(Id, 0) sends SingleEventVod model — replicating the exact POST body removeWishListsMovies sent",
+        "addWishListsTVShow > addToWishlist(Id, 2) sends MultiEventVod model — replicating the exact POST body addWishListsTVShow sent",
+        "addWishListsTVShow > removeFromWishlist(Id, 2) sends MultiEventVod model — replicating the exact POST body removeWishListsTVShow sent",
+        "addWishListsTVShow > addToWishlist with type=2 calls the unified add-favorite-vod endpoint (the old addWishListsTVShow used tvshows/add-favorite-vod)"
+      ],
+      "files": ["test_repository/feature/wishlist.feature.test.js"],
+      "count": 14
+    },
+
+    "HIGH": {
+      "reason": "Two files share source overlap with the changed code: (1) api-navigation.feature.test.js declares src/services/api/common/ApiEndPoints.js as a source — that file is directly modified by the diff. (2) wishlist.feature.test.js declares ApiEndPoints.js, movieDetails.js, and WatchList.js as sources — all three are changed by the diff. The remaining 31 tests in wishlist.feature.test.js (those NOT in a CRITICAL describe block) are HIGH.",
+      "tests_from_api_navigation": [
+        "endpoints.payment > addCard points to the correct payment creation path",
+        "endpoints.payment > getAllCards points to the cards listing path without query parameters",
+        "endpoints.payment > paymentsCheckout points to the v2 checkout path",
+        "endpoints.payment > deleteCard endpoint includes the cardId query parameter placeholder",
+        "endpoints.payment > preAuth endpoint targets the preauth-verify path",
+        "endpoints.payment > updateCard and addCard share the same base path",
+        "endpoints.favourites > addCardtoFavourite endpoint points to the sports favourites add path",
+        "endpoints.favourites > getAllFavourites endpoint includes type=4 query filter",
+        "endpoints.favourites > removeCardFromFavourite endpoint points to the remove-favorite-match path",
+        "endpoints.favourites > favoritesList endpoint includes accountProfileId as a query parameter placeholder",
+        "endpoints.cart > addItemToCart endpoint points to the sports cart add path",
+        "endpoints.cart > removeItemsToCart endpoint points to the sports cart remove path",
+        "endpoints for authentication and profile management > iStream_login endpoint targets the v2 client login path",
+        "endpoints for authentication and profile management > resetpassword endpoint targets the v2 forgot-password path",
+        "endpoints for authentication and profile management > refreshToken endpoint targets the v2 client refresh-token path",
+        "endpoints for authentication and profile management > ChangePasswordAPI endpoint targets the reset-account-password path",
+        "endpoints for authentication and profile management > emailverification endpoint targets the account activate/email path",
+        "endpoints for authentication and profile management > registerDevice endpoint targets the v2 device-registration path",
+        "endpoints for authentication and profile management > getDevices and removeDevice endpoints both target the subscriptor device namespace",
+        "endpoints dynamic builder functions > episodes builder interpolates tvShowId and seasonId into the URL",
+        "endpoints dynamic builder functions > episodes builder always sorts by episodeNumber ascending",
+        "endpoints dynamic builder functions > topPicksForYou builder interpolates type and vodId into the URL",
+        "endpoints dynamic builder functions > myOrders builder interpolates account id into the transaction query path",
+        "endpoints for content and subscriptions > getSubscriptionPlans targets the v2 get-subscriptions path",
+        "endpoints for content and subscriptions > checkUserSubscription targets the get-all-user-subscriptions path",
+        "endpoints for content and subscriptions > composer_api targets the v3 composer configuration path",
+        "endpoints for content and subscriptions > getLandingPage targets the v2 composer configuration path",
+        "endpoints for content and subscriptions > continueWatching query string includes the Continue Watching filterType",
+        "ApiConstants > MAX_IMAGE_UPLOAD_SIZE equals exactly 20 MB expressed in bytes",
+        "ApiConstants > TIMEOUT equals exactly 60 seconds expressed in milliseconds"
+      ],
+      "tests_from_wishlist_non_critical": [
+        "watchlistApi endpoint > includes both types=0 (movies) and types=2 (TV shows) in one query string",
+        "watchlistApi endpoint > sets filterType to Favorites",
+        "watchlistApi endpoint > uses the /movie/composer/content path",
+        "watchlistApi endpoint > sets carouselType to Static",
+        "watchlistApi endpoint > does not contain the old movies-only types=0 without types=2",
+        "getAllWatchlistApi > calls ApiClient.get exactly once when invoked",
+        "getAllWatchlistApi > calls ApiClient.get with the unified watchlistApi URL",
+        "getAllWatchlistApi > returns whatever ApiClient.get returns",
+        "getAllWatchlistApi > does not call ApiClient.post — only a GET request is made",
+        "addToWishlist > sets model to SingleEventVod when type is 0 (movie)",
+        "addToWishlist > sets model to MultiEventVod when type is 2 (TV show)",
+        "addToWishlist > defaults to type=0 (movie) when no type argument is provided",
+        "addToWishlist > sets modelId to the provided item ID",
+        "addToWishlist > calls the add-favorite-vod endpoint",
+        "addToWishlist > returns whatever ApiClient.post returns",
+        "addToWishlist > passes the correct type value in the POST body for TV shows",
+        "removeFromWishlist > sets model to SingleEventVod when type is 0 (movie)",
+        "removeFromWishlist > sets model to MultiEventVod when type is 2 (TV show)",
+        "removeFromWishlist > defaults to type=0 (movie) when no type argument is provided",
+        "removeFromWishlist > sets modelId to the provided item ID",
+        "removeFromWishlist > calls the remove-favorite-vod endpoint",
+        "addWatchList reducer > initialises with an empty wishlist array",
+        "addWatchList reducer > ADD_TO_WISHLIST adds a single ID to an empty wishlist",
+        "addWatchList reducer > ADD_TO_WISHLIST spreads multiple IDs into the existing wishlist",
+        "addWatchList reducer > ADD_TO_WISHLIST does not remove existing IDs when adding new ones",
+        "addWatchList reducer > REMOVE_FROM_WISHLIST removes the matching ID from the wishlist",
+        "addWatchList reducer > REMOVE_FROM_WISHLIST keeps all other IDs intact",
+        "addWatchList reducer > REMOVE_FROM_WISHLIST on a non-existent ID leaves the wishlist unchanged",
+        "addWatchList reducer > CLEAR_WISHLIST resets a populated wishlist to an empty array",
+        "addWatchList reducer > CLEAR_WISHLIST on an already empty wishlist stays empty",
+        "addWatchList reducer > returns unchanged state for an unknown action type"
+      ],
+      "files": [
+        "test_repository/feature/api-navigation.feature.test.js",
+        "test_repository/feature/wishlist.feature.test.js"
+      ],
+      "count": 61
+    },
+
+    "LOW": {
+      "reason": "No loosely related tests reference watchlist, MyFavourites, or WatchList.js in any other test file.",
+      "tests": [],
+      "count": 0
+    },
+
+    "SKIP": {
+      "reason": "Sources for these test files have no overlap with ApiEndPoints.js, movieDetails.js, WatchList.js, MyFavourites.js, movieSubPage.js, or TvShowDetails.js.",
+      "files": [
+        "test_repository/standalone/utilities.pure.test.js",
+        "test_repository/standalone/regex.constants.test.js",
+        "test_repository/standalone/storage.pure.test.js",
+        "test_repository/standalone/action-creators.pure.test.js",
+        "test_repository/feature/user-profile.feature.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js",
+        "test_repository/feature/reducers-spinners-app.feature.test.js",
+        "test_repository/feature/stream-video.feature.test.js",
+        "test_repository/feature/home-search.feature.test.js",
+        "test_repository/feature/sports.feature.test.js",
+        "test_repository/feature/auth-reducers.feature.test.js",
+        "test_repository/feature/ui-state.feature.test.js",
+        "test_repository/cross-dependent/auth-storage.cross.test.js",
+        "test_repository/cross-dependent/payment-state.cross.test.js"
+      ],
+      "count": 458
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "gap_id": "GAP-01",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/wishlist.feature.test.js",
+      "type": "SYMBOL_NOT_TESTED_IN_SOURCE_FILE",
+      "file": "src/services/api/common/ApiEndPoints.js",
+      "symbols": ["moviesWatchlistApi", "TVShowsWatchlistApi", "watchlistApi (new)"],
+      "tests_written": [
+        "watchlistApi endpoint > includes both types=0 (movies) and types=2 (TV shows) in one query string",
+        "watchlistApi endpoint > sets filterType to Favorites",
+        "watchlistApi endpoint > uses the /movie/composer/content path",
+        "watchlistApi endpoint > sets carouselType to Static",
+        "watchlistApi endpoint > does not contain the old movies-only types=0 without types=2"
+      ]
+    },
+    {
+      "gap_id": "GAP-02",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/wishlist.feature.test.js",
+      "type": "COMPLETELY_UNTESTED_FILE",
+      "file": "src/services/api/common/moviesDetails/movieDetails.js",
+      "symbols": [
+        "getAllWatchlistMoviesApi (removed)",
+        "getAllWatchlistTVShowsApi (removed)",
+        "getAllWatchlistApi (new)"
+      ],
+      "tests_written": [
+        "getAllWatchlistApi > calls ApiClient.get exactly once when invoked",
+        "getAllWatchlistApi > calls ApiClient.get with the unified watchlistApi URL",
+        "getAllWatchlistApi > returns whatever ApiClient.get returns",
+        "getAllWatchlistApi > does not call ApiClient.post — only a GET request is made"
+      ]
+    },
+    {
+      "gap_id": "GAP-03",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/wishlist.feature.test.js",
+      "type": "COMPLETELY_UNTESTED_FILE",
+      "file": "src/services/api/common/watchList/WatchList.js",
+      "symbols": [
+        "addWishListsMovies (removed)",
+        "removeWishListsMovies (removed)",
+        "addWishListsTVShow (removed)",
+        "removeWishListsTVShow (removed)",
+        "addToWishlist (new unified function)",
+        "removeFromWishlist (new unified function)"
+      ],
+      "consumer_files_updated_in_diff": [
+        "src/screens/movieSubPage/movieSubPage.js — import updated to addToWishlist/removeFromWishlist with type=0",
+        "src/screens/movieSubPage/TvShowDetails.js — import updated to addToWishlist/removeFromWishlist with type=2"
+      ],
+      "tests_written": [
+        "addToWishlist > sets model to SingleEventVod when type is 0 (movie)",
+        "addToWishlist > sets model to MultiEventVod when type is 2 (TV show)",
+        "addToWishlist > defaults to type=0 (movie) when no type argument is provided",
+        "addToWishlist > sets modelId to the provided item ID",
+        "addToWishlist > calls the add-favorite-vod endpoint",
+        "addToWishlist > returns whatever ApiClient.post returns",
+        "addToWishlist > passes the correct type value in the POST body for TV shows",
+        "removeFromWishlist > sets model to SingleEventVod when type is 0 (movie)",
+        "removeFromWishlist > sets model to MultiEventVod when type is 2 (TV show)",
+        "removeFromWishlist > defaults to type=0 (movie) when no type argument is provided",
+        "removeFromWishlist > sets modelId to the provided item ID",
+        "removeFromWishlist > calls the remove-favorite-vod endpoint"
+      ]
+    },
+    {
+      "gap_id": "GAP-04",
+      "status": "OPEN",
+      "type": "COMPLETELY_UNTESTED_SCREEN",
+      "file": "src/screens/MyFavourites/MyFavourites.js",
+      "symbols": [
+        "titles (removed)",
+        "WATCHLIST_TITLE (new)",
+        "getAllWatchlist (changed from Promise.allSettled over two calls to a single API call)"
+      ],
+      "severity": "HIGH — the UI category split is the visible user-facing change. Testing getAllWatchlist requires mocking React hooks (useState, useEffect) and the React Native rendering environment. This cannot be done with a plain Jest unit test and needs a React Native Testing Library setup.",
+      "recommended_describe": "getAllWatchlist in MyFavourites",
+      "recommended_tests": [
+        "calls getAllWatchlistApi exactly once (not two separate API calls)",
+        "sets watchList to a single section with title 'My Watchlist'",
+        "maps response items into cardsData on the single section object",
+        "calls setIsLoading(false) when the API resolves",
+        "calls setIsLoading(false) when the API rejects",
+        "does NOT produce a section with title 'Movies'",
+        "does NOT produce a section with title 'TV Shows'"
+      ]
+    },
+    {
+      "gap_id": "GAP-05",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/wishlist.feature.test.js",
+      "type": "COMPLETELY_UNTESTED_REDUCER",
+      "file": "src/reducer/addWatchList.js",
+      "symbols": [
+        "ADD_TO_WISHLIST",
+        "REMOVE_FROM_WISHLIST",
+        "CLEAR_WISHLIST",
+        "addWatchList (reducer)"
+      ],
+      "tests_written": [
+        "addWatchList reducer > initialises with an empty wishlist array",
+        "addWatchList reducer > ADD_TO_WISHLIST adds a single ID to an empty wishlist",
+        "addWatchList reducer > ADD_TO_WISHLIST spreads multiple IDs into the existing wishlist",
+        "addWatchList reducer > ADD_TO_WISHLIST does not remove existing IDs when adding new ones",
+        "addWatchList reducer > REMOVE_FROM_WISHLIST removes the matching ID from the wishlist",
+        "addWatchList reducer > REMOVE_FROM_WISHLIST keeps all other IDs intact",
+        "addWatchList reducer > REMOVE_FROM_WISHLIST on a non-existent ID leaves the wishlist unchanged",
+        "addWatchList reducer > CLEAR_WISHLIST resets a populated wishlist to an empty array",
+        "addWatchList reducer > CLEAR_WISHLIST on an already empty wishlist stays empty",
+        "addWatchList reducer > returns unchanged state for an unknown action type"
+      ]
+    }
+  ],
+
+  "selection_proof": {
+    "standalone_selected": 0,
+    "cross_dependent_selected": 0,
+    "feature_selected": 30,
+    "total_selected": 30,
+    "total_skipped": 489,
+    "test_suite_breakdown": {
+      "test_files_total": 16,
+      "test_files_triggered_HIGH": 1,
+      "test_files_skipped": 15,
+      "tests_total": 519,
+      "tests_HIGH": 30,
+      "tests_SKIP": 489
+    }
+  },
+
+  "frontend_impact": {
+    "visible_to_user": true,
+    "screens_affected": [
+      {
+        "screen": "My Wishlist / MyFavourites screen",
+        "before": "Two separate sections labelled 'Movies' and 'TV Shows', each populated by an independent API call",
+        "after": "One unified section labelled 'My Watchlist', populated by a single API call with types=0,2"
+      },
+      {
+        "screen": "Movie detail page (movieSubPage.js)",
+        "before": "Add/remove button called addWishListsMovies / removeWishListsMovies",
+        "after": "Same button now calls addToWishlist(id, 0) / removeFromWishlist(id, 0) — behaviour identical to the user"
+      },
+      {
+        "screen": "TV Show detail page (TvShowDetails.js)",
+        "before": "Add/remove button called addWishListsTVShow / removeWishListsTVShow",
+        "after": "Same button now calls addToWishlist(id, 2) / removeFromWishlist(id, 2) — behaviour identical to the user"
+      }
+    ],
+    "compile_safe": true,
+    "compile_note": "All 6 changed files are updated consistently. No dangling import of the old function names remains anywhere in the codebase."
+  },
+
+  "summary": {
+    "total_tests": 533,
+    "test_files": 16,
+    "CRITICAL": 14,
+    "HIGH": 61,
+    "LOW": 0,
+    "SKIP": 458,
+    "coverage_gaps": 5,
+    "gaps_closed": 4,
+    "gaps_remaining": 1,
+    "new_test_files": [
+      { "file": "test_repository/feature/wishlist.feature.test.js",        "tests": 45,  "closes_gaps": ["GAP-01", "GAP-02", "GAP-03", "GAP-05"], "critical_describes": ["moviesWatchlistApi", "TVShowsWatchlistApi", "getAllWatchlistMoviesApi", "getAllWatchlistTVShowsApi", "addWishListsMovies", "addWishListsTVShow"] },
+      { "file": "test_repository/feature/stream-video.feature.test.js",     "tests": 29,  "closes_gaps": [] },
+      { "file": "test_repository/feature/home-search.feature.test.js",      "tests": 19,  "closes_gaps": [] },
+      { "file": "test_repository/feature/sports.feature.test.js",           "tests": 24,  "closes_gaps": [] },
+      { "file": "test_repository/feature/auth-reducers.feature.test.js",    "tests": 30,  "closes_gaps": [] },
+      { "file": "test_repository/feature/ui-state.feature.test.js",         "tests": 22,  "closes_gaps": [] },
+      { "file": "test_repository/standalone/action-creators.pure.test.js",  "tests": 50,  "closes_gaps": [] }
+    ],
+    "gap_note": "GAP-01 through GAP-03 and GAP-05 are fully closed by wishlist.feature.test.js (45 tests, 14 of which are CRITICAL). GAP-04 (MyFavourites.js UI screen orchestration) remains open — it requires React Native Testing Library and cannot be covered by a plain Jest unit test. wishlist.feature.test.js is now both CRITICAL (14 tests whose describe() labels match the removed symbols) and HIGH (31 remaining tests that share source files with the diff). api-navigation.feature.test.js contributes the other 30 HIGH tests."
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage test_repository/feature/wishlist.feature.test.js test_repository/feature/api-navigation.feature.test.js",
+  "jest_run_note": "wishlist.feature.test.js must always be run for this diff: 14 CRITICAL tests directly name the removed symbols, and 31 HIGH tests validate the new unified watchlistApi, getAllWatchlistApi, addToWishlist, removeFromWishlist, and addWatchList reducer. api-navigation.feature.test.js adds 30 HIGH tests confirming no other endpoint contracts in ApiEndPoints.js were accidentally broken."
+}

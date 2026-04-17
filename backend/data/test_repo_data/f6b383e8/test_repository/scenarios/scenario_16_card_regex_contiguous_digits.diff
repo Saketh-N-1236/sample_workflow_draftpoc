@@ -1,0 +1,10 @@
+diff --git a/src/types/constants.ts b/src/types/constants.ts
+index a1b2c3d..9e0f1a2 100644
+--- a/src/types/constants.ts
++++ b/src/types/constants.ts
+@@ -5,7 +5,7 @@ export const USERNAME_REGEX = /^[a-zA-Z][a-zA-Z ]{2,24}$/
+ export const PASSWORD_REGEX =
+   /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]{10,30}$/
+-  export const CARD_REGEX = /^[0-9\s]*$/
++  export const CARD_REGEX = /^[0-9]*$/
+ export const EXPIRY_DATE_REGEX = /\b(0[1-9]|1[0-2])\/?([0-9]{4}|[0-9]{2})\b/

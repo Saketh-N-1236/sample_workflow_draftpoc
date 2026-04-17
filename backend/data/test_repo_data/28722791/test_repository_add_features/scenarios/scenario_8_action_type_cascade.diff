@@ -1,0 +1,9 @@
+diff --git a/src/reducer/actiotypes.js b/src/reducer/actiotypes.js
+index 4a5b6c7..8d9e0f1 100644
+--- a/src/reducer/actiotypes.js
++++ b/src/reducer/actiotypes.js
+@@ -5,1 +5,1 @@
+-export const UPDATEREFRESHEDTOKEN = 'UPDATE_REFRESHED_TOKEN';
++export const UPDATEREFRESHEDTOKEN = 'REFRESH_TOKEN_UPDATE';
+@@ -18,0 +19,1 @@
++export const SESSION_EXPIRED = 'SESSION_EXPIRED';

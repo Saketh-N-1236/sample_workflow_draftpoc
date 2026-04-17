@@ -30,10 +30,24 @@ def build_embedding_text(test: dict, provider: str = 'openai') -> str:
 
     # ANALYSIS-BASED: Real test name + test body (from language analyzers)
     if test.get('is_analysis_based'):
-        if test.get('method_name'):
-            parts.append(f"Test: {test['method_name']}")
-        if test.get('class_name'):
-            parts.append(f"Component: {test['class_name']}")
+        # Strong identifiers first
+        _method = test.get('method_name') or ''
+        _class  = test.get('class_name') or ''
+        _file   = test.get('test_file_path') or test.get('file_path') or test.get('relative_path') or ''
+        id_parts = []
+        if _class:
+            id_parts.append(f"Class: {_class}")
+        if _method:
+            id_parts.append(f"Method: {_method}")
+        if _file:
+            id_parts.append(f"File: {_file}")
+        if id_parts:
+            parts.append("Identifiers: " + " | ".join(id_parts))
+
+        if _method:
+            parts.append(f"Test: {_method}")
+        if _class:
+            parts.append(f"Component: {_class}")
         if test.get('language') and test['language'] != 'unknown':
             parts.append(f"Language: {test['language']}")
         content = test.get('content', '')
@@ -62,7 +76,20 @@ def build_embedding_text(test: dict, provider: str = 'openai') -> str:
         chunk_content = test.get('content', '')
         chunk_index = test.get('chunk_index', 0)
         total_chunks = test.get('total_chunks', 1)
+        method_name = test.get('method_name') or ''
+        class_name = test.get('class_name') or ''
         
+        # Strong identifiers first
+        id_parts = []
+        if class_name:
+            id_parts.append(f"Class: {class_name}")
+        if method_name:
+            id_parts.append(f"Method: {method_name}")
+        if file_path:
+            id_parts.append(f"File: {file_path}")
+        if id_parts:
+            parts.append("Identifiers: " + " | ".join(id_parts))
+
         # File metadata
         if file_name:
             parts.append(f"Test file: {file_name}")
@@ -102,12 +129,25 @@ def build_embedding_text(test: dict, provider: str = 'openai') -> str:
         return embedding_text
     
     # LEGACY APPROACH: Handle test descriptions (from JSON/database)
-    if test.get('method_name'):
-        readable = test['method_name'].replace('test_', '').replace('_', ' ')
+    _method = test.get('method_name') or ''
+    _class  = test.get('class_name') or ''
+    _file   = test.get('test_file_path') or test.get('file_path') or test.get('relative_path') or ''
+    id_parts = []
+    if _class:
+        id_parts.append(f"Class: {_class}")
+    if _method:
+        id_parts.append(f"Method: {_method}")
+    if _file:
+        id_parts.append(f"File: {_file}")
+    if id_parts:
+        parts.append("Identifiers: " + " | ".join(id_parts))
+
+    if _method:
+        readable = _method.replace('test_', '').replace('_', ' ')
         parts.append(f"Test: {readable}")
 
-    if test.get('class_name'):
-        readable_class = test['class_name'].replace('Test', '').replace('_', ' ')
+    if _class:
+        readable_class = _class.replace('Test', '').replace('_', ' ')
         parts.append(f"Component: {readable_class}")
 
     # Check if description contains test content (vs just docstring)

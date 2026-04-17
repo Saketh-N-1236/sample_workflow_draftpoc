@@ -124,74 +124,55 @@ const ResultsDisplay = ({ analysisResults, selectionResults }) => {
                 <div style={{ fontSize: '14px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>
                   Selected Tests ({(() => {
                     if (activeTab === 'all') return selectionResults.tests.length;
-                    if (activeTab === 'ast') {
+                        // Match types that are semantic-driven, not AST-driven.
+                        const _SEMANTIC_MATCH_TYPES = new Set([
+                          'semantic', 'colocated_from_semantic', 'semantic_colocation', ''
+                        ]);
+                        const _isASTMatchType = mt =>
+                          mt && mt !== 'unknown' && !_SEMANTIC_MATCH_TYPES.has(mt);
+
+                        if (activeTab === 'ast') {
                       return selectionResults.tests.filter(t => {
-                        // First check explicit flags (most reliable)
+                        // Explicit flags are most reliable — set by the backend after merge
                         if (t.is_ast_match !== undefined && t.is_semantic_match !== undefined) {
                           return t.is_ast_match === true && t.is_semantic_match === false;
                         }
-                        
-                        // Fallback: check arrays and properties
                         const testId = String(t.test_id);
                         const astTestIds = new Set((selectionResults.astMatchDetails || []).map(m => String(m.test_id)));
                         const semanticTestIds = new Set((selectionResults.semanticMatchDetails || []).map(m => String(m.test_id)));
                         const inAST = astTestIds.has(testId);
                         const inSemantic = semanticTestIds.has(testId) || (t.similarity && t.similarity > 0);
-                        const hasASTIndicators = (
-                          (t.match_type && t.match_type !== 'unknown' && t.match_type !== 'semantic') ||
-                          (t.matched_classes && t.matched_classes.length > 0)
-                        );
+                        const hasASTIndicators = _isASTMatchType(t.match_type) || !!(t.matched_classes && t.matched_classes.length > 0);
                         return (inAST || hasASTIndicators) && !inSemantic;
                       }).length;
                     }
                     if (activeTab === 'semantic') {
                       return selectionResults.tests.filter(t => {
-                        // First check explicit flags (most reliable)
                         if (t.is_ast_match !== undefined && t.is_semantic_match !== undefined) {
                           return t.is_semantic_match === true && t.is_ast_match === false;
                         }
-                        
-                        // Fallback: check arrays and properties
                         const testId = String(t.test_id);
                         const semanticTestIds = new Set((selectionResults.semanticMatchDetails || []).map(m => String(m.test_id)));
                         const astTestIds = new Set((selectionResults.astMatchDetails || []).map(m => String(m.test_id)));
-                        const inSemantic = semanticTestIds.has(testId) || (t.similarity && t.similarity > 0);
-                        const inAST = astTestIds.has(testId) || (
-                          (t.match_type && t.match_type !== 'unknown' && t.match_type !== 'semantic') ||
-                          (t.matched_classes && t.matched_classes.length > 0)
-                        );
+                        const inSemantic = semanticTestIds.has(testId) || (t.similarity && t.similarity > 0)
+                          || (t.match_type && _SEMANTIC_MATCH_TYPES.has(t.match_type) && t.match_type !== '');
+                        const inAST = astTestIds.has(testId) || _isASTMatchType(t.match_type)
+                          || !!(t.matched_classes && t.matched_classes.length > 0);
                         return inSemantic && !inAST;
                       }).length;
                     }
                     if (activeTab === 'both') {
                       return selectionResults.tests.filter(t => {
-                        // First check explicit flags (most reliable)
                         if (t.is_ast_match !== undefined && t.is_semantic_match !== undefined) {
                           return t.is_ast_match === true && t.is_semantic_match === true;
                         }
-                        
-                        // Fallback: check arrays and properties
                         const testId = String(t.test_id);
                         const astTestIds = new Set((selectionResults.astMatchDetails || []).map(m => String(m.test_id)));
                         const semanticTestIds = new Set((selectionResults.semanticMatchDetails || []).map(m => String(m.test_id)));
-                        
-                        // Check AST indicators (more comprehensive)
-                        const inASTDetails = astTestIds.has(testId);
-                        const hasASTMatchType = t.match_type && 
-                          t.match_type !== 'unknown' && 
-                          t.match_type !== 'semantic' &&
-                          t.match_type !== '';
-                        const hasMatchedClasses = t.matched_classes && t.matched_classes.length > 0;
-                        const hasASTIndicators = hasASTMatchType || hasMatchedClasses;
-                        const isAST = inASTDetails || hasASTIndicators;
-                        
-                        // Check semantic indicators (more comprehensive)
-                        const inSemanticDetails = semanticTestIds.has(testId);
-                        const hasSimilarity = t.similarity && typeof t.similarity === 'number' && t.similarity > 0;
-                        const isSemanticMatchType = t.match_type && t.match_type.toLowerCase() === 'semantic';
-                        const isSemantic = inSemanticDetails || hasSimilarity || isSemanticMatchType;
-                        
-                        // Must have BOTH
+                        const isAST = astTestIds.has(testId) || _isASTMatchType(t.match_type)
+                          || !!(t.matched_classes && t.matched_classes.length > 0);
+                        const isSemantic = semanticTestIds.has(testId) || (t.similarity && t.similarity > 0)
+                          || (t.match_type && _SEMANTIC_MATCH_TYPES.has(t.match_type) && t.match_type !== '');
                         return isAST && isSemantic;
                       }).length;
                     }
@@ -211,10 +192,8 @@ const ResultsDisplay = ({ analysisResults, selectionResults }) => {
                         <th style={{ padding: '8px', textAlign: 'left' }}>Test ID</th>
                         <th style={{ padding: '8px', textAlign: 'left' }}>Test Name</th>
                         <th style={{ padding: '8px', textAlign: 'left' }}>Class</th>
-                        <th style={{ padding: '8px', textAlign: 'left' }}>Type</th>
                         <th style={{ padding: '8px', textAlign: 'left' }}>Match Type</th>
-                        <th style={{ padding: '8px', textAlign: 'left' }}>Similarity</th>
-                        <th style={{ padding: '8px', textAlign: 'left' }}>Confidence</th>
+                        <th style={{ padding: '8px', textAlign: 'left' }}>Classification</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -222,88 +201,51 @@ const ResultsDisplay = ({ analysisResults, selectionResults }) => {
                         // Filter tests based on active tab
                         let filteredTests = selectionResults.tests;
                         
+                        const _SEM_TYPES = new Set([
+                          'semantic', 'colocated_from_semantic', 'semantic_colocation'
+                        ]);
+                        const _isASTMT = mt => mt && mt !== 'unknown' && mt !== '' && !_SEM_TYPES.has(mt);
+
                         if (activeTab === 'ast') {
-                          // Filter: AST matches only (NOT semantic)
                           filteredTests = selectionResults.tests.filter(t => {
-                            // First check explicit flags (most reliable)
                             if (t.is_ast_match !== undefined && t.is_semantic_match !== undefined) {
                               return t.is_ast_match === true && t.is_semantic_match === false;
                             }
-                            
-                            // Fallback: check arrays and properties
                             const testId = String(t.test_id);
-                            const astTestIds = new Set(
-                              (selectionResults.astMatchDetails || []).map(m => String(m.test_id))
-                            );
-                            const semanticTestIds = new Set(
-                              (selectionResults.semanticMatchDetails || []).map(m => String(m.test_id))
-                            );
+                            const astTestIds = new Set((selectionResults.astMatchDetails || []).map(m => String(m.test_id)));
+                            const semanticTestIds = new Set((selectionResults.semanticMatchDetails || []).map(m => String(m.test_id)));
                             const inAST = astTestIds.has(testId);
-                            const inSemantic = semanticTestIds.has(testId) || (t.similarity && t.similarity > 0);
-                            const hasASTIndicators = (
-                              (t.match_type && t.match_type !== 'unknown' && t.match_type !== 'semantic') ||
-                              (t.matched_classes && t.matched_classes.length > 0)
-                            );
+                            const inSemantic = semanticTestIds.has(testId) || (t.similarity && t.similarity > 0)
+                              || _SEM_TYPES.has(t.match_type);
+                            const hasASTIndicators = _isASTMT(t.match_type) || !!(t.matched_classes && t.matched_classes.length > 0);
                             return (inAST || hasASTIndicators) && !inSemantic;
                           });
                         } else if (activeTab === 'semantic') {
-                          // Filter: semantic matches only (NOT AST)
                           filteredTests = selectionResults.tests.filter(t => {
-                            // First check explicit flags (most reliable)
                             if (t.is_ast_match !== undefined && t.is_semantic_match !== undefined) {
                               return t.is_semantic_match === true && t.is_ast_match === false;
                             }
-                            
-                            // Fallback: check arrays and properties
                             const testId = String(t.test_id);
-                            const semanticTestIds = new Set(
-                              (selectionResults.semanticMatchDetails || []).map(m => String(m.test_id))
-                            );
-                            const astTestIds = new Set(
-                              (selectionResults.astMatchDetails || []).map(m => String(m.test_id))
-                            );
-                            const inSemantic = semanticTestIds.has(testId) || (t.similarity && t.similarity > 0);
-                            const inAST = astTestIds.has(testId) || (
-                              (t.match_type && t.match_type !== 'unknown' && t.match_type !== 'semantic') ||
-                              (t.matched_classes && t.matched_classes.length > 0)
-                            );
+                            const semanticTestIds = new Set((selectionResults.semanticMatchDetails || []).map(m => String(m.test_id)));
+                            const astTestIds = new Set((selectionResults.astMatchDetails || []).map(m => String(m.test_id)));
+                            const inSemantic = semanticTestIds.has(testId) || (t.similarity && t.similarity > 0)
+                              || _SEM_TYPES.has(t.match_type);
+                            const inAST = astTestIds.has(testId) || _isASTMT(t.match_type)
+                              || !!(t.matched_classes && t.matched_classes.length > 0);
                             return inSemantic && !inAST;
                           });
                         } else if (activeTab === 'both') {
-                          // Get tests found by both AST and semantic
-                          // Use explicit flags if available, otherwise fall back to checking arrays and properties
                           filteredTests = selectionResults.tests.filter(t => {
-                            // First check explicit flags (most reliable)
                             if (t.is_ast_match !== undefined && t.is_semantic_match !== undefined) {
                               return t.is_ast_match === true && t.is_semantic_match === true;
                             }
-                            
-                            // Fallback: check arrays and properties
                             const testId = String(t.test_id);
-                            const astTestIds = new Set(
-                              (selectionResults.astMatchDetails || []).map(m => String(m.test_id))
-                            );
-                            const semanticTestIds = new Set(
-                              (selectionResults.semanticMatchDetails || []).map(m => String(m.test_id))
-                            );
-                            
-                            // Check AST indicators (more comprehensive)
-                            const inASTDetails = astTestIds.has(testId);
-                            const hasASTMatchType = t.match_type && 
-                              t.match_type !== 'unknown' && 
-                              t.match_type !== 'semantic' &&
-                              t.match_type !== '';
-                            const hasMatchedClasses = t.matched_classes && t.matched_classes.length > 0;
-                            const hasASTIndicators = hasASTMatchType || hasMatchedClasses;
-                            const isAST = inASTDetails || hasASTIndicators;
-                            
-                            // Check semantic indicators (more comprehensive)
-                            const inSemanticDetails = semanticTestIds.has(testId);
-                            const hasSimilarity = t.similarity && typeof t.similarity === 'number' && t.similarity > 0;
-                            const isSemanticMatchType = t.match_type && t.match_type.toLowerCase() === 'semantic';
-                            const isSemantic = inSemanticDetails || hasSimilarity || isSemanticMatchType;
-                            
-                            // Must have BOTH
+                            const astTestIds = new Set((selectionResults.astMatchDetails || []).map(m => String(m.test_id)));
+                            const semanticTestIds = new Set((selectionResults.semanticMatchDetails || []).map(m => String(m.test_id)));
+                            const isAST = astTestIds.has(testId) || _isASTMT(t.match_type)
+                              || !!(t.matched_classes && t.matched_classes.length > 0);
+                            const isSemantic = semanticTestIds.has(testId) || (t.similarity && t.similarity > 0)
+                              || _SEM_TYPES.has(t.match_type);
                             return isAST && isSemantic;
                           });
                         }
@@ -313,32 +255,35 @@ const ResultsDisplay = ({ analysisResults, selectionResults }) => {
                           const semanticMatch = (selectionResults.semanticMatchDetails || []).find(
                             m => m.test_id === test.test_id
                           );
-                          // Also check test object itself for similarity
-                          const similarity = semanticMatch?.similarity || test.similarity;
                           
-                          // Determine match type - check both astMatchDetails and test properties
-                          // First check astMatchDetails array
-                          const inASTDetails = (selectionResults.astMatchDetails || []).some(
-                            m => String(m.test_id) === String(test.test_id)
-                          );
-                          
-                          // Also check test properties for AST indicators
-                          const hasASTIndicators = (
-                            (test.match_type && 
-                             test.match_type !== 'unknown' && 
-                             test.match_type !== 'semantic') ||
-                            (test.matched_classes && test.matched_classes.length > 0)
-                          );
-                          
-                          // AST if in details OR has AST indicators (and not semantic-only)
-                          const isAST = inASTDetails || (hasASTIndicators && !(test.similarity && test.similarity > 0));
-                          
-                          // Semantic if has semantic match OR has similarity score
-                          const isSemantic = !!semanticMatch || (test.similarity && test.similarity > 0);
+                          // Determine match type label using explicit backend flags (most reliable).
+                          // Fall back to detail arrays only when flags are absent.
+                          const _semTypes = new Set(['semantic', 'colocated_from_semantic', 'semantic_colocation']);
+                          const _isASTMatchType2 = mt => mt && mt !== 'unknown' && mt !== '' && !_semTypes.has(mt);
+
+                          let isAST, isSemantic;
+                          if (test.is_ast_match !== undefined && test.is_semantic_match !== undefined) {
+                            isAST = test.is_ast_match;
+                            isSemantic = test.is_semantic_match;
+                          } else {
+                            const inASTDetails = (selectionResults.astMatchDetails || []).some(
+                              m => String(m.test_id) === String(test.test_id)
+                            );
+                            isSemantic = !!semanticMatch || (test.similarity && test.similarity > 0)
+                              || _semTypes.has(test.match_type);
+                            isAST = inASTDetails || (_isASTMatchType2(test.match_type) && !isSemantic)
+                              || !!(test.matched_classes && test.matched_classes.length > 0);
+                          }
                           const matchTypeLabel = isAST && isSemantic ? 'Both' : 
                                                  isAST ? 'AST' : 
                                                  isSemantic ? 'Semantic' : 'Unknown';
                           
+                          const depType = test.dependency_type;
+                          const depLabel = depType === 'independent' ? 'Independent' : 'Cross-dep';
+                          const depStyle = depType === 'independent'
+                            ? { bg: '#e8f5e9', color: '#2e7d32', title: 'Directly imports or declares coverage of the changed file' }
+                            : { bg: '#fff3e0', color: '#e65100', title: 'Indirectly affected via import chain or semantic similarity' };
+
                           return (
                             <tr key={idx} style={{ borderBottom: '1px solid #f0f0f0' }}>
                               <td style={{ padding: '8px', fontFamily: 'monospace', fontSize: '12px' }}>
@@ -349,17 +294,6 @@ const ResultsDisplay = ({ analysisResults, selectionResults }) => {
                               </td>
                               <td style={{ padding: '8px', color: '#666' }}>
                                 {test.class_name || '-'}
-                              </td>
-                              <td style={{ padding: '8px' }}>
-                                <span style={{ 
-                                  padding: '2px 6px', 
-                                  borderRadius: '4px', 
-                                  background: test.test_type === 'unit' ? '#e3f2fd' : test.test_type === 'integration' ? '#f3e5f5' : '#fff3e0',
-                                  color: test.test_type === 'unit' ? '#1976d2' : test.test_type === 'integration' ? '#7b1fa2' : '#e65100',
-                                  fontSize: '11px'
-                                }}>
-                                  {test.test_type || 'other'}
-                                </span>
                               </td>
                               <td style={{ padding: '8px' }}>
                                 <span style={{ 
@@ -378,32 +312,18 @@ const ResultsDisplay = ({ analysisResults, selectionResults }) => {
                                 </span>
                               </td>
                               <td style={{ padding: '8px' }}>
-                                {similarity !== undefined && similarity !== null ? (
-                                  <span style={{ 
-                                    padding: '2px 6px', 
-                                    borderRadius: '4px', 
-                                    background: similarity >= 0.6 ? '#e8f5e9' : similarity >= 0.4 ? '#fff3e0' : '#ffebee',
-                                    color: similarity >= 0.6 ? '#2e7d32' : similarity >= 0.4 ? '#f57c00' : '#c62828',
-                                    fontSize: '11px',
-                                    fontWeight: '500'
-                                  }}>
-                                    {(similarity * 100).toFixed(1)}%
+                                {depType && (
+                                  <span
+                                    title={depStyle.title}
+                                    style={{
+                                      padding: '2px 8px', borderRadius: '4px',
+                                      background: depStyle.bg, color: depStyle.color,
+                                      fontSize: '11px', fontWeight: '600', cursor: 'default',
+                                    }}
+                                  >
+                                    {depLabel}
                                   </span>
-                                ) : (
-                                  <span style={{ color: '#999', fontSize: '11px' }}>-</span>
                                 )}
-                              </td>
-                              <td style={{ padding: '8px' }}>
-                                <span style={{ 
-                                  padding: '2px 6px', 
-                                  borderRadius: '4px', 
-                                  background: test.confidence === 'high' ? '#e8f5e9' : test.confidence === 'medium' ? '#fff3e0' : '#ffebee',
-                                  color: test.confidence === 'high' ? '#2e7d32' : test.confidence === 'medium' ? '#f57c00' : '#c62828',
-                                  fontSize: '11px',
-                                  fontWeight: '500'
-                                }}>
-                                  {test.confidence || 'medium'}
-                                </span>
                               </td>
                             </tr>
                           );

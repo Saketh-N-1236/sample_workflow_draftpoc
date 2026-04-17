@@ -1,3 +1,39 @@
+/* Responsive improvements */
+@media (max-width: 900px) {
+  .details-content .section-content,
+  .details-section,
+  .repository-detail-page .info-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  th, td {
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 600px) {
+  .page-header {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .section-title {
+    font-size: 14px;
+  }
+  .page-title {
+    font-size: 18px;
+  }
+}
 * {
   margin: 0;
   padding: 0;
@@ -34,7 +70,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 64px;
+  height: 60px;
   z-index: 100;
 }
 
@@ -121,12 +157,15 @@ body {
 
 /* Sidebar Styles */
 .sidebar {
+  flex: 0 0 240px; /* fixed basis so it does not shrink on zoom */
   width: 240px;
   background: white;
   border-right: 1px solid #e0e0e0;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
+  position: sticky; /* keep visible when page scrolls */
+  top: 0;
 }
 
 .sidebar-header {
@@ -181,10 +220,11 @@ body {
 }
 
 .content-area {
-  flex: 1;
+  flex: 1 1 auto;
   background: #f5f5f5;
   padding: 24px;
   width: 100%;
+  min-width: 0; /* allow content to shrink instead of pushing sidebar */
 }
 
 .project-selector {
@@ -622,6 +662,10 @@ body {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .action-button.primary {
@@ -629,7 +673,7 @@ body {
   color: white;
 }
 
-.action-button.primary:hover {
+.action-button.primary:hover:not(:disabled) {
   background: #1565c0;
 }
 
@@ -639,7 +683,7 @@ body {
   border: 1px solid #e0e0e0;
 }
 
-.action-button.secondary:hover {
+.action-button.secondary:hover:not(:disabled) {
   background: #e0e0e0;
 }
 
@@ -647,6 +691,56 @@ body {
   background: #e0e0e0;
   color: #999;
   cursor: not-allowed;
+}
+
+/* Spinner used inside the Select Tests button */
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
+
+.btn-spinner {
+  width: 15px;
+  height: 15px;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #ffffff;
+  border-radius: 50%;
+  animation: btn-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+/* Selection loading overlay shown in the Test Selection tab */
+.selection-loading-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 60px 20px;
+}
+
+@keyframes overlay-spin {
+  to { transform: rotate(360deg); }
+}
+
+.selection-loading-overlay .overlay-spinner {
+  width: 48px;
+  height: 48px;
+  border: 4px solid #e3eaf4;
+  border-top-color: #1976d2;
+  border-radius: 50%;
+  animation: overlay-spin 0.9s linear infinite;
+}
+
+.selection-loading-overlay .overlay-label {
+  font-size: 16px;
+  color: #555;
+  font-weight: 500;
+}
+
+.selection-loading-overlay .overlay-sub {
+  font-size: 13px;
+  color: #999;
+  margin-top: -12px;
 }
 
 /* Progress Indicator */
@@ -891,6 +985,85 @@ body {
   border: 1px solid #e0e0e0;
   padding: 20px;
   margin-bottom: 20px;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.branch-selector {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.branch-selector-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.branch-selector-select {
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+  box-sizing: border-box;
+}
+
+.branch-selector-select:disabled {
+  cursor: not-allowed;
+}
+
+.branch-selector-refresh {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  background: #f5f5f5;
+  font-size: 14px;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  transition: background 0.15s;
+}
+
+.branch-selector-refresh:hover:not(:disabled) {
+  background: #e8e8e8;
+}
+
+.branch-selector-refresh:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.branch-refresh-icon {
+  display: inline-block;
+  font-size: 16px;
+  line-height: 1;
+  transition: transform 0.2s;
+}
+
+.branch-selector-refresh:hover:not(:disabled) .branch-refresh-icon {
+  transform: rotate(30deg);
+}
+
+.branch-refresh-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid #bdbdbd;
+  border-top-color: #1976d2;
+  border-radius: 50%;
+  animation: btn-spin 0.7s linear infinite;
+  flex-shrink: 0;
 }
 
 /* Tabs */

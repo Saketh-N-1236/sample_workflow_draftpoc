@@ -1,0 +1,125 @@
+{
+  "scenario": "11",
+  "category": "STANDALONE — SINGLE DESCRIBE SYMBOL",
+  "title": "utilities.js — getTimes now zero-pads hours like minutes and seconds",
+  "commit_message": "fix: pad hours to two digits in getTimes return object",
+
+  "changed_files": ["src/helpers/utilities.js"],
+  "changed_symbols": ["getTimes"],
+
+  "why_standalone_focus": {
+    "explanation": "Only getTimes is modified. CRITICAL selection is the describe('getTimes') block (2 tests). All other describe blocks in standalone/utilities.pure.test.js list sibling symbols in the same file — included as HIGH defensive coverage.",
+    "key_point": "2 CRITICAL + 8 HIGH = 10 tests; no cross-dependent or feature suite lists getTimes."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "describe('getTimes') label matches changed symbol",
+      "tests": [
+        {
+          "test": "getTimes > correctly parses 3661 seconds into 1h 01m 01s",
+          "file": "test_repository/standalone/utilities.pure.test.js",
+          "result": "⚠️  MAY FAIL — if test expects hours string '1' instead of '01'",
+          "category": "standalone"
+        },
+        {
+          "test": "getTimes > returns 0 hours when the duration is under 3600 seconds",
+          "file": "test_repository/standalone/utilities.pure.test.js",
+          "result": "⚠️  MAY FAIL — if test expects hours '0' vs '00'",
+          "category": "standalone"
+        }
+      ],
+      "count": 2
+    },
+
+    "HIGH": {
+      "reason": "Same source file utilities.js — sibling symbols (checkNull, checkArray, checkWhiteSpace, getProgressWidth)",
+      "tests": [
+        {
+          "test": "checkNull > returns an empty string when the value is null",
+          "file": "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "checkNull > returns the original value when it is defined and non-null",
+          "file": "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "checkArray > returns an empty array when the input is null",
+          "file": "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "checkArray > returns the original array when it contains items",
+          "file": "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "checkWhiteSpace > returns true for a string that contains a space",
+          "file": "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "checkWhiteSpace > returns false for a string with no whitespace",
+          "file": "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "getProgressWidth > calculates 50% when value is half of max",
+          "file": "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "getProgressWidth > returns 0 when the value argument is missing or falsy",
+          "file": "test_repository/standalone/utilities.pure.test.js",
+          "category": "standalone"
+        }
+      ],
+      "count": 8
+    },
+
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "utilities.js not the sole focus of cross-dependent suites for this change policy — or cross suites list multiple sources; selection engine may still pull auth-storage if utilities.js in sources (scenario-dependent). For this narrative, only standalone utilities.pure.test.js is selected.",
+      "skipped_files": [
+        "test_repository/standalone/regex.constants.test.js",
+        "test_repository/cross-dependent/auth-storage.cross.test.js",
+        "test_repository/cross-dependent/payment-state.cross.test.js",
+        "test_repository/feature/user-profile.feature.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js",
+        "test_repository/feature/api-navigation.feature.test.js"
+      ],
+      "count": 67
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "gap_id": "GAP-01",
+      "type": "ASSERTION_UPDATE",
+      "symbol": "getTimes",
+      "action_required": "Update expectations for hours field to use two-digit padding where applicable."
+    }
+  ],
+
+  "selection_proof": {
+    "standalone_selected": 10,
+    "cross_dependent_selected": 0,
+    "feature_selected": 0,
+    "total_selected": 10,
+    "total_skipped": 67
+  },
+
+  "summary": {
+    "total_tests": 77,
+    "CRITICAL": 2,
+    "HIGH": 8,
+    "LOW": 0,
+    "SKIP": 67,
+    "coverage_gaps": 1
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage -t \"checkNull|checkArray|checkWhiteSpace|getTimes|getProgressWidth\" --verbose"
+}
