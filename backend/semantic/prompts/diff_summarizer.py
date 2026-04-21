@@ -13,7 +13,7 @@ Optional: DIFF_SUMMARY_MAX_TOKENS for chat completion (default 4096).
 import os
 import sys
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 import logging
 
 project_root = Path(__file__).parent.parent.parent.parent
@@ -43,13 +43,18 @@ def _full_diff_for_pipeline(diff_content: str) -> Tuple[str, bool]:
     return diff_content, False
 
 
-async def summarize_git_diff(diff_content: Optional[str]) -> Optional[str]:
+async def summarize_git_diff(
+    diff_content: Optional[str],
+) -> Tuple[Optional[str], Optional[List[float]]]:
     """
     1) Embed a token-safe slice of the diff (best-effort; failure does not block summarization).
-    2) Send capped/full diff text to chat LLM; return summary text.
+    2) Send capped/full diff text to chat LLM; return (summary_text, diff_embedding).
+
+    The caller should reuse diff_embedding instead of re-embedding the diff for validation,
+    which would otherwise cost a second identical embedding API call.
     """
     if not diff_content or not diff_content.strip():
-        return None
+        return None, None
 
     diff_text, truncated = _full_diff_for_pipeline(diff_content)
     n = len(diff_text)
@@ -83,14 +88,17 @@ async def summarize_git_diff(diff_content: Optional[str]) -> Optional[str]:
             len(embed_slice),
             n,
         )
+    diff_embedding: Optional[List[float]] = None
     try:
         embed_provider = LLMFactory.create_embedding_provider(settings)
         emb_resp = await embed_provider.get_embeddings(
             EmbeddingRequest(texts=[embed_slice])
         )
-        vec = emb_resp.embeddings[0] if emb_resp.embeddings else []
+        diff_embedding = emb_resp.embeddings[0] if emb_resp.embeddings else None
         logger.info(
-            f"[DIFF_SUMMARY] Diff embedded first | dim={len(vec)} | provider={getattr(emb_resp, 'provider', '')}"
+            "[DIFF_SUMMARY] Diff embedded | dim=%s | provider=%s",
+            len(diff_embedding) if diff_embedding else 0,
+            getattr(emb_resp, "provider", ""),
         )
     except Exception as e:
         logger.warning(
@@ -102,7 +110,7 @@ async def summarize_git_diff(diff_content: Optional[str]) -> Optional[str]:
         chat_provider = LLMFactory.create_provider(settings)
     except Exception as e:
         logger.warning(f"Diff summarizer: LLM provider not available: {e}")
-        return None
+        return None, diff_embedding
 
     prompt = f"""You will write ONE continuous paragraph (or a few short paragraphs) that will be turned into a **vector embedding** to retrieve **automated tests** from a database.
 
@@ -153,7 +161,7 @@ Git diff:
         summary = (response.content or "").strip()
         if summary:
             logger.info(f"[DIFF_SUMMARY] LLM summary length: {len(summary)} chars")
-            return summary
+            return summary, diff_embedding
     except Exception as e:
         logger.warning(f"Diff summarization failed: {e}")
-    return None
+    return None, diff_embedding

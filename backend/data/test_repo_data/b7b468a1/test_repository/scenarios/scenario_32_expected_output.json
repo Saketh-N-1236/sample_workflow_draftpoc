@@ -1,0 +1,101 @@
+{
+  "scenario": "32",
+  "title": "Language RTL Support — add isRTL flag to languagereducer for Arabic / Hebrew / Farsi / Urdu users",
+  "commit_message": "feat: add RTL_LANGUAGES constant, isRtlLanguage() utility, and isRTL state field to languagereducer",
+
+  "changed_files": [
+    "src/reducer/actiotypes.js",
+    "src/helpers/utilities.js",
+    "src/reducer/languagereducer.js"
+  ],
+
+  "changed_symbols": [
+    "RTL_LANGUAGES (new constant array — ['ar', 'he', 'fa', 'ur'])",
+    "isRtlLanguage (new utility — case-insensitive check against RTL_LANGUAGES)",
+    "languagereducer (modified — initial state gains isRTL: false; LANGUAGE case now also sets isRTL based on RTL_LANGUAGES.includes(action.data))"
+  ],
+
+  "what_the_diff_does": {
+    "before": "languagereducer only stores selectlanguage: 'en'. When a user switches to Arabic or Hebrew, the app stores the code but has no flag to flip the UI to right-to-left layout. Every component that needs RTL logic must re-derive it from the language code independently.",
+    "after": "languagereducer.isRTL is computed on every LANGUAGE dispatch and stored centrally in Redux state. Components read state.languagereducer.isRTL to decide layout direction — no per-component re-derivation needed. isRtlLanguage(code) in utilities.js exposes the same check for use outside Redux. RTL_LANGUAGES in actiotypes.js defines the authoritative list of right-to-left language codes.",
+    "visible_change": "When a user selects Arabic, Hebrew, Farsi, or Urdu in the language settings, the entire app layout mirrors to right-to-left. Selecting any other language restores left-to-right.",
+    "compile_safe": true,
+    "compile_note": "languagereducer is backward-compatible: isRTL is false for all existing callers since 'en', 'fr', 'es', etc. are not in RTL_LANGUAGES. The initial state change from a single-line object to a two-field object is non-breaking."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "Two files contribute CRITICAL tests: (1) auth-reducers.feature.test.js — describe('languagereducer') matches the changed symbol, 4 tests CRITICAL. (2) language-rtl.feature.test.js — declares actiotypes.js, utilities.js, and languagereducer.js as sources and contains describe('RTL_LANGUAGES') 7 tests, describe('isRtlLanguage') 9 tests, describe('languagereducer — isRTL') 8 tests — all 24 are CRITICAL. Total CRITICAL: 28.",
+      "tests": [
+        "languagereducer > initialises with default language code 'en'",
+        "languagereducer > LANGUAGE stores a new language code",
+        "languagereducer > LANGUAGE can switch between multiple languages",
+        "languagereducer > returns unchanged state for an unknown action type"
+      ],
+      "files": [
+        "test_repository/feature/auth-reducers.feature.test.js",
+        "test_repository/feature/language-rtl.feature.test.js"
+      ],
+      "count": 28
+    },
+
+    "HIGH": {
+      "reason": "Three files qualify as HIGH: (1) The remaining 26 tests in auth-reducers.feature.test.js (signUpReducer, loginUserNameReducer, etc.) share the file whose sources include languagereducer.js — a changed file. (2) utilities.pure.test.js declares src/helpers/utilities.js as its source — utilities.js is changed. (3) favourites-watchlist.feature.test.js declares src/reducer/actiotypes.js as a source — actiotypes.js is changed.",
+      "files": [
+        "test_repository/feature/auth-reducers.feature.test.js",
+        "test_repository/standalone/utilities.pure.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js"
+      ],
+      "count": 111
+    },
+
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "All remaining test files do not declare actiotypes.js, utilities.js, or languagereducer.js as a source.",
+      "count": 477
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "id": "GAP-01",
+      "symbol": "RTL_LANGUAGES",
+      "source": "src/reducer/actiotypes.js",
+      "gap": "Covered by 7 tests in describe('RTL_LANGUAGES') in language-rtl.feature.test.js.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/language-rtl.feature.test.js"
+    },
+    {
+      "id": "GAP-02",
+      "symbol": "isRtlLanguage",
+      "source": "src/helpers/utilities.js",
+      "gap": "Covered by 9 tests in describe('isRtlLanguage') in language-rtl.feature.test.js.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/language-rtl.feature.test.js"
+    },
+    {
+      "id": "GAP-03",
+      "symbol": "languagereducer — isRTL field",
+      "source": "src/reducer/languagereducer.js",
+      "gap": "Covered by 8 tests in describe('languagereducer — isRTL') in language-rtl.feature.test.js.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/language-rtl.feature.test.js"
+    }
+  ],
+
+  "summary": {
+    "total_tests": 616,
+    "test_files": 21,
+    "CRITICAL": 28,
+    "HIGH": 111,
+    "LOW": 0,
+    "SKIP": 477,
+    "coverage_gaps": 3,
+    "gaps_closed": 3,
+    "gaps_remaining": 0
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage test_repository/feature/language-rtl.feature.test.js test_repository/feature/auth-reducers.feature.test.js test_repository/standalone/utilities.pure.test.js test_repository/feature/favourites-watchlist.feature.test.js",
+  "jest_run_note": "language-rtl.feature.test.js runs 24 CRITICAL tests. auth-reducers.feature.test.js runs 4 CRITICAL + 26 HIGH tests. utilities.pure.test.js adds 61 HIGH tests. favourites-watchlist.feature.test.js adds 24 HIGH tests. All 3 gaps closed."
+}

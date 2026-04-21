@@ -90,7 +90,19 @@ def create_repositories_table():
                 except Exception as e:
                     logger.warning(f"Could not add semantic_config column (may already exist): {e}")
                     conn.rollback()
-                
+
+                # Add encrypted_token column if it doesn't exist (migration)
+                try:
+                    cursor.execute(f"""
+                        ALTER TABLE {DB_SCHEMA}.repositories
+                        ADD COLUMN IF NOT EXISTS encrypted_token TEXT
+                    """)
+                    conn.commit()
+                    logger.info("Encrypted token column added/verified")
+                except Exception as e:
+                    logger.warning(f"Could not add encrypted_token column (may already exist): {e}")
+                    conn.rollback()
+
                 return True
     except Exception as e:
         logger.error(f"Failed to create repositories table: {e}", exc_info=True)
@@ -138,7 +150,8 @@ def create_repository(
     local_path: Optional[str] = None,
     selected_branch: Optional[str] = None,
     default_branch: Optional[str] = None,
-    risk_threshold: Optional[int] = None
+    risk_threshold: Optional[int] = None,
+    access_token: Optional[str] = None,
 ) -> Dict:
     """
     Create a new repository record in the database.
@@ -160,22 +173,31 @@ def create_repository(
     # Default risk threshold if not provided
     if risk_threshold is None:
         risk_threshold = 20
-    
+
+    # Encrypt the PAT if provided
+    encrypted_token: Optional[str] = None
+    if access_token and access_token.strip():
+        from services.token_encryption import encrypt_token
+        encrypted_token = encrypt_token(access_token.strip())
+
     try:
         with get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(f"""
-                    INSERT INTO {DB_SCHEMA}.repositories 
-                    (id, url, provider, local_path, selected_branch, default_branch, risk_threshold, created_at)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO {DB_SCHEMA}.repositories
+                    (id, url, provider, local_path, selected_branch, default_branch,
+                     risk_threshold, encrypted_token, created_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (url) DO UPDATE SET
                         provider = EXCLUDED.provider,
                         selected_branch = COALESCE(EXCLUDED.selected_branch, repositories.selected_branch),
                         default_branch = COALESCE(EXCLUDED.default_branch, repositories.default_branch),
                         risk_threshold = COALESCE(EXCLUDED.risk_threshold, repositories.risk_threshold),
+                        encrypted_token = COALESCE(EXCLUDED.encrypted_token, repositories.encrypted_token),
                         last_refreshed = CURRENT_TIMESTAMP
                     RETURNING id
-                """, (repo_id, url, provider, local_path, selected_branch, default_branch, risk_threshold, now))
+                """, (repo_id, url, provider, local_path, selected_branch, default_branch,
+                      risk_threshold, encrypted_token, now))
                 
                 # If conflict occurred, get the existing ID
                 result = cursor.fetchone()
@@ -205,33 +227,28 @@ def get_repository_by_id(repo_id: str) -> Optional[Dict]:
         with get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(f"""
-                    SELECT id, url, provider, local_path, selected_branch, 
-                           default_branch, last_commit, created_at, last_refreshed, risk_threshold, semantic_config
+                    SELECT id, url, provider, local_path, selected_branch,
+                           default_branch, last_commit, created_at, last_refreshed,
+                           risk_threshold, semantic_config, encrypted_token
                     FROM {DB_SCHEMA}.repositories
                     WHERE id = %s
                 """, (repo_id,))
-                
+
                 row = cursor.fetchone()
                 if not row:
                     return None
-                
-                # Handle risk_threshold - preserve None if NULL in DB (don't default to 20)
-                risk_threshold = None  # Default to None (disabled)
-                if len(row) > 9:
-                    risk_threshold_val = row[9]
-                    if risk_threshold_val is not None:
-                        risk_threshold = int(risk_threshold_val)
-                    # If risk_threshold_val is None, keep it as None (don't default to 20)
-                
-                # Handle semantic_config
+
+                risk_threshold = None
+                if len(row) > 9 and row[9] is not None:
+                    risk_threshold = int(row[9])
+
                 semantic_config = None
                 if len(row) > 10 and row[10] is not None:
                     import json
-                    if isinstance(row[10], dict):
-                        semantic_config = row[10]
-                    elif isinstance(row[10], str):
-                        semantic_config = json.loads(row[10])
-                
+                    semantic_config = row[10] if isinstance(row[10], dict) else json.loads(row[10])
+
+                encrypted_token = row[11] if len(row) > 11 else None
+
                 return {
                     "id": row[0],
                     "url": row[1],
@@ -243,7 +260,8 @@ def get_repository_by_id(repo_id: str) -> Optional[Dict]:
                     "createdAt": row[7],
                     "lastRefreshed": row[8],
                     "risk_threshold": risk_threshold,
-                    "semantic_config": semantic_config
+                    "semantic_config": semantic_config,
+                    "encrypted_token": encrypted_token,
                 }
     except Exception as e:
         logger.error(f"Failed to get repository by ID: {e}", exc_info=True)
@@ -264,33 +282,28 @@ def get_repository_by_url(url: str) -> Optional[Dict]:
         with get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(f"""
-                    SELECT id, url, provider, local_path, selected_branch, 
-                           default_branch, last_commit, created_at, last_refreshed, risk_threshold, semantic_config
+                    SELECT id, url, provider, local_path, selected_branch,
+                           default_branch, last_commit, created_at, last_refreshed,
+                           risk_threshold, semantic_config, encrypted_token
                     FROM {DB_SCHEMA}.repositories
                     WHERE url = %s
                 """, (url,))
-                
+
                 row = cursor.fetchone()
                 if not row:
                     return None
-                
-                # Handle risk_threshold - preserve None if NULL in DB (don't default to 20)
-                risk_threshold = None  # Default to None (disabled)
-                if len(row) > 9:
-                    risk_threshold_val = row[9]
-                    if risk_threshold_val is not None:
-                        risk_threshold = int(risk_threshold_val)
-                    # If risk_threshold_val is None, keep it as None (don't default to 20)
-                
-                # Handle semantic_config
+
+                risk_threshold = None
+                if len(row) > 9 and row[9] is not None:
+                    risk_threshold = int(row[9])
+
                 semantic_config = None
                 if len(row) > 10 and row[10] is not None:
                     import json
-                    if isinstance(row[10], dict):
-                        semantic_config = row[10]
-                    elif isinstance(row[10], str):
-                        semantic_config = json.loads(row[10])
-                
+                    semantic_config = row[10] if isinstance(row[10], dict) else json.loads(row[10])
+
+                encrypted_token = row[11] if len(row) > 11 else None
+
                 return {
                     "id": row[0],
                     "url": row[1],
@@ -302,7 +315,8 @@ def get_repository_by_url(url: str) -> Optional[Dict]:
                     "createdAt": row[7],
                     "lastRefreshed": row[8],
                     "risk_threshold": risk_threshold,
-                    "semantic_config": semantic_config
+                    "semantic_config": semantic_config,
+                    "encrypted_token": encrypted_token,
                 }
     except Exception as e:
         logger.error(f"Failed to get repository by URL: {e}", exc_info=True)
@@ -320,32 +334,27 @@ def list_repositories() -> List[Dict]:
         with get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(f"""
-                    SELECT id, url, provider, local_path, selected_branch, 
-                           default_branch, last_commit, created_at, last_refreshed, risk_threshold, semantic_config
+                    SELECT id, url, provider, local_path, selected_branch,
+                           default_branch, last_commit, created_at, last_refreshed,
+                           risk_threshold, semantic_config, encrypted_token
                     FROM {DB_SCHEMA}.repositories
                     ORDER BY created_at DESC
                 """)
-                
+
                 rows = cursor.fetchall()
                 result = []
+                import json as _json
                 for row in rows:
-                    # Handle risk_threshold - preserve None if NULL in DB, only default if column missing
-                    risk_threshold = None  # Default to None (disabled)
-                    if len(row) > 9:
-                        risk_threshold_val = row[9]
-                        if risk_threshold_val is not None:
-                            risk_threshold = int(risk_threshold_val)
-                        # If risk_threshold_val is None, keep it as None (don't default to 20)
-                    
-                    # Handle semantic_config
+                    risk_threshold = None
+                    if len(row) > 9 and row[9] is not None:
+                        risk_threshold = int(row[9])
+
                     semantic_config = None
                     if len(row) > 10 and row[10] is not None:
-                        import json
-                        if isinstance(row[10], dict):
-                            semantic_config = row[10]
-                        elif isinstance(row[10], str):
-                            semantic_config = json.loads(row[10])
-                    
+                        semantic_config = row[10] if isinstance(row[10], dict) else _json.loads(row[10])
+
+                    encrypted_token = row[11] if len(row) > 11 else None
+
                     result.append({
                         "id": row[0],
                         "url": row[1],
@@ -357,7 +366,8 @@ def list_repositories() -> List[Dict]:
                         "createdAt": row[7],
                         "lastRefreshed": row[8],
                         "risk_threshold": risk_threshold,
-                        "semantic_config": semantic_config
+                        "semantic_config": semantic_config,
+                        "encrypted_token": encrypted_token,
                     })
                 return result
     except Exception as e:
@@ -373,7 +383,8 @@ def update_repository(
     last_refreshed: Optional[datetime] = None,
     risk_threshold: Optional[int] = None,
     _update_risk_threshold: bool = False,
-    semantic_config: Optional[Dict] = None
+    semantic_config: Optional[Dict] = None,
+    access_token: Optional[str] = None,
 ) -> Optional[Dict]:
     """
     Update repository fields.
@@ -419,12 +430,16 @@ def update_repository(
                     updates.append("risk_threshold = %s")
                     params.append(risk_threshold)
                 
-                # Handle semantic_config
                 if semantic_config is not None:
                     import json
                     updates.append("semantic_config = %s::jsonb")
                     params.append(json.dumps(semantic_config))
-                
+
+                if access_token and access_token.strip():
+                    from services.token_encryption import encrypt_token
+                    updates.append("encrypted_token = %s")
+                    params.append(encrypt_token(access_token.strip()))
+
                 if last_refreshed is not None:
                     updates.append("last_refreshed = %s")
                     params.append(last_refreshed)

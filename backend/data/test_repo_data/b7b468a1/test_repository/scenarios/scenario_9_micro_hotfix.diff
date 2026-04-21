@@ -1,0 +1,12 @@
+diff --git a/src/helpers/utilities.js b/src/helpers/utilities.js
+index 7b6c5d4..2e1f0a9 100644
+--- a/src/helpers/utilities.js
++++ b/src/helpers/utilities.js
+@@ -173,2 +173,3 @@
+ export function checkWhiteSpace(string) {
+-  var reWhiteSpace = new RegExp(/\s/g);
+-  return reWhiteSpace.test(string ? string : '');
++  if (string === null || string === undefined) return false;
++  var reWhiteSpace = new RegExp(/\s/g);
++  return reWhiteSpace.test(string);
+ }

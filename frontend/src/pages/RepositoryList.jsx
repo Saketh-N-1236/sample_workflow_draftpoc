@@ -40,11 +40,14 @@ const RepositoryList = () => {
 
   const handleDelete = async (repoId, event) => {
     event.stopPropagation();
-    if (!window.confirm('Are you sure you want to delete this repository?')) {
-      return;
+    if (!window.confirm('Delete this repository? This cannot be undone.')) return;
+    try {
+      await api.deleteRepository(repoId);
+      setRepositories(prev => prev.filter(r => r.id !== repoId));
+    } catch (error) {
+      console.error('Failed to delete repository:', error);
+      alert(error.response?.data?.detail || 'Failed to delete repository.');
     }
-    // Delete functionality can be added when API endpoint is available
-    alert('Delete functionality coming soon');
   };
 
   const filteredRepositories = repositories.filter(repo => {
@@ -102,8 +105,17 @@ const RepositoryList = () => {
               onClick={() => navigate(`/repositories/${repo.id}`)}
             >
               <div className="repository-card-header">
-                <div className="repository-card-title">
+                <div className="repository-card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <span className="repository-name">{repo.url.split('/').pop()}</span>
+                  {repo.has_token ? (
+                    <span style={{ fontSize: '11px', background: '#c6f6d5', color: '#276749', borderRadius: '4px', padding: '2px 7px', fontWeight: 600 }}>
+                      Token ✓
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '11px', background: '#fff3cd', color: '#856404', borderRadius: '4px', padding: '2px 7px', fontWeight: 600 }}>
+                      Env token
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="repository-card-body">
@@ -132,7 +144,7 @@ const RepositoryList = () => {
                   )}
                 </div>
               </div>
-              <div className="repository-card-footer">
+              <div className="repository-card-footer" style={{ display: 'flex', gap: '8px', justifyContent: 'space-between' }}>
                 <button
                   className="button button-secondary"
                   onClick={(e) => {
@@ -141,6 +153,21 @@ const RepositoryList = () => {
                   }}
                 >
                   View Details →
+                </button>
+                <button
+                  className="button"
+                  onClick={(e) => handleDelete(repo.id, e)}
+                  style={{
+                    background: 'transparent',
+                    border: '1px solid #e53e3e',
+                    color: '#e53e3e',
+                    padding: '6px 14px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                  }}
+                >
+                  Delete
                 </button>
               </div>
             </div>

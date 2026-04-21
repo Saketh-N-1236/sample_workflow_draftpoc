@@ -1,0 +1,93 @@
+{
+  "scenario": "31",
+  "title": "User Initials — add getUserInitials() and formatFullName() utilities for profile avatar fallback",
+  "commit_message": "feat: add getUserInitials and formatFullName helpers to utilities.js for profile avatar text fallback",
+
+  "changed_files": [
+    "src/helpers/utilities.js"
+  ],
+
+  "changed_symbols": [
+    "getUserInitials (new export — returns up to 2 uppercase initials, e.g. 'John Doe' → 'JD')",
+    "formatFullName (new export — trims and capitalises first+last name into one display string)"
+  ],
+
+  "what_the_diff_does": {
+    "before": "If a profile avatar image fails to load, the UI shows nothing. First and last name are used as raw strings wherever they appear, with no unified capitalisation.",
+    "after": "getUserInitials(firstName, lastName) returns the first uppercase letter of each name joined together (max 2 chars; falls back to '--' when both are empty). formatFullName(firstName, lastName) trims both parts, joins them with a space, and runs them through capitalizeFirstLetter. Both are pure functions with no external dependencies.",
+    "visible_change": "Profile avatar shows a two-letter monogram (e.g. 'JD') when the image cannot load. Display names on the profile screen and header are consistently capitalised regardless of how the server returns the name casing.",
+    "compile_safe": true,
+    "compile_note": "Both functions are pure additions to utilities.js — no existing function is modified. The file's other exports are completely untouched."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "user-initials.pure.test.js declares src/helpers/utilities.js as its source and contains describe('getUserInitials') with 7 tests and describe('formatFullName') with 7 tests — all 14 are CRITICAL.",
+      "tests": [
+        "getUserInitials > returns two uppercase initials from first and last name: ('John', 'Doe') => 'JD'",
+        "getUserInitials > returns only the first initial when lastName is empty: ('Alice', '') => 'A'",
+        "getUserInitials > returns only the second initial when firstName is empty: ('', 'Smith') => 'S'",
+        "getUserInitials > returns '--' when both firstName and lastName are empty strings",
+        "getUserInitials > returns '--' when both are null or undefined",
+        "getUserInitials > trims leading and trailing whitespace before taking the initial",
+        "getUserInitials > uppercases the initial regardless of the input case",
+        "formatFullName > combines first and last name with a space and capitalises each word",
+        "formatFullName > returns only the first name when lastName is empty",
+        "formatFullName > returns only the last name when firstName is empty",
+        "formatFullName > returns an empty string when both are empty or whitespace-only",
+        "formatFullName > trims extra whitespace from both parts before combining",
+        "formatFullName > handles null and undefined gracefully by treating them as empty",
+        "formatFullName > does not add a trailing space when lastName is missing"
+      ],
+      "files": ["test_repository/standalone/user-initials.pure.test.js"],
+      "count": 14
+    },
+
+    "HIGH": {
+      "reason": "utilities.pure.test.js declares src/helpers/utilities.js as its sole source. utilities.js is the changed file, so all 61 existing utility tests must be re-run to confirm no regression.",
+      "files": ["test_repository/standalone/utilities.pure.test.js"],
+      "count": 61
+    },
+
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "All remaining test files do not declare src/helpers/utilities.js as a source.",
+      "count": 541
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "id": "GAP-01",
+      "symbol": "getUserInitials",
+      "source": "src/helpers/utilities.js",
+      "gap": "Covered by 7 tests in describe('getUserInitials') in user-initials.pure.test.js.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/standalone/user-initials.pure.test.js"
+    },
+    {
+      "id": "GAP-02",
+      "symbol": "formatFullName",
+      "source": "src/helpers/utilities.js",
+      "gap": "Covered by 7 tests in describe('formatFullName') in user-initials.pure.test.js.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/standalone/user-initials.pure.test.js"
+    }
+  ],
+
+  "summary": {
+    "total_tests": 616,
+    "test_files": 21,
+    "CRITICAL": 14,
+    "HIGH": 61,
+    "LOW": 0,
+    "SKIP": 541,
+    "coverage_gaps": 2,
+    "gaps_closed": 2,
+    "gaps_remaining": 0
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage test_repository/standalone/user-initials.pure.test.js test_repository/standalone/utilities.pure.test.js",
+  "jest_run_note": "user-initials.pure.test.js runs 14 CRITICAL tests. utilities.pure.test.js runs 61 HIGH tests confirming no regressions in existing utility functions. All 2 gaps closed."
+}

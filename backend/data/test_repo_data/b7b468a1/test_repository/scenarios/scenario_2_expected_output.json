@@ -1,0 +1,196 @@
+{
+  "scenario": "2",
+  "category": "FULLY STANDALONE",
+  "title": "PHONE_REGEX strictened — + prefix support removed",
+  "commit_message": "fix: remove optional + prefix from PHONE_REGEX — accept local numbers only",
+
+  "changed_files": [
+    "src/types/constants.ts"
+  ],
+  "changed_symbols": [
+    "PHONE_REGEX"
+  ],
+
+  "why_fully_standalone": {
+    "explanation": "PHONE_REGEX is defined in constants.ts and used in phone-validation UI logic. In this test repository, no cross-dependent test references PHONE_REGEX in its symbols[] (phone validation is not cross-wired to a second file yet). No feature reducer uses PHONE_REGEX either. Therefore ALL critical tests are in the standalone category — exactly one describe block, one file, one symbol.",
+    "pattern": "changed_symbol  →  only standalone tests have it in symbols[]  →  zero cross-dependent, zero feature as CRITICAL"
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "describe('PHONE_REGEX') label exactly matches changed symbol in standalone/regex.constants.test.js",
+      "tests": [
+        {
+          "test":   "PHONE_REGEX > accepts a 10-digit phone number",
+          "file":   "test_repository/standalone/regex.constants.test.js",
+          "result": "PASS — digits-only number still accepted"
+        },
+        {
+          "test":   "PHONE_REGEX > accepts a phone number with a + country prefix",
+          "file":   "test_repository/standalone/regex.constants.test.js",
+          "result": "⚠️  WILL FAIL — + prefix removed from regex; '+919876543210' no longer matches"
+        },
+        {
+          "test":   "PHONE_REGEX > rejects a phone number shorter than 10 digits",
+          "file":   "test_repository/standalone/regex.constants.test.js",
+          "result": "PASS — length guard unchanged"
+        }
+      ],
+      "count": 3,
+      "all_from_category": "standalone"
+    },
+
+    "HIGH": {
+      "reason": "Same source file (src/types/constants.ts) changed — sibling regex constants may share test infrastructure or be accidentally broken by a typo in the diff",
+      "tests": [
+        {
+          "test":  "EMAIL_REGEX > accepts a valid .com email address",
+          "file":  "test_repository/standalone/regex.constants.test.js",
+          "why":   "Sibling constant in same file — conservative inclusion"
+        },
+        {
+          "test":  "EMAIL_REGEX > rejects an email address missing the @ symbol",
+          "file":  "test_repository/standalone/regex.constants.test.js"
+        },
+        {
+          "test":  "EMAIL_REGEX > rejects a non-.com domain (e.g. .org)",
+          "file":  "test_repository/standalone/regex.constants.test.js"
+        },
+        {
+          "test":  "PASSWORD_REGEX_CHANGE_PASSWORD > accepts a password meeting all requirements",
+          "file":  "test_repository/standalone/regex.constants.test.js"
+        },
+        {
+          "test":  "PASSWORD_REGEX_CHANGE_PASSWORD > rejects a password without an uppercase letter",
+          "file":  "test_repository/standalone/regex.constants.test.js"
+        },
+        {
+          "test":  "PASSWORD_REGEX_CHANGE_PASSWORD > rejects a password without a special character",
+          "file":  "test_repository/standalone/regex.constants.test.js"
+        },
+        {
+          "test":  "PASSWORD_REGEX_CHANGE_PASSWORD > rejects a password longer than 30 characters",
+          "file":  "test_repository/standalone/regex.constants.test.js"
+        },
+        {
+          "test":  "CARD_REGEX > accepts a string of digits and spaces",
+          "file":  "test_repository/standalone/regex.constants.test.js"
+        },
+        {
+          "test":  "CARD_REGEX > rejects letters inside a card number",
+          "file":  "test_repository/standalone/regex.constants.test.js"
+        },
+        {
+          "test":  "UNIQUE_USERNAME_REGEX > accepts a valid alphanumeric username with a letter",
+          "file":  "test_repository/standalone/regex.constants.test.js"
+        },
+        {
+          "test":  "UNIQUE_USERNAME_REGEX > rejects a username made entirely of digits",
+          "file":  "test_repository/standalone/regex.constants.test.js"
+        },
+        {
+          "test":  "CARD_NUMBER_REGEX > accepts a properly spaced 19-character card number",
+          "file":  "test_repository/standalone/regex.constants.test.js"
+        },
+        {
+          "test":  "CARD_NUMBER_REGEX > rejects a card number shorter than 17 characters",
+          "file":  "test_repository/standalone/regex.constants.test.js"
+        },
+        {
+          "test":  "validateEmailOrUsername uses EMAIL_REGEX > routes input containing @ to email validation and accepts a valid address",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "why":   "sources include constants.ts — same file changed"
+        },
+        {
+          "test":  "validateEmailOrUsername uses EMAIL_REGEX > routes plain text input to username validation and accepts a clean username",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js"
+        },
+        {
+          "test":  "validateEmailOrUsername uses EMAIL_REGEX > returns an error message when the email format is invalid via EMAIL_REGEX",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js"
+        },
+        {
+          "test":  "validateEmailOrUsername uses EMAIL_REGEX > returns an error message when the username contains special characters",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js"
+        },
+        {
+          "test":  "generateCardNumber output satisfies CARD_REGEX > output of generateCardNumber preserves first and last 4 digits",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "why":   "sources include constants.ts"
+        },
+        {
+          "test":  "generateCardNumber output satisfies CARD_REGEX > correctly masks middle digits with X characters",
+          "file":  "test_repository/cross-dependent/auth-storage.cross.test.js"
+        },
+        {
+          "test":  "storageKeys align with payment flow expectations > storageKeys.stripePaymentDetails equals STRIPEPAYMENTDETAILS",
+          "file":  "test_repository/cross-dependent/payment-state.cross.test.js",
+          "why":   "sources include constants.ts"
+        },
+        {
+          "test":  "CARD_NUMBER_REGEX validates checkout flow input > accepts a standard 19-character card number with spaces",
+          "file":  "test_repository/cross-dependent/payment-state.cross.test.js",
+          "why":   "sources include constants.ts"
+        },
+        {
+          "test":  "CARD_NUMBER_REGEX validates checkout flow input > rejects a card number shorter than 17 characters",
+          "file":  "test_repository/cross-dependent/payment-state.cross.test.js"
+        },
+        {
+          "test":  "CARD_NUMBER_REGEX validates checkout flow input > rejects a card number that contains letters",
+          "file":  "test_repository/cross-dependent/payment-state.cross.test.js"
+        }
+      ],
+      "count": 23
+    },
+
+    "LOW": {
+      "reason": "No loosely related tests",
+      "tests": [],
+      "count": 0
+    },
+
+    "SKIP": {
+      "reason": "sources[] have zero overlap with src/types/constants.ts",
+      "skipped_files": [
+        "test_repository/standalone/utilities.pure.test.js     (sources: utilities.js only)",
+        "test_repository/cross-dependent/auth-storage.cross.test.js  (isUserLoggedIn, updateNewTokenDetails, capitalizeFirstLetter describes — constants.ts not in sources[])",
+        "test_repository/cross-dependent/payment-state.cross.test.js (updateUserCards, updatePaymentPlanDetails, CLEARCARDS describes — constants.ts not in sources[])",
+        "test_repository/feature/user-profile.feature.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js",
+        "test_repository/feature/api-navigation.feature.test.js"
+      ],
+      "count": 51
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "type": "ASSERTION_WILL_FAIL",
+      "symbol": "PHONE_REGEX",
+      "test": "PHONE_REGEX > accepts a phone number with a + country prefix",
+      "reason": "Old regex: /^\\+?[0-9]{10,15}$/ — allowed optional +.  New regex: /^[0-9]{10,15}$/ — + prefix now invalid. Test input '+919876543210' will not match.",
+      "action_required": "Either: (a) update test to assert false for +prefix, OR (b) add a new test 'rejects a phone number with a + prefix'"
+    }
+  ],
+
+  "selection_proof": {
+    "standalone_selected":       3,
+    "cross_dependent_selected":  0,
+    "feature_selected":          0,
+    "total_CRITICAL":            3,
+    "note": "All 3 critical tests come exclusively from the standalone category — zero cross-dependent, zero feature"
+  },
+
+  "summary": {
+    "total_tests":          77,
+    "CRITICAL":              3,
+    "HIGH":                 23,
+    "LOW":                   0,
+    "SKIP":                 51,
+    "assertion_failures":    1,
+    "coverage_gaps":         0
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage -t \"PHONE_REGEX|EMAIL_REGEX|PASSWORD_REGEX_CHANGE_PASSWORD|CARD_REGEX|UNIQUE_USERNAME_REGEX|CARD_NUMBER_REGEX|validateEmailOrUsername uses EMAIL_REGEX|generateCardNumber output satisfies CARD_REGEX|storageKeys align with payment flow expectations|CARD_NUMBER_REGEX validates checkout flow input\""
+}

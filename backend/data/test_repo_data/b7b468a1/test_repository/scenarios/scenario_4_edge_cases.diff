@@ -1,0 +1,30 @@
+diff --git a/src/types/constants.ts b/src/types/constants.ts
+index 5f6e7d8..4c3b2a1 100644
+--- a/src/types/constants.ts
++++ b/src/types/constants.ts
+@@ -18,2 +18,2 @@
+-export const CARD_NUMBER_REGEX =
+-  /^([0-9 ]{17,17}|[0-9 ]{18,18}|[0-9 ]{19,19})$/
++export const FULL_CARD_REGEX =
++  /^([0-9 ]{16,16}|[0-9 ]{17,17}|[0-9 ]{18,18}|[0-9 ]{19,19})$/
+
+diff --git a/src/services/api/common/ApiEndPoints.js b/src/services/api/common/ApiEndPoints.js
+index 6a7b8c9..3d4e5f0 100644
+--- a/src/services/api/common/ApiEndPoints.js
++++ b/src/services/api/common/ApiEndPoints.js
+@@ -108,4 +108,0 @@
+-  advertisement: (type, id, genres) =>
+-    `/api/v2/advertisements/active-video-campaigns/list?type=${type}&vod_id=${id}&genresId=${genres}`,
+-
+
+diff --git a/src/helpers/utilities.js b/src/helpers/utilities.js
+index 8e9f0a1..7b6c5d4 100644
+--- a/src/helpers/utilities.js
++++ b/src/helpers/utilities.js
+@@ -420,0 +421,5 @@
++export const getStreamingQuality = (bitrateBps) => {
++  if (!bitrateBps || bitrateBps <= 0) return 'unknown';
++  if (bitrateBps < 500000)  return 'low';
++  if (bitrateBps < 2000000) return 'medium';
++  return 'high';
++};

@@ -24,8 +24,11 @@ DEFAULT_SIMILARITY_THRESHOLD = 0.45
 # Embedding dimensions (nomic-embed-text produces 768-dimensional vectors)
 EMBEDDING_DIMENSIONS = 768
 
-# Batch size for embedding generation
-BATCH_SIZE = 10
+# Batch size for embedding generation.
+# OpenAI supports up to 2048 texts per batch; 100 strikes a balance between
+# throughput (fewer API calls) and reliability (retrying smaller failed batches).
+# Reduces ~684 individual API calls to ~7 calls for a typical 684-test repository.
+BATCH_SIZE = 100
 
 # Semantic score cap (so semantic never outranks exact matches)
 SEMANTIC_SCORE_CAP = 60

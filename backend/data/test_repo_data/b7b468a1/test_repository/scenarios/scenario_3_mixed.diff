@@ -1,0 +1,48 @@
+diff --git a/src/helpers/utilities.js b/src/helpers/utilities.js
+index 3a4b5c6..7e8f9a0 100644
+--- a/src/helpers/utilities.js
++++ b/src/helpers/utilities.js
+@@ -12,5 +12,9 @@
+ export const capitalizeFirstLetter = string => {
+-  if (string && typeof string === 'string') {
++  if (string && typeof string === 'string' && string.trim().length > 0) {
+     if (checkWhiteSpace(string)) {
+       return string
+         .split(' ')
+-        .map(w => w.length > 0 ? w.charAt(0).toUpperCase() + w.slice(1) : '')
++        .filter(w => w.length > 0)
++        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+         .join(' ');
+     }
+     return string.charAt(0).toUpperCase() + string.slice(1);
+   }
++  return '';
+ };
+
+diff --git a/src/reducer/toastReducer.js b/src/reducer/toastReducer.js
+index 4d5e6f7..2b3c4d5 100644
+--- a/src/reducer/toastReducer.js
++++ b/src/reducer/toastReducer.js
+@@ -2,3 +2,4 @@
+-const initialState = { showToast: null };
++const initialState = {
++  showToast:  null,
++  toastType:  'info',
++  toastQueue: [],
++};
+
+@@ -5,6 +6,10 @@
+ export const toastReducer = (state = initialState, action) => {
+   switch (action.type) {
+     case TOAST:
+       return {
+         ...state,
+-        showToast: action.toast,
++        showToast:  action.toast,
++        toastType:  action.toastType ?? state.toastType,
++        toastQueue: action.queue    ?? state.toastQueue,
+       };
+     default:
+       return state;
+   }
+ };

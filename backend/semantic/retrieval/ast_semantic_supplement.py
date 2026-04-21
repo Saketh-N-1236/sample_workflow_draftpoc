@@ -48,9 +48,13 @@ async def supplement_semantic_hits_for_ast_tests(
     ast_results: Dict[str, Any],
     primary_query_text: str,
     test_repo_id: Optional[str],
+    precomputed_query_embedding: Optional[List[float]] = None,
 ) -> Dict[str, float]:
     """
     Return test_id -> cosine similarity for AST-matched tests (no global threshold).
+
+    Pass precomputed_query_embedding (from rag_pipeline._vector_search_queries) to avoid
+    re-embedding the same primary query text — that embedding already exists in memory.
 
     Missing tests (not in index) are omitted.
     """
@@ -60,7 +64,11 @@ async def supplement_semantic_hits_for_ast_tests(
     if not test_ids:
         return {}
 
-    query_embedding = await embed_query_text(primary_query_text)
+    if precomputed_query_embedding is not None:
+        logger.debug("[AST-SEM-SUP] Reusing precomputed primary query embedding (saved 1 API call)")
+        query_embedding: Optional[List[float]] = precomputed_query_embedding
+    else:
+        query_embedding = await embed_query_text(primary_query_text)
     if not query_embedding:
         return {}
 

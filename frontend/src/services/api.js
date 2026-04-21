@@ -30,6 +30,10 @@ export default {
     return api.post(`/repositories/${repoId}/refresh`);
   },
 
+  deleteRepository: (repoId) => {
+    return api.delete(`/repositories/${repoId}`);
+  },
+
   updateRepository: (repoId, data) => {
     return api.put(`/repositories/${repoId}`, data);
   },

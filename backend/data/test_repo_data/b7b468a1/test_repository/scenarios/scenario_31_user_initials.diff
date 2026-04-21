@@ -1,0 +1,32 @@
+diff --git a/src/helpers/utilities.js b/src/helpers/utilities.js
+index a1b2c3d..b2c3d4e 100644
+--- a/src/helpers/utilities.js
++++ b/src/helpers/utilities.js
+@@ -422,3 +422,21 @@
+   appStorage.set(storageKeys.token, token);
+   appStorage.set(storageKeys.loginTime, loginTime);
+   appStorage.set(storageKeys.refreshToken, refreshToken);
+ }
++
++/**
++ * Returns up to two uppercase initials from a user's first and last name.
++ * Used as a text fallback when a profile avatar image fails to load.
++ * Examples: ('John', 'Doe') => 'JD'  |  ('Alice', '') => 'A'  |  (null, null) => '--'
++ */
++export function getUserInitials(firstName, lastName) {
++  const first = typeof firstName === 'string' ? firstName.trim().charAt(0).toUpperCase() : '';
++  const last  = typeof lastName  === 'string' ? lastName.trim().charAt(0).toUpperCase()  : '';
++  return (first + last) || '--';
++}
++
++/**
++ * Combines first and last name into a properly capitalised display name.
++ * Trims whitespace, filters empty parts, and delegates to capitalizeFirstLetter.
++ * Examples: ('  john ', 'DOE') => 'John Doe'  |  ('alice', '') => 'Alice'
++ */
++export function formatFullName(firstName, lastName) {
++  const first = typeof firstName === 'string' ? firstName.trim() : '';
++  const last  = typeof lastName  === 'string' ? lastName.trim()  : '';
++  const combined = [first, last].filter(Boolean).join(' ');
++  return capitalizeFirstLetter(combined);
++}

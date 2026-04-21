@@ -1,0 +1,55 @@
+diff --git a/src/navigation/constants.js b/src/navigation/constants.js
+index aaaaaaa..bbbbbbb 100644
+--- a/src/navigation/constants.js
++++ b/src/navigation/constants.js
+@@ -30,10 +30,13 @@ export const carousaTypes = {
+   isHighlightContent: 'Highlight Content',
+   isSportsHighlightContent: 'Sports Highlight Content',
+   Sports: 'Sports',
+   Shows: 'Shows',
+   Players: 'Players',
++  Movies: 'MOVIES',
+ };
++
++export const MY_MOVIES_TITLE = 'My Movies';
+
+diff --git a/src/screens/home/HomeIntroPage.js b/src/screens/home/HomeIntroPage.js
+index ccccccc..ddddddd 100644
+--- a/src/screens/home/HomeIntroPage.js
++++ b/src/screens/home/HomeIntroPage.js
+@@ -35,7 +35,7 @@ import {carousaTypes, onPending, screenNames} from '../../navigation/constants';
++import {carousaTypes, MY_MOVIES_TITLE, onPending, screenNames} from '../../navigation/constants';
+ import Slide from '../../components/carouselbanner/Slide';
+ import {getFavorites} from '../../services/api/common/favourites';
+ import appStorage, {storageKeys} from '../../services/storage';
+ import {LocalImages} from '../../globalAssets/images';
+ import {sportsData} from './utils';
+ import ShimmerHome from '../../Shimmer/shimmer';
+ import {checkNull, getScaled} from '../../helpers/utilities';
+ import {useTheme} from '../../config/ThemeContext';
+ import {useTranslation} from 'react-i18next';
+ import {colors} from '../../screens/VideoPlayer/constants';
+ import useProtection from '../../hooks/useProtection';
+ import {TempAd, tempAds} from '../../screens/VideoPlayer/temp';
+ import {cardTitles} from '../../components/sectionlist/Data';
+-import {carousaTypes, onPending, screenNames} from '../../navigation/constants';
+
+@@ -89,6 +89,18 @@ function HomeIntroPage() {
+   const {homeScreenData, hoveredTitle, bannerData} = useSelector(
+     state => state.homeReducer,
+   );
+
++  const mergedMoviesSection = useMemo(() => {
++    if (!Array.isArray(homeScreenData)) return [];
++    const movieSections = homeScreenData.filter(
++      section => section.type !== carousaTypes.Sports &&
++                 section.type !== carousaTypes.isSportsHighlightContent,
++    );
++    if (!movieSections.length) return homeScreenData;
++    const allMovieItems = movieSections.flatMap(s => s.data ?? []);
++    return [
++      {title: MY_MOVIES_TITLE, type: carousaTypes.Movies, data: allMovieItems},
++      ...homeScreenData.filter(s => s.type === carousaTypes.Sports || s.type === carousaTypes.isSportsHighlightContent),
++    ];
++  }, [homeScreenData]);
++

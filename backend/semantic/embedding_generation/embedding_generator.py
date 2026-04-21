@@ -156,10 +156,16 @@ async def store_embeddings(tests: list, conn=None) -> tuple:
     is_file_based = any(test.get('is_file_chunk') or test.get('content') for test in tests[:1] if tests) and not is_analysis_based
 
     if is_analysis_based:
-        # One vector per test (or per chunk of long test); method_name/class_name from analyzer
+        # ── Two-pass batched embedding (analysis-based) ──────────────────────
+        # Pass 1: collect all (chunk_dict, embedding_text) pairs without any API calls.
+        # Pass 2: embed in batches of BATCH_SIZE (one API call per batch) and store results.
+        # This reduces ~684 individual API round-trips to ~14 batched calls.
         print(f"  [ANALYSIS] Using analyzer test names and content ({len(tests)} tests)")
         TEST_CHUNK_MAX = 8000
-        for i, test in enumerate(tests):
+
+        # Pass 1 — collect pending (chunk_dict, text) pairs
+        pending: list = []
+        for test in tests:
             try:
                 content = test.get('content', '')
                 method_name = test.get('method_name', '')
@@ -182,61 +188,60 @@ async def store_embeddings(tests: list, conn=None) -> tuple:
                         chunk_test['total_chunks'] = len(chunks) if chunks else 1
                         chunk_test['is_chunk'] = len(chunks or []) > 1
                         text = build_embedding_text(chunk_test, provider=embedding_provider)
-                        request = EmbeddingRequest(texts=[text])
-                        response = await llm.get_embeddings(request)
-                        embedding = response.embeddings[0]
-                        test_chunks_list.append(chunk_test)
-                        embeddings_list.append(embedding)
-                        total_chunks += 1
+                        pending.append((chunk_test, text))
                 else:
                     text = build_embedding_text(test, provider=embedding_provider)
-                    request = EmbeddingRequest(texts=[text])
-                    response = await llm.get_embeddings(request)
-                    embedding = response.embeddings[0]
-                    test_chunks_list.append(test)
+                    pending.append((test, text))
+            except Exception as e:
+                logger.warning(f"Failed to prepare analysis test {test.get('test_id', '')}: {e}")
+                failed_generation += 1
+
+        print(f"  [ANALYSIS] Prepared {len(pending)} chunk(s) — batch-embedding in groups of {BATCH_SIZE}...")
+
+        # Pass 2 — batch embed
+        for batch_start in range(0, len(pending), BATCH_SIZE):
+            batch = pending[batch_start: batch_start + BATCH_SIZE]
+            batch_texts = [text for _, text in batch]
+            try:
+                response = await llm.get_embeddings(EmbeddingRequest(texts=batch_texts))
+                for j, (chunk_test, _) in enumerate(batch):
+                    embedding = response.embeddings[j]
+                    test_chunks_list.append(chunk_test)
                     embeddings_list.append(embedding)
                     total_chunks += 1
-                if (i + 1) % 20 == 0 or i == len(tests) - 1:
-                    pct = round((i + 1) / len(tests) * 100, 1)
-                    print(f"  Analysis tests: {i + 1}/{len(tests)} ({pct}%) | Chunks: {total_chunks}", end='\r')
             except Exception as e:
-                logger.warning(f"Failed to embed analysis test {test.get('test_id', '')}: {e}")
-                embeddings_list.append(None)
-                test_chunks_list.append(None)
-                failed_generation += 1
-    elif is_file_based:
-        # Chunk by tests first (one vector per test + content); fallback to method-boundary chunking
-        print(f"  [NEW] Chunking test repo by tests (one chunk per test), then storing in vector DB")
-        MAX_CHUNK_SIZE = 2000  # For fallback chunking
-        TEST_CHUNK_MAX = 8000  # Max size for a single-test chunk (test + content)
+                logger.warning(f"Batch embed failed (start={batch_start}): {e}")
+                for chunk_test, _ in batch:
+                    embeddings_list.append(None)
+                    test_chunks_list.append(None)
+                    failed_generation += 1
+            done = min(batch_start + BATCH_SIZE, len(pending))
+            pct = round(done / len(pending) * 100, 1)
+            print(f"  Batch-embedded: {done}/{len(pending)} ({pct}%) | API calls so far: {done // BATCH_SIZE + 1}", end='\r')
 
-        for i, test_file in enumerate(tests):
+        print()  # newline after progress
+    elif is_file_based:
+        # ── Two-pass batched embedding (file-based) ───────────────────────────
+        print(f"  [NEW] Chunking test repo by tests (one chunk per test), then batch-embedding")
+        MAX_CHUNK_SIZE = 2000
+        TEST_CHUNK_MAX = 8000
+
+        # Pass 1 — collect (chunk_dict, text) pairs without any API calls
+        pending_file: list = []
+        for test_file in tests:
             try:
                 file_content = test_file.get('content', '')
                 language = test_file.get('language', 'python')
                 file_path = test_file.get('relative_path', test_file.get('file_path', ''))
-
                 if not file_content:
                     logger.warning(f"Skipping empty file: {file_path}")
                     continue
 
-                # Prefer test-based chunking: one chunk per test (it/test, def test_*, @Test) with content
-                chunks = chunk_file_by_tests(
-                    file_content,
-                    language=language,
-                    max_chunk_size=TEST_CHUNK_MAX,
-                )
+                chunks = chunk_file_by_tests(file_content, language=language, max_chunk_size=TEST_CHUNK_MAX)
                 if not chunks:
-                    # Fallback: chunk by method boundaries or character split
-                    chunks = chunk_test_intelligently(
-                        file_content,
-                        max_chunk_size=MAX_CHUNK_SIZE,
-                        language=language,
-                        prefer_method_boundaries=True,
-                    )
-                
+                    chunks = chunk_test_intelligently(file_content, max_chunk_size=MAX_CHUNK_SIZE, language=language, prefer_method_boundaries=True)
+
                 if chunks:
-                    # Generate embedding for each chunk
                     for chunk in chunks:
                         chunk_test = test_file.copy()
                         chunk_test['content'] = chunk['content']
@@ -247,38 +252,41 @@ async def store_embeddings(tests: list, conn=None) -> tuple:
                         chunk_test['end_line'] = chunk.get('end_line', 1)
                         chunk_test['is_chunk'] = True
                         chunk_test['original_file_id'] = test_file['test_id']
-                        # Use chunk-extracted names so semantic results show test/class instead of N/A
                         chunk_test['method_name'] = chunk.get('method_name') or chunk_test.get('method_name') or ''
                         chunk_test['class_name'] = chunk.get('class_name') or chunk_test.get('class_name') or ''
-                        
-                        # Build embedding text from chunk
                         text = build_embedding_text(chunk_test, provider=embedding_provider)
-                        request = EmbeddingRequest(texts=[text])
-                        response = await llm.get_embeddings(request)
-                        embedding = response.embeddings[0]
-                        
-                        test_chunks_list.append(chunk_test)
-                        embeddings_list.append(embedding)
-                        total_chunks += 1
+                        pending_file.append((chunk_test, text))
                 else:
-                    # Fallback: single embedding for file
                     text = build_embedding_text(test_file, provider=embedding_provider)
-                    request = EmbeddingRequest(texts=[text])
-                    response = await llm.get_embeddings(request)
-                    embedding = response.embeddings[0]
-                    test_chunks_list.append(test_file)
-                    embeddings_list.append(embedding)
-                
-                # Progress update
-                if (i + 1) % 10 == 0 or i == len(tests) - 1:
-                    pct = round((i + 1) / len(tests) * 100, 1)
-                    print(f"  Processing files: {i + 1}/{len(tests)} ({pct}%) | Chunks: {total_chunks}", end='\r')
-                    
+                    pending_file.append((test_file, text))
             except Exception as e:
-                logger.warning(f"Failed to process file {test_file.get('file_path', 'unknown')}: {e}")
-                embeddings_list.append(None)
-                test_chunks_list.append(None)
+                logger.warning(f"Failed to prepare file {test_file.get('file_path', 'unknown')}: {e}")
                 failed_generation += 1
+
+        print(f"  [FILE] Prepared {len(pending_file)} chunk(s) — batch-embedding in groups of {BATCH_SIZE}...")
+
+        # Pass 2 — batch embed
+        for batch_start in range(0, len(pending_file), BATCH_SIZE):
+            batch = pending_file[batch_start: batch_start + BATCH_SIZE]
+            batch_texts = [text for _, text in batch]
+            try:
+                response = await llm.get_embeddings(EmbeddingRequest(texts=batch_texts))
+                for j, (chunk_test, _) in enumerate(batch):
+                    embedding = response.embeddings[j]
+                    test_chunks_list.append(chunk_test)
+                    embeddings_list.append(embedding)
+                    total_chunks += 1
+            except Exception as e:
+                logger.warning(f"Batch embed failed (start={batch_start}): {e}")
+                for chunk_test, _ in batch:
+                    embeddings_list.append(None)
+                    test_chunks_list.append(None)
+                    failed_generation += 1
+            done = min(batch_start + BATCH_SIZE, len(pending_file))
+            pct = round(done / len(pending_file) * 100, 1)
+            print(f"  Batch-embedded: {done}/{len(pending_file)} ({pct}%) | Chunks: {total_chunks}", end='\r')
+
+        print()
     else:
         # LEGACY APPROACH: Chunk individual test descriptions
         print(f"  [LEGACY] Using description-based chunking approach")

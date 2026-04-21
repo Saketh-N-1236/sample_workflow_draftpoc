@@ -9,6 +9,7 @@ class RepositoryCreate(BaseModel):
     """Request model for creating a repository connection."""
     url: str
     provider: Optional[str] = None  # 'github' or 'gitlab', auto-detected if not provided
+    access_token: Optional[str] = None  # Personal Access Token for private repos
 
 
 class RepositoryResponse(BaseModel):
@@ -23,11 +24,19 @@ class RepositoryResponse(BaseModel):
     createdAt: Optional[datetime] = None
     lastRefreshed: Optional[datetime] = None  # Timestamp of last refresh
     risk_threshold: Optional[int] = 20  # Risk threshold for test selection
+    has_token: bool = False  # Whether a PAT is stored for this repo (token itself is never returned)
 
     class Config:
         json_encoders = {
             datetime: lambda v: v.isoformat()
         }
+
+    @classmethod
+    def from_db(cls, repo: Dict) -> "RepositoryResponse":
+        """Build a response from a DB dict.  Computes has_token and strips encrypted_token."""
+        data = {k: v for k, v in repo.items() if k not in ("encrypted_token", "semantic_config")}
+        data["has_token"] = bool(repo.get("encrypted_token"))
+        return cls(**data)
 
 
 class RepositoryUpdate(BaseModel):

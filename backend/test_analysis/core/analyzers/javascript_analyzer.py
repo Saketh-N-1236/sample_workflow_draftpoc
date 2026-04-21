@@ -1026,7 +1026,7 @@ class JavaScriptAnalyzer(BaseAnalyzer):
     # "toastReducer > TOAST action"               → "toastReducer"
     # "validateEmailOrUsername uses EMAIL_REGEX"  → "validateEmailOrUsername"
     _DESCRIBE_SPLIT_RE = re.compile(
-        r'\s+(?:with|uses|from|for|in|that|>|→|:)\s+', re.IGNORECASE
+        r'\s+(?:with|uses|from|for|in|that|>|→|:|—|–)\s+', re.IGNORECASE
     )
 
     @staticmethod

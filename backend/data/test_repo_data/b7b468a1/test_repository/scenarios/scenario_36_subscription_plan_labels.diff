@@ -1,0 +1,70 @@
+diff --git a/src/screens/SubscriptionPlans/SubscriptionPlans.js b/src/screens/SubscriptionPlans/SubscriptionPlans.js
+index aaaaaaa..bbbbbbb 100644
+--- a/src/screens/SubscriptionPlans/SubscriptionPlans.js
++++ b/src/screens/SubscriptionPlans/SubscriptionPlans.js
+@@ -24,6 +24,16 @@ import AppLogo from '../../components/header/AppLogo';
++
++export const PLAN_LABELS = {
++  Monthly: 'Most Popular',
++  Yearly: 'Best Value',
++};
++
++export const getPlanLabel = billingPeriod =>
++  PLAN_LABELS[billingPeriod] ?? null;
++
+ const SubscriptionPlans = () => {
+   const navigation = useNavigation();
+   const screensizereducer = useSelector(state => state.responsiveReducer);
+
+@@ -195,6 +205,14 @@ const SubscriptionPlans = () => {
+               {Monthly && (
+                 <Animated.View
+                   onMouseEnter={animations.onMouseEnterView}
+                   onMouseLeave={animations.onMouseLeaveView}
+                   style={[...]}>
+                   <Pressable
+                     onHoverIn={() => { setIsHover(true); }}
+                     onHoverOut={() => { setIsHover(false); }}>
++                    {getPlanLabel('Monthly') && (
++                      <View style={{
++                        backgroundColor: themeLight.global.red,
++                        paddingHorizontal: 8,
++                        paddingVertical: 3,
++                        borderRadius: 4,
++                        alignSelf: 'flex-start',
++                        marginBottom: 6,
++                      }}>
++                        <Text style={{color: 'white', fontSize: 12}}>
++                          {getPlanLabel('Monthly')}
++                        </Text>
++                      </View>
++                    )}
+                   </Pressable>
+                 </Animated.View>
+               )}
+@@ -221,6 +239,14 @@ const SubscriptionPlans = () => {
+               {Yearly && (
+                 <Animated.View
+                   onMouseEnter={animation.onMouseEnter}
+                   onMouseLeave={animation.onMouseLeave}
+                   style={[...]}>
+                   <Pressable
+                     onHoverIn={() => { setIsHovered(true); }}
+                     onHoverOut={() => { setIsHovered(false); }}>
++                    {getPlanLabel('Yearly') && (
++                      <View style={{
++                        backgroundColor: themeLight.global.red,
++                        paddingHorizontal: 8,
++                        paddingVertical: 3,
++                        borderRadius: 4,
++                        alignSelf: 'flex-start',
++                        marginBottom: 6,
++                      }}>
++                        <Text style={{color: 'white', fontSize: 12}}>
++                          {getPlanLabel('Yearly')}
++                        </Text>
++                      </View>
++                    )}
+                   </Pressable>
+                 </Animated.View>
+               )}

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -181,33 +182,48 @@ class RepoAnalyzer:
                 repo_path=str(repo_path),
             )
 
-        # STAGE 2: Select plugins
+        # STAGE 2: Select plugins and scan files (fast, sequential — just directory walks)
         lang_results: Dict[str, LanguageResult] = {}
+        jobs: List[tuple] = []  # (lang, plugin, files)
+
         for lang in detected:
             plugin: Optional[LanguagePlugin] = self._registry.get(lang)
             if plugin is None:
                 logger.debug(f"[engine] No plugin registered for '{lang}' — skipping")
                 continue
 
-            # STAGE 3: Scan test files
+            # STAGE 3: Scan (fast directory walk — keep sequential)
             _progress(f"STAGE 3 — scanning {lang} test files")
             files = plugin.scan(repo_path)
             if not files:
                 logger.info(f"[engine] No {lang} test files found — skipping plugin")
                 continue
 
-            _progress(f"STAGE 4 — extracting {lang} ({len(files)} file(s))")
+            jobs.append((lang, plugin, files))
 
-            # STAGE 4: Extract
+        # STAGE 4: Extract — run all language plugins IN PARALLEL via threads.
+        # Tree-sitter parsing and import-graph traversal are CPU-bound; running
+        # them concurrently via ThreadPoolExecutor cuts wall-clock time for
+        # multi-language repositories (e.g. Java + JavaScript) roughly in half.
+        def _extract(lang: str, plugin: LanguagePlugin, files) -> tuple:
             try:
                 lr = plugin.extract(files, repo_path)
-                if lr and lr.tests:
+                return lang, lr, None
+            except Exception as exc:
+                return lang, None, exc
+
+        _progress(f"STAGE 4 — extracting {len(jobs)} language(s) in parallel")
+        with ThreadPoolExecutor(max_workers=min(len(jobs), 4)) as pool:
+            futures = {pool.submit(_extract, *job): job[0] for job in jobs}
+            for future in as_completed(futures):
+                lang, lr, exc = future.result()
+                if exc is not None:
+                    logger.error(f"[engine] Plugin '{lang}' raised exception: {exc}", exc_info=True)
+                elif lr and lr.tests:
                     lang_results[lang] = lr
                     _progress(f"[OK] {lang}: {len(lr.tests)} test(s) extracted")
                 else:
                     logger.warning(f"[engine] Plugin '{lang}' returned no tests")
-            except Exception as exc:
-                logger.error(f"[engine] Plugin '{lang}' raised exception: {exc}", exc_info=True)
 
         if not lang_results:
             logger.warning("[engine] No tests extracted from any language")

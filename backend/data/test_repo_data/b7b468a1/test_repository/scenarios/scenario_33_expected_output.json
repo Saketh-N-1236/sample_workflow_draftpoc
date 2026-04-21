@@ -1,0 +1,115 @@
+{
+  "scenario": "33",
+  "title": "My Orders clustering — group orders into Movies and TV Shows sections",
+  "commit_message": "feat: cluster My Orders screen by content type — add ORDER_TYPES, getOrdersByType, and render Movies/TVShows sections separately",
+
+  "changed_files": [
+    "src/screens/MyOrder/myOrderData.js",
+    "src/screens/MyOrder/MyOrder.js"
+  ],
+
+  "changed_symbols": [
+    "ORDER_TYPES (new constant — { MOVIE: 'Movie', TV_SHOW: 'TVShow' })",
+    "getOrdersByType (new helper — filters orders array by type field)",
+    "myOrderDetails (modified — type field added to every order entry)",
+    "MyOrder (modified — renders two labelled sections: Movies then TV Shows)"
+  ],
+
+  "what_the_diff_does": {
+    "before": "My Orders screen renders all orders in a single flat list with no grouping. Orders for movies and TV shows appear mixed together.",
+    "after": "My Orders screen renders two labelled sections: 'Movies' (type='Movie' orders) followed by 'TV Shows' (type='TVShow' orders). Each section header is bold and displayed above its rows. Sections with zero items are hidden.",
+    "visible_change": "The My Orders screen now shows a 'Movies' heading above movie purchases and a 'TV Shows' heading above TV show purchases, making it easier to find a specific order at a glance.",
+    "compile_safe": true,
+    "compile_note": "The import line in MyOrder.js is extended to also import ORDER_TYPES and getOrdersByType from the same file, so no new dependency files are introduced."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "orders-clustering.feature.test.js declares both changed files as @source and contains describe blocks that match every changed symbol: ORDER_TYPES (4 tests), getOrdersByType (7 tests), myOrderDetails type field (6 tests), Section grouping (5 tests). All 22 are CRITICAL.",
+      "tests": [
+        "ORDER_TYPES > MOVIE value is the string \"Movie\"",
+        "ORDER_TYPES > TV_SHOW value is the string \"TVShow\"",
+        "ORDER_TYPES > contains exactly two keys",
+        "ORDER_TYPES > MOVIE and TV_SHOW are distinct values",
+        "getOrdersByType > returns only Movie orders when type is ORDER_TYPES.MOVIE",
+        "getOrdersByType > returns only TVShow orders when type is ORDER_TYPES.TV_SHOW",
+        "getOrdersByType > returns empty array when no orders match the type",
+        "getOrdersByType > returns empty array when orders list is empty",
+        "getOrdersByType > returns empty array when orders argument is undefined",
+        "getOrdersByType > returns empty array when orders argument is null",
+        "getOrdersByType > does not mutate the original orders array",
+        "myOrderDetails — type field > every entry in myOrderDetails has a type field",
+        "myOrderDetails — type field > type field is either Movie or TVShow for every entry",
+        "myOrderDetails — type field > Spider Man is classified as Movie",
+        "myOrderDetails — type field > Avatar is classified as Movie",
+        "myOrderDetails — type field > Wonder Woman is classified as TVShow",
+        "myOrderDetails — type field > Thor is classified as TVShow",
+        "Section grouping — Movies before TV Shows > render order array has Movies as the first entry",
+        "Section grouping — Movies before TV Shows > render order array has TV Shows as the second entry",
+        "Section grouping — Movies before TV Shows > Movie group has 3 items in sample data",
+        "Section grouping — Movies before TV Shows > TV Show group has 2 items in sample data",
+        "Section grouping — Movies before TV Shows > Movie + TV Show counts sum to total order count"
+      ],
+      "files": ["test_repository/feature/orders-clustering.feature.test.js"],
+      "count": 22
+    },
+
+    "HIGH": {
+      "reason": "wishlist.feature.test.js and favourites-watchlist.feature.test.js cover the broader order/watchlist data layer — these must be re-verified to confirm the type field addition did not break any existing data contracts.",
+      "files": [
+        "test_repository/feature/wishlist.feature.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js"
+      ],
+      "count": 28
+    },
+
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "All remaining test files do not declare myOrderData.js or MyOrder.js as a source and do not test order clustering logic.",
+      "count": 647
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "id": "GAP-01",
+      "symbol": "ORDER_TYPES",
+      "source": "src/screens/MyOrder/myOrderData.js",
+      "gap": "No existing tests covered this new constant.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/orders-clustering.feature.test.js"
+    },
+    {
+      "id": "GAP-02",
+      "symbol": "getOrdersByType",
+      "source": "src/screens/MyOrder/myOrderData.js",
+      "gap": "No existing tests covered this new helper function.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/orders-clustering.feature.test.js"
+    },
+    {
+      "id": "GAP-03",
+      "symbol": "myOrderDetails — type field",
+      "source": "src/screens/MyOrder/myOrderData.js",
+      "gap": "No existing tests validated the type field on each order entry.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/orders-clustering.feature.test.js"
+    }
+  ],
+
+  "summary": {
+    "total_tests": 638,
+    "test_files": 22,
+    "CRITICAL": 22,
+    "HIGH": 28,
+    "LOW": 0,
+    "SKIP": 588,
+    "coverage_gaps": 3,
+    "gaps_closed": 3,
+    "gaps_remaining": 0
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage test_repository/feature/orders-clustering.feature.test.js test_repository/feature/wishlist.feature.test.js test_repository/feature/favourites-watchlist.feature.test.js",
+  "jest_run_note": "orders-clustering.feature.test.js runs 22 CRITICAL tests for ORDER_TYPES, getOrdersByType, and section grouping. wishlist and favourites-watchlist files run 28 HIGH tests verifying no regressions in the data layer."
+}

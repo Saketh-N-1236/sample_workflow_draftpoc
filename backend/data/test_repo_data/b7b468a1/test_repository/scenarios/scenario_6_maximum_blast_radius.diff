@@ -1,0 +1,31 @@
+diff --git a/src/types/constants.ts b/src/types/constants.ts
+index 2b3c4d5..8f1e2a9 100644
+--- a/src/types/constants.ts
++++ b/src/types/constants.ts
+@@ -6,1 +6,1 @@
+-export const PASSWORD_REGEX =
+-  /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]{8,30}$/
++export const PASSWORD_REGEX =
++  /^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]{10,30}$/
+
+diff --git a/src/services/storage.ts b/src/services/storage.ts
+index 9d8e7f6..4c5b6a3 100644
+--- a/src/services/storage.ts
++++ b/src/services/storage.ts
+@@ -10,0 +11,1 @@
++  sessionId: 'SESSION_ID',
+
+diff --git a/src/reducer/paymentReducer.js b/src/reducer/paymentReducer.js
+index ab12345..cc67890 100644
+--- a/src/reducer/paymentReducer.js
++++ b/src/reducer/paymentReducer.js
+@@ -8,0 +9,1 @@
++  paymentError: null,
+
+diff --git a/src/reducer/toastReducer.js b/src/reducer/toastReducer.js
+index 2b3c4d5..dd56789 100644
+--- a/src/reducer/toastReducer.js
++++ b/src/reducer/toastReducer.js
+@@ -5,0 +6,3 @@
++    case 'CLEARTOAST':
++      return { ...state, showToast: null };

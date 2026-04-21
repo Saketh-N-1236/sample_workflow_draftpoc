@@ -1,0 +1,13 @@
+diff --git a/src/helpers/utilities.js b/src/helpers/utilities.js
+index 3333333..4444444 100644
+--- a/src/helpers/utilities.js
++++ b/src/helpers/utilities.js
+@@ -88,7 +88,9 @@ export function getTimes(time) {
+   const minutes = Math.floor((time % 3600) / 60);
+   const seconds = time % 60;
+   return {
+-    hours: hours.toString(),
++    hours: hours.toString().padStart(2, '0'),
+     minutes: minutes.toString().padStart(2, '0'),
+     seconds: seconds.toString().padStart(2, '0'),
+   };

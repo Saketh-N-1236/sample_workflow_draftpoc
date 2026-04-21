@@ -1,0 +1,16 @@
+diff --git a/src/helpers/utilities.js b/src/helpers/utilities.js
+index a1b2c3d..9e0f1a2 100644
+--- a/src/helpers/utilities.js
++++ b/src/helpers/utilities.js
+@@ -234,9 +234,9 @@ export const timeConvert = n => {
+ };
+ 
+ export const getProgressWidth = (value, max) => {
+   if (!value || !max) {
+     return 0;
+   }
+-  return (value / max) * 100;
++  return Math.min(100, (value / max) * 100);
+ };
+ 
+ export const currentDateToNextDate = () => {

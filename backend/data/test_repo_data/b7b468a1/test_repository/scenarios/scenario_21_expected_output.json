@@ -1,0 +1,124 @@
+{
+  "scenario": "21",
+  "category": "FEATURE — userDetailsReducer ONLY",
+  "title": "userDetailsReducer.js — profileAuthSuccess initial value set to true",
+  "commit_message": "fix: align initial profileAuthSuccess with persisted session bootstrap",
+
+  "changed_files": ["src/reducer/userDetailsReducer.js"],
+  "changed_symbols": ["userDetailsReducer"],
+
+  "why_user_details_only": {
+    "explanation": "Only userDetailsReducer.js changes. CRITICAL = every test whose symbols[] includes userDetailsReducer (6 tests). profileReducer.js is in the same feature file but has disjoint sources[] — those tests are HIGH under a same-file defensive policy (scenario 12 profile-only narrative, inverted).",
+    "key_point": "6 CRITICAL + 4 HIGH = 10 selected; 67 SKIP — single feature file, two reducer describes."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "symbols[] contains 'userDetailsReducer'; sources include userDetailsReducer.js",
+      "tests": [
+        {
+          "test": "userDetailsReducer > initialises with data as an empty array",
+          "file": "test_repository/feature/user-profile.feature.test.js",
+          "result": "⚠️  MAY FAIL — initial profileAuthSuccess may break assertions that assumed false",
+          "category": "feature"
+        },
+        {
+          "test": "userDetailsReducer > SUCCESS action populates data and token from the payload",
+          "file": "test_repository/feature/user-profile.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test": "userDetailsReducer > UPDATEREFRESHEDTOKEN updates token and loginTime independently",
+          "file": "test_repository/feature/user-profile.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test": "userDetailsReducer > ONAUTHENTICATE resets profileAuthSuccess to false",
+          "file": "test_repository/feature/user-profile.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test": "userDetailsReducer > SHOWLOGGEDOUTSHEET stores the payload in showLoggedOutSheet",
+          "file": "test_repository/feature/user-profile.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test": "userDetailsReducer > returns unchanged state for an unknown action type",
+          "file": "test_repository/feature/user-profile.feature.test.js",
+          "category": "feature"
+        }
+      ],
+      "count": 6
+    },
+
+    "HIGH": {
+      "reason": "Same suite file (user-profile.feature.test.js) — profileReducer describes",
+      "tests": [
+        {
+          "test": "profileReducer > initialises with an empty profileData array",
+          "file": "test_repository/feature/user-profile.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test": "profileReducer > PROFILESDETAILS action replaces profileData with the new list",
+          "file": "test_repository/feature/user-profile.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test": "profileReducer > SAVESELECTEDPROFILEDETAILS stores the chosen profile",
+          "file": "test_repository/feature/user-profile.feature.test.js",
+          "category": "feature"
+        },
+        {
+          "test": "profileReducer > returns current state unchanged for an unrecognised action",
+          "file": "test_repository/feature/user-profile.feature.test.js",
+          "category": "feature"
+        }
+      ],
+      "count": 4
+    },
+
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "userDetailsReducer.js not in sources[] for other suites",
+      "skipped_files": [
+        "test_repository/standalone/regex.constants.test.js",
+        "test_repository/standalone/utilities.pure.test.js",
+        "test_repository/cross-dependent/auth-storage.cross.test.js",
+        "test_repository/cross-dependent/payment-state.cross.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js",
+        "test_repository/feature/api-navigation.feature.test.js"
+      ],
+      "count": 67
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "gap_id": "GAP-01",
+      "type": "ASSERTION_UPDATE",
+      "symbol": "userDetailsReducer",
+      "detail": "Initial state test should assert profileAuthSuccess if that field is now part of the public contract."
+    }
+  ],
+
+  "selection_proof": {
+    "standalone_selected": 0,
+    "cross_dependent_selected": 0,
+    "feature_selected": 10,
+    "total_selected": 10,
+    "total_skipped": 67
+  },
+
+  "summary": {
+    "total_tests": 77,
+    "CRITICAL": 6,
+    "HIGH": 4,
+    "LOW": 0,
+    "SKIP": 67,
+    "coverage_gaps": 1
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage -t \"userDetailsReducer|profileReducer\" --verbose"
+}

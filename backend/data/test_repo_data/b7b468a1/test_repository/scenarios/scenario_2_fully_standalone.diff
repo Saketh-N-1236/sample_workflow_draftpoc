@@ -1,0 +1,7 @@
+diff --git a/src/types/constants.ts b/src/types/constants.ts
+index 2b3c4d5..1a9f8e7 100644
+--- a/src/types/constants.ts
++++ b/src/types/constants.ts
+@@ -14,3 +14,3 @@
+-export const PHONE_REGEX = /^\+?[0-9]{10,15}$/
++export const PHONE_REGEX = /^[0-9]{10,15}$/

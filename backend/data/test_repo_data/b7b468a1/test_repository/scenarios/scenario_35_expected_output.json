@@ -1,0 +1,98 @@
+{
+  "scenario": "35",
+  "title": "FAQ Additions — add 3 new FAQ entries and use FAQDataList as offline fallback",
+  "commit_message": "feat: add password-reset, streaming-quality, and payment-methods FAQs — use FAQDataList as fallback when API returns empty or errors",
+
+  "changed_files": [
+    "src/screens/frequentlyAskedQuestions/FAQDataList.js",
+    "src/screens/frequentlyAskedQuestions/FrequentlyAskedQuestions.js"
+  ],
+
+  "changed_symbols": [
+    "FAQDataList (modified — 3 new entries added: ids 6, 7, 8 covering password reset, streaming quality, payment methods)",
+    "FrequentlyAskedQuestions useEffect (modified — FAQAPI response now falls back to FAQDataList when items array is empty or API throws)"
+  ],
+
+  "what_the_diff_does": {
+    "before": "Help Center shows FAQ items fetched from FAQAPI. If the API returns an empty list or throws, the FAQ section is hidden entirely (faqItems stays []). FAQDataList had 5 entries but was unused by the component.",
+    "after": "Help Center always shows at least 8 FAQ items. If the API returns a non-empty list, those items are shown. If the API returns empty or fails, the component falls back to the local FAQDataList (which now has 8 entries including 3 new ones). Users always see content.",
+    "visible_change": "Three new FAQ entries appear in the Help Center: 'How do I reset my account password?', 'What streaming quality does iStream support?', and 'What payment methods does iStream accept?'. The FAQ section no longer disappears when the API is unavailable.",
+    "compile_safe": true,
+    "compile_note": "FAQDataList is imported from a sibling file in the same directory — no new npm packages or external dependencies introduced."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "faq-data.pure.test.js declares both changed files as @source and tests every changed symbol: FAQDataList size (2 tests), new entries ids 6/7/8 (8 tests), fallback logic (6 tests). All 16 are CRITICAL.",
+      "tests": [
+        "FAQDataList — size > contains 8 entries after the 3 new FAQs are added",
+        "FAQDataList — size > every entry has a unique id",
+        "FAQDataList — new entries (ids 6, 7, 8) > entry with id \"6\" exists",
+        "FAQDataList — new entries (ids 6, 7, 8) > entry with id \"7\" exists",
+        "FAQDataList — new entries (ids 6, 7, 8) > entry with id \"8\" exists",
+        "FAQDataList — new entries (ids 6, 7, 8) > entry 6 sectionHeader mentions password reset",
+        "FAQDataList — new entries (ids 6, 7, 8) > entry 7 sectionHeader mentions streaming quality",
+        "FAQDataList — new entries (ids 6, 7, 8) > entry 8 sectionHeader mentions payment methods",
+        "FAQDataList — new entries (ids 6, 7, 8) > all 3 new entries have non-empty sectionContent",
+        "FAQ fallback logic — resolveFaqItems > returns API items when API responds with a non-empty array",
+        "FAQ fallback logic — resolveFaqItems > falls back to FAQDataList when API responds with an empty array",
+        "FAQ fallback logic — resolveFaqItems > falls back to FAQDataList when API response has no items field",
+        "FAQ fallback logic — resolveFaqItems > falls back to FAQDataList when API response is null",
+        "FAQ fallback logic — resolveFaqItems > falls back to FAQDataList when API throws an error",
+        "FAQ fallback logic — resolveFaqItems > fallback list has 8 items so users always see content"
+      ],
+      "files": ["test_repository/standalone/faq-data.pure.test.js"],
+      "count": 15
+    },
+
+    "HIGH": {
+      "reason": "auth-reducers.feature.test.js covers the navigation layer which includes faqScreen. user-profile.feature.test.js covers the profile/menu area where Help Center is launched from. Both must pass to confirm navigation to FAQ still works.",
+      "files": [
+        "test_repository/feature/auth-reducers.feature.test.js",
+        "test_repository/feature/user-profile.feature.test.js"
+      ],
+      "count": 35
+    },
+
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "All remaining test files do not declare FAQDataList.js or FrequentlyAskedQuestions.js as a source.",
+      "count": 647
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "id": "GAP-01",
+      "symbol": "FAQDataList — new entries",
+      "source": "src/screens/frequentlyAskedQuestions/FAQDataList.js",
+      "gap": "No existing tests validated the contents of FAQDataList or its new entries.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/standalone/faq-data.pure.test.js"
+    },
+    {
+      "id": "GAP-02",
+      "symbol": "FAQ fallback logic",
+      "source": "src/screens/frequentlyAskedQuestions/FrequentlyAskedQuestions.js",
+      "gap": "No existing tests covered the API-empty / API-error fallback to FAQDataList.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/standalone/faq-data.pure.test.js"
+    }
+  ],
+
+  "summary": {
+    "total_tests": 670,
+    "test_files": 24,
+    "CRITICAL": 15,
+    "HIGH": 35,
+    "LOW": 0,
+    "SKIP": 620,
+    "coverage_gaps": 2,
+    "gaps_closed": 2,
+    "gaps_remaining": 0
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage test_repository/standalone/faq-data.pure.test.js test_repository/feature/auth-reducers.feature.test.js test_repository/feature/user-profile.feature.test.js",
+  "jest_run_note": "faq-data.pure.test.js runs 15 CRITICAL tests for FAQDataList additions and fallback logic. auth-reducers and user-profile run 35 HIGH tests confirming Help Center navigation is unaffected."
+}

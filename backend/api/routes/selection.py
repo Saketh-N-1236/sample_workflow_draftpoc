@@ -42,22 +42,25 @@ async def select_tests(repo_id: str):
             risk_threshold = int(risk_threshold)  # Ensure it's an integer
         # If risk_threshold is None, keep it as None (risk analysis disabled)
         
+        from services.token_encryption import decrypt_token
+        _repo_token = decrypt_token(repo.get("encrypted_token") or "") or None
+
         logger.info(f"Getting diff for provider: {provider}, branch: {branch}")
         if provider == 'gitlab':
-            gitlab_service = GitLabService()
+            gitlab_service = GitLabService(api_token=_repo_token)
             diff_data = await gitlab_service.get_latest_diff(
                 repo_url, branch=branch, default_branch_hint=default_hint
             )
-            
+
             if not diff_data:
                 logger.error("Failed to get diff via GitLab API")
                 raise HTTPException(
                     status_code=500,
                     detail="Failed to get diff via GitLab API for test selection."
                 )
-            
+
         elif provider == 'github':
-            github_service = GitHubService()
+            github_service = GitHubService(api_token=_repo_token)
             diff_data = await github_service.get_latest_diff(
                 repo_url, branch=branch, default_branch_hint=default_hint
             )

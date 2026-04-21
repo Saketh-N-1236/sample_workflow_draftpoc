@@ -9,6 +9,7 @@ original query). Summary text is still validated vs the diff embedding. See READ
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -66,8 +67,19 @@ async def _vector_search_queries(
     test_repo_id: Optional[str],
     top_k: Optional[int],
     top_p: Optional[int],
-) -> List[Dict[str, Any]]:
-    """Embed each query string, search backend, merge with weights (first query 1.0, rest 0.9)."""
+) -> Tuple[List[Dict[str, Any]], Optional[List[float]]]:
+    """
+    Embed ALL query strings in ONE batched API call, then run all Pinecone searches
+    in parallel via asyncio.gather.  Merge results with weights (first query 1.0, rest 0.9).
+
+    Returns (results, primary_query_embedding).  The primary embedding (queries[0]) is
+    cached so the caller can reuse it for ast_semantic_supplement without re-embedding.
+
+    Optimisation summary
+    --------------------
+    Before: N serial embed calls  + N serial Pinecone searches
+    After : 1 batched embed call  + N parallel Pinecone searches
+    """
     embedding_provider = LLMFactory.create_embedding_provider(get_settings())
     backend = get_backend(conn)
     query_limit = max(max_results * 2, 100) if max_results > 0 else 10000
@@ -75,20 +87,42 @@ async def _vector_search_queries(
     if hasattr(embedding_provider, "get_embedding_dimensions"):
         expected_dimensions = embedding_provider.get_embedding_dimensions()
 
-    all_results: List[Dict[str, Any]] = []
-    # O(1) lookup dict so duplicate test_id updates don't require a linear scan (Bug 5 fix)
-    seen: Dict[str, Dict[str, Any]] = {}
+    # ── Filter blanks, preserving original index so position-0 stays "primary" ──
+    indexed_queries: List[tuple[int, str]] = [
+        (i, q.strip()) for i, q in enumerate(queries) if q and q.strip()
+    ]
+    if not indexed_queries:
+        return [], None
 
-    for i, query in enumerate(queries):
-        if not query or not query.strip():
-            continue
+    texts = [q for _, q in indexed_queries]
+
+    # ── Step 1: ONE batched embedding call for all query variations ──────────────
+    try:
+        emb_response = await embedding_provider.get_embeddings(
+            EmbeddingRequest(texts=texts)
+        )
+        embeddings: List[List[float]] = emb_response.embeddings
+    except Exception as e:
+        logger.warning("[RAG] Batch embedding failed: %s", e)
+        return [], None
+
+    if len(embeddings) != len(texts):
+        logger.warning(
+            "[RAG] Embedding count mismatch: expected %s got %s",
+            len(texts), len(embeddings),
+        )
+        return [], None
+
+    primary_query_embedding: Optional[List[float]] = None
+    orig_idx_0 = indexed_queries[0][0]  # original index of the first valid query
+    if orig_idx_0 == 0:
+        primary_query_embedding = embeddings[0]
+
+    # ── Step 2: ALL Pinecone searches in PARALLEL ─────────────────────────────────
+    async def _search(emb: List[float]) -> List[Dict[str, Any]]:
         try:
-            response = await embedding_provider.get_embeddings(
-                EmbeddingRequest(texts=[query])
-            )
-            query_embedding = response.embeddings[0]
-            results = await backend.search_similar(
-                query_embedding,
+            return await backend.search_similar(
+                emb,
                 similarity_threshold,
                 query_limit,
                 test_repo_id=test_repo_id,
@@ -96,45 +130,55 @@ async def _vector_search_queries(
                 top_p=top_p,
                 expected_dimensions=expected_dimensions,
             )
-            weight = 1.0 if i == 0 else 0.9
-            for result in results:
-                test_id = result.get("test_id")
-                if test_id not in seen:
-                    result["query_weight"] = weight
-                    all_results.append(result)
-                    seen[test_id] = result
-                else:
-                    existing = seen[test_id]
-                    existing["query_weight"] = max(
-                        existing.get("query_weight", 1.0), weight
-                    )
-                    existing["similarity"] = max(
-                        existing.get("similarity", 0),
-                        result.get("similarity", 0),
-                    )
         except Exception as e:
-            logger.warning("[RAG] Failed query variation %s: %s", i + 1, e)
-            continue
+            logger.warning("[RAG] Pinecone search failed: %s", e)
+            return []
 
-    # Sort by weighted_similarity (first-query hits rank higher) then strip the helper
-    # fields — Bug 1 fix: the old code re-sorted by raw similarity immediately after,
-    # which discarded the query-weight ranking entirely.
+    per_query_results: List[List[Dict[str, Any]]] = await asyncio.gather(
+        *[_search(emb) for emb in embeddings]
+    )
+
+    # ── Step 3: Merge (identical logic to before) ─────────────────────────────────
+    all_results: List[Dict[str, Any]] = []
+    seen: Dict[str, Dict[str, Any]] = {}
+
+    for slot, (orig_i, _) in enumerate(indexed_queries):
+        weight = 1.0 if orig_i == 0 else 0.9
+        for result in per_query_results[slot]:
+            test_id = result.get("test_id")
+            if test_id not in seen:
+                result["query_weight"] = weight
+                all_results.append(result)
+                seen[test_id] = result
+            else:
+                existing = seen[test_id]
+                existing["query_weight"] = max(existing.get("query_weight", 1.0), weight)
+                existing["similarity"] = max(
+                    existing.get("similarity", 0), result.get("similarity", 0)
+                )
+
+    # Sort by weighted_similarity (first-query hits rank higher) then strip helpers.
     for result in all_results:
-        w = result.get("query_weight", 1.0)
-        result["weighted_similarity"] = result.get("similarity", 0) * w
+        result["weighted_similarity"] = result.get("similarity", 0) * result.get("query_weight", 1.0)
     all_results.sort(key=lambda x: x.get("weighted_similarity", 0), reverse=True)
     for result in all_results:
         result.pop("query_weight", None)
         result.pop("weighted_similarity", None)
-    # No second sort — the weighted order is the correct final order.
+
     for result in all_results:
         orig = result.get("similarity", 0)
         result["confidence_score"] = int(orig * 60)
         result["similarity"] = orig
         result["match_type"] = "semantic"
+
     if max_results > 0:
         all_results = all_results[:max_results]
-    return all_results
+
+    logger.info(
+        "[RAG] Batch-embedded %s queries (1 API call) → parallel-searched → %s candidates",
+        len(texts), len(all_results),
+    )
+    return all_results, primary_query_embedding
 
 
 async def run_semantic_rag(
@@ -183,9 +227,12 @@ async def run_semantic_rag(
     summary_meta: Dict[str, Any] = {}
 
     try:
-        summary = await summarize_git_diff(diff_content)
+        summary, diff_embedding_cached = await summarize_git_diff(diff_content)
         if summary and summary.strip():
-            metrics = await validate_llm_extraction(dc, [summary.strip()])
+            metrics = await validate_llm_extraction(
+                dc, [summary.strip()],
+                precomputed_diff_embedding=diff_embedding_cached,
+            )
             avg_sim = float(metrics.get("avg_similarity", 0.0))
             summary_meta = {
                 "summary_validation_avg_similarity": avg_sim,
@@ -263,7 +310,7 @@ async def run_semantic_rag(
             **summary_meta,
         }
         if RAG_LENIENT_FALLBACK:
-            tests = await _vector_search_queries(
+            tests, prim_emb = await _vector_search_queries(
                 conn,
                 [original_query],
                 similarity_threshold or DEFAULT_SIMILARITY_THRESHOLD,
@@ -278,8 +325,9 @@ async def run_semantic_rag(
                 "recovered_via": "RAG_LENIENT_FALLBACK",
                 "after_rewrite_failure": True,
                 "queries_used_strings": [original_query.strip()],
+                "primary_query_embedding": prim_emb,
             }
-        return [], {**diag, "queries_used_strings": []}
+        return [], {**diag, "queries_used_strings": [], "primary_query_embedding": None}
 
     # Rewrites are derived from original_query; no post-rewrite embedding validation.
     queries_for_search = [q.strip() for q in queries if q and q.strip()]
@@ -290,11 +338,12 @@ async def run_semantic_rag(
             "reason": "all rewriter outputs empty after strip",
             "query_count": len(queries),
             "queries_used_strings": [],
+            "primary_query_embedding": None,
             **summary_meta,
         }
 
     threshold = similarity_threshold or DEFAULT_SIMILARITY_THRESHOLD
-    tests = await _vector_search_queries(
+    tests, prim_emb = await _vector_search_queries(
         conn,
         queries_for_search,
         threshold,
@@ -309,5 +358,6 @@ async def run_semantic_rag(
         "post_rewrite_validation": "skipped",
         "queries_used": len(queries_for_search),
         "queries_used_strings": list(queries_for_search),
+        "primary_query_embedding": prim_emb,
         **summary_meta,
     }

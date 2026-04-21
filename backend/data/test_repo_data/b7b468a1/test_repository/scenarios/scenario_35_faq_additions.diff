@@ -1,0 +1,59 @@
+diff --git a/src/screens/frequentlyAskedQuestions/FAQDataList.js b/src/screens/frequentlyAskedQuestions/FAQDataList.js
+index aaaaaaa..bbbbbbb 100644
+--- a/src/screens/frequentlyAskedQuestions/FAQDataList.js
++++ b/src/screens/frequentlyAskedQuestions/FAQDataList.js
+@@ -38,4 +38,28 @@ export const FAQDataList = [
+     sectionContent:
+       'Yes, we offer a 30-day free trial period for new subscribers. During this time, you can access all of our content and features to see if iStream is right for you. If you decide to continue using our service after the trial period ends, you will be automatically billed for the subscription plan you chose.',
+   },
++  {
++    id: '6',
++    collapseImage: 'collapse',
++    expandImage: 'expand',
++    sectionHeader: 'How do I reset my account password?',
++    sectionContent:
++      'You can reset your password by navigating to the Sign In page and clicking "Forgot Password". Enter your registered email address and we will send you a reset link. The link is valid for 24 hours.',
++  },
++  {
++    id: '7',
++    collapseImage: 'collapse',
++    expandImage: 'expand',
++    sectionHeader: 'What streaming quality does iStream support?',
++    sectionContent:
++      'iStream supports Standard Definition (SD), High Definition (HD at 1080p), and Ultra High Definition (4K) streaming depending on your subscription plan and internet connection speed. A minimum of 5 Mbps is recommended for HD and 25 Mbps for 4K.',
++  },
++  {
++    id: '8',
++    collapseImage: 'collapse',
++    expandImage: 'expand',
++    sectionHeader: 'What payment methods does iStream accept?',
++    sectionContent:
++      'iStream accepts major credit and debit cards (Visa, Mastercard, American Express, JCB), as well as Bitcoin. You can manage your saved payment methods from the Billing Details screen under your profile settings.',
++  },
+ ];
+
+diff --git a/src/screens/frequentlyAskedQuestions/FrequentlyAskedQuestions.js b/src/screens/frequentlyAskedQuestions/FrequentlyAskedQuestions.js
+index ccccccc..ddddddd 100644
+--- a/src/screens/frequentlyAskedQuestions/FrequentlyAskedQuestions.js
++++ b/src/screens/frequentlyAskedQuestions/FrequentlyAskedQuestions.js
+@@ -1,6 +1,7 @@
+ /* eslint-disable prettier/prettier */
+ import React, {useState, useEffect, useRef, useLayoutEffect} from 'react';
+ import {View, Image, SafeAreaView, FlatList, ScrollView} from 'react-native';
++import {FAQDataList} from './FAQDataList';
+ import {LocalImages} from '../../globalAssets/images';
+ import {useSelector} from 'react-redux';
+ import {frequentlyAskedQuestionsStyles} from './FrequentlyAskedQuestionsStyles';
+@@ -117,7 +118,12 @@ export const FrequentlyAskedQuestions = () => {
+ 
+   useEffect(() => {
+-    FAQAPI().then(response => setFaqItems(response?.data?.data?.items));
++    FAQAPI()
++      .then(response => {
++        const items = response?.data?.data?.items;
++        setFaqItems(Array.isArray(items) && items.length > 0 ? items : FAQDataList);
++      })
++      .catch(() => {
++        setFaqItems(FAQDataList);
++      });
+   }, []);

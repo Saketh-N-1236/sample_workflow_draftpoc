@@ -1,0 +1,13 @@
+diff --git a/src/reducer/favouritesReducer.js b/src/reducer/favouritesReducer.js
+index ccccccc..ddddddd 100644
+--- a/src/reducer/favouritesReducer.js
++++ b/src/reducer/favouritesReducer.js
+@@ -6,7 +6,7 @@ export const favouritesActions = {
+ 
+ const initialState = {
+   userFavourites: [],
+-  favouritesFetched: false,
++  favouritesFetched: null,
+ };
+ 
+ export default function favouritesReducer(state = initialState, action) {

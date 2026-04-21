@@ -42,6 +42,7 @@ pinecone>=3.0.0                    # Pinecone v3 SDK (Pinecone class, Serverless
 # Numerical / Validation
 # ------------------------------------------------------------
 numpy>=1.24.0                      # Used in semantic/retrieval/validation.py (cosine sim)
+cryptography>=41.0.0               # Fernet symmetric encryption for per-repo PAT storage
 
 # ------------------------------------------------------------
 # Configuration Parsing

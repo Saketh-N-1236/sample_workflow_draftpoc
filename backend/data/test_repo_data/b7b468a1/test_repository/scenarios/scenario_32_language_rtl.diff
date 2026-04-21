@@ -1,0 +1,57 @@
+diff --git a/src/reducer/actiotypes.js b/src/reducer/actiotypes.js
+index a1b2c3d..b2c3d4e 100644
+--- a/src/reducer/actiotypes.js
++++ b/src/reducer/actiotypes.js
+@@ -30,6 +30,8 @@
+ export const LANGUAGE = 'LANGUAGE';
++
++export const RTL_LANGUAGES = ['ar', 'he', 'fa', 'ur'];
+
+diff --git a/src/helpers/utilities.js b/src/helpers/utilities.js
+index b2c3d4e..c3d4e5f 100644
+--- a/src/helpers/utilities.js
++++ b/src/helpers/utilities.js
+@@ -422,3 +422,13 @@
+   appStorage.set(storageKeys.token, token);
+   appStorage.set(storageKeys.loginTime, loginTime);
+   appStorage.set(storageKeys.refreshToken, refreshToken);
+ }
++
++/**
++ * Returns true when the given BCP-47 language code represents a right-to-left
++ * writing system (Arabic, Hebrew, Farsi, Urdu).
++ * The check is case-insensitive so both 'AR' and 'ar' return true.
++ */
++export function isRtlLanguage(code) {
++  if (typeof code !== 'string') return false;
++  return ['ar', 'he', 'fa', 'ur'].includes(code.toLowerCase());
++}
+
+diff --git a/src/reducer/languagereducer.js b/src/reducer/languagereducer.js
+index c3d4e5f..d4e5f6g 100644
+--- a/src/reducer/languagereducer.js
++++ b/src/reducer/languagereducer.js
+@@ -1,4 +1,4 @@
+-import {LANGUAGE} from './actiotypes';
++import {LANGUAGE, RTL_LANGUAGES} from './actiotypes';
+
+@@ -3,5 +3,6 @@
+ const initialState = {
+-  selectlanguage: 'en'
++  selectlanguage: 'en',
++  isRTL: false,
+ };
+
+@@ -6,7 +7,8 @@
+ function languagereducer (state = initialState, action){
+   switch (action.type) {
+     case LANGUAGE:
+-      return {...state, selectlanguage: action.data};
++      return {
++        ...state,
++        selectlanguage: action.data,
++        isRTL: RTL_LANGUAGES.includes(action.data),
++      };
+     default:
+       return state;
+   }

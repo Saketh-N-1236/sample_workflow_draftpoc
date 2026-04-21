@@ -1,0 +1,227 @@
+diff --git a/src/services/api/common/ApiEndPoints.js b/src/services/api/common/ApiEndPoints.js
+index 7f3c2a1..e84b9d5 100644
+--- a/src/services/api/common/ApiEndPoints.js
++++ b/src/services/api/common/ApiEndPoints.js
+@@ -141,9 +141,8 @@
+   matchesApi: '/api/v1/client/sports/search/match?',
+-  moviesWatchlistApi:
+-  '/api/v3/movie/composer/content?carouselType=Static&types=0&filterType=Favorites',
+-  TVShowsWatchlistApi:
+-  '/api/v3/tvshows/composer/content?carouselType=Static&types=2&filterType=Favorites',
++  watchlistApi:
++  '/api/v3/movie/composer/content?carouselType=Static&types=0,2&filterType=Favorites',
+   myOrders: (id) => `/api/v2/payments/get-transaction?account_id=${id}`,
+ };
+
+diff --git a/src/services/api/common/moviesDetails/movieDetails.js b/src/services/api/common/moviesDetails/movieDetails.js
+index 2b41d0c..9cef3a8 100644
+--- a/src/services/api/common/moviesDetails/movieDetails.js
++++ b/src/services/api/common/moviesDetails/movieDetails.js
+@@ -39,10 +39,6 @@
+-export const getAllWatchlistMoviesApi = () => {
+-  const response = ApiClient.get(endpoints.moviesWatchlistApi)
+-  return response
+-}
+-export const getAllWatchlistTVShowsApi = () => {
+-  const response = ApiClient.get(endpoints.TVShowsWatchlistApi)
+-  return response
+-}
++export const getAllWatchlistApi = () => {
++  const response = ApiClient.get(endpoints.watchlistApi)
++  return response
++}
+
+diff --git a/src/services/api/common/watchList/WatchList.js b/src/services/api/common/watchList/WatchList.js
+index d9c3e5f..1a72b40 100644
+--- a/src/services/api/common/watchList/WatchList.js
++++ b/src/services/api/common/watchList/WatchList.js
+@@ -1,48 +1,26 @@
+ import ApiClient from '../ApiClient';
+ 
+-export const addWishListsMovies = Id => {
++export const addToWishlist = (Id, type = 0) => {
+   const data = {
+-    model: 'SingleEventVod',
++    model: type === 0 ? 'SingleEventVod' : 'MultiEventVod',
+     modelId: Id,
+-    type: 0,
++    type,
+   };
+-  const response = ApiClient.post(`/api/v3/movie/add-favorite-vod/`, data);
++  const response = ApiClient.post(`/api/v3/movie/add-favorite-vod/`, data);
+   return response;
+ };
+ 
+-export const removeWishListsMovies = Id => {
++export const removeFromWishlist = (Id, type = 0) => {
+   const data = {
+-    model: 'SingleEventVod',
++    model: type === 0 ? 'SingleEventVod' : 'MultiEventVod',
+     modelId: Id,
+-    type: 0,
++    type,
+   };
+-  const response = ApiClient.post(`/api/v3/movie/remove-favorite-vod/`, data);
++  const response = ApiClient.post(`/api/v3/movie/remove-favorite-vod/`, data);
+   return response;
+ };
+-
+-export const addWishListsTVShow = Id => {
+-  const data = {
+-    model: 'MultiEventVod',
+-    modelId: Id,
+-    type: 2,
+-  };
+-  const response = ApiClient.post(`/api/v3/tvshows/add-favorite-vod/`, data);
+-  return response;
+-};
+-
+-export const removeWishListsTVShow = Id => {
+-  const data = {
+-    model: 'MultiEventVod',
+-    modelId: Id,
+-    type: 2
+-  };
+-  const response = ApiClient.post(`/api/v3/tvshows/remove-favorite-vod/`, data);
+-  return response;
+-};
+
+diff --git a/src/screens/MyFavourites/MyFavourites.js b/src/screens/MyFavourites/MyFavourites.js
+index 4f1a9c3..bc28e07 100644
+--- a/src/screens/MyFavourites/MyFavourites.js
++++ b/src/screens/MyFavourites/MyFavourites.js
+@@ -15,8 +15,7 @@
+ import {
+-  getAllWatchlistMoviesApi,
+-  getAllWatchlistTVShowsApi,
++  getAllWatchlistApi,
+ } from '../../services/api/common/moviesDetails/movieDetails';
+ 
+@@ -24,10 +23,6 @@
+-const titles = {
+-  movies: 'Movies',
+-  TVShows: 'TV Shows',
+-};
++const WATCHLIST_TITLE = 'My Watchlist';
+ 
+@@ -83,38 +79,21 @@
+   const getAllWatchlist = () => {
+-    const apiCallling = [
+-      {
+-        Component: Streaming,
+-        NoDataFound: 'No streaming Videos',
+-        showHeader: true,
+-        viewMoreScreenName: '',
+-        title: titles.movies,
+-        page: 0,
+-        contenttype: '',
+-        staticCarouselValue: false,
+-        getAll: getAllWatchlistMoviesApi,
+-        search: true,
+-        callPagination: false,
+-        showPagination: true,
+-      },
+-      {
+-        Component: Streaming,
+-        NoDataFound: 'No streaming Videos',
+-        showHeader: true,
+-        viewMoreScreenName: '',
+-        title: titles.TVShows,
+-        page: 0,
+-        contenttype: '',
+-        staticCarouselValue: false,
+-        getAll: getAllWatchlistTVShowsApi,
+-        callPagination: true,
+-        showPagination: true,
+-      },
+-    ];
+-    Promise.allSettled(apiCallling.map(({getAll}, id) => getAll()))
+-      .then(values => {
+-        const sectionData = values.map((item, index) => {
+-          if (item.status !== 'fulfilled') return item;
+-          return {
+-            ...apiCallling[index],
+-            cardsData: item.value?.data?.data?.items ?? [],
+-          };
+-        });
+-        setWatchList(sectionData);
++    getAllWatchlistApi()
++      .then(response => {
++        setWatchList([{
++          Component: Streaming,
++          NoDataFound: 'No streaming Videos',
++          showHeader: true,
++          viewMoreScreenName: '',
++          title: WATCHLIST_TITLE,
++          page: 0,
++          contenttype: '',
++          staticCarouselValue: false,
++          callPagination: false,
++          showPagination: true,
++          cardsData: response?.data?.data?.items ?? [],
++        }]);
+         setIsLoading(false);
+       })
+       .catch(() => { setIsLoading(false); })
+
+diff --git a/src/screens/movieSubPage/movieSubPage.js b/src/screens/movieSubPage/movieSubPage.js
+index 8a3c1d2..5b7e9f1 100644
+--- a/src/screens/movieSubPage/movieSubPage.js
++++ b/src/screens/movieSubPage/movieSubPage.js
+@@ -56,8 +56,8 @@
+ import {
+-  addWishListsMovies,
+-  removeWishListsMovies,
++  addToWishlist,
++  removeFromWishlist,
+ } from '../../services/api/common/watchList/WatchList';
+ 
+@@ -404,10 +404,10 @@
+       if (wishlist.includes(Number(id))) {
+         setIsAddedToList(false);
+         setIsAddedToListImage(false);
+-        removeWishListsMovies(Number(id));
++        removeFromWishlist(Number(id), 0);
+         dispatch(removeFromWishlist(Number(id)));
+         setBackgroundColor('Play');
+         showToast({ message: t('REMOVE_FROME_THE_WATCHLIST'), type: toastTypes.success });
+       } else {
+         setIsAddedToList(true);
+         setIsAddedToListImage(true);
+-        addWishListsMovies(Number(id));
++        addToWishlist(Number(id), 0);
+         dispatch(addToWishlist([Number(id)]));
+         setBackgroundColor('Play');
+         showToast({ message: t('ADDED_FROME_THE_WATCHLIST'), type: toastTypes.success });
+       }
+
+diff --git a/src/screens/movieSubPage/TvShowDetails.js b/src/screens/movieSubPage/TvShowDetails.js
+index 9f2e4a1..3d8c0b2 100644
+--- a/src/screens/movieSubPage/TvShowDetails.js
++++ b/src/screens/movieSubPage/TvShowDetails.js
+@@ -57,8 +57,8 @@
+ import {
+-  addWishListsTVShow,
+-  removeWishListsTVShow,
++  addToWishlist,
++  removeFromWishlist,
+ } from '../../services/api/common/watchList/WatchList';
+ 
+@@ -380,10 +380,10 @@
+       if (wishlist.includes(Number(id))) {
+         setIsAddedToList(false);
+         setIsAddedToListImage(false);
+-        removeWishListsTVShow(Number(id));
++        removeFromWishlist(Number(id), 2);
+         dispatch(removeFromWishlist(Number(id)));
+         setBackgroundColor('Play');
+         showToast({ message: t('REMOVE_FROME_THE_WATCHLIST'), type: toastTypes.success });
+       } else {
+         setIsAddedToList(true);
+         setIsAddedToListImage(true);
+-        addWishListsTVShow(Number(id));
++        addToWishlist(Number(id), 2);
+         dispatch(addToWishlist([Number(id)]));
+         setBackgroundColor('Play');
+         showToast({ message: t('ADDED_FROME_THE_WATCHLIST'), type: toastTypes.success });
+       }

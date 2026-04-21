@@ -1,0 +1,150 @@
+{
+  "scenario": "27",
+  "title": "Movies page — merge all carousel categories into a single 'My Movies' section",
+  "commit_message": "feat: collapse movie-tab carousels into one unified 'My Movies' section — remove per-genre rows",
+
+  "changed_files": [
+    "src/navigation/constants.js",
+    "src/screens/home/HomeIntroPage.js"
+  ],
+
+  "changed_symbols": [
+    "carousaTypes.Movies (new property — value 'MOVIES' used to detect the movies tab)",
+    "MY_MOVIES_TITLE (new export — string constant 'My Movies')",
+    "getComposerDetails (modified — branches on isMoviesTab to merge filteredSectionData into one section)"
+  ],
+
+  "what_the_diff_does": {
+    "before": {
+      "movies_page": "Each carousel row returned by the composer API is displayed as its own labelled section (e.g. 'Action', 'Thriller', 'Crime', 'Drama', …). The number of sections equals the number of carousels defined in the backend composer configuration for the MOVIES page.",
+      "other_tabs": "HOME, TV SHOWS, SPORTS, TRENDING, etc. are displayed exactly as before — no change."
+    },
+    "after": {
+      "movies_page": "All carousel rows for the MOVIES tab are collapsed into a single section labelled 'My Movies'. Items from every carousel are concatenated via flatMap into one cardsData array. Banner data (Highlight Content carousel) is still extracted and passed to the banner component as before.",
+      "other_tabs": "All other tabs are unaffected — the else branch preserves the existing multi-section dispatch."
+    },
+    "detection_logic": "ComposerData.name (the tab's name from the composer API response) is compared case-insensitively via .toUpperCase() against carousaTypes.Movies ('MOVIES'). Only the exact MOVIES page triggers the merge; all other pages use the original path.",
+    "banner_preservation": "The Highlight Content carousel is still extracted to bannerData before the merge step. filteredSectionData already excludes the highlight row, so mergedCards contains only playable content cards.",
+    "compile_safe": true,
+    "compile_note": "Both changed files are self-consistent. MY_MOVIES_TITLE is exported from constants.js and imported in HomeIntroPage.js. carousaTypes.Movies is added as a new property — no existing property is renamed or removed."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "No existing describe() block in any test file is named 'getComposerDetails', 'MY_MOVIES_TITLE', or 'carousaTypes.Movies'. The changed symbols have zero direct test coverage — the test selector cannot find a matching label anywhere in the test manifest.",
+      "tests": [],
+      "files": [],
+      "count": 0
+    },
+
+    "HIGH": {
+      "reason": "The two changed files are src/navigation/constants.js and src/screens/home/HomeIntroPage.js. Neither file appears in the sources[] declaration of any existing test file. homeReducer.js (source of home-search.feature.test.js) is not modified — only HomeIntroPage.js is, and it is a React screen component with no test coverage. Therefore zero tests qualify for HIGH.",
+      "tests": [],
+      "files": [],
+      "count": 0
+    },
+
+    "LOW": {
+      "reason": "No loosely related tests reference carousaTypes, HomeIntroPage, getComposerDetails, or MY_MOVIES_TITLE in any describe() or it() label.",
+      "tests": [],
+      "count": 0
+    },
+
+    "SKIP": {
+      "reason": "All 533 existing tests are from files whose declared sources[] have no overlap with constants.js or HomeIntroPage.js.",
+      "files": [
+        "test_repository/standalone/utilities.pure.test.js",
+        "test_repository/standalone/regex.constants.test.js",
+        "test_repository/standalone/storage.pure.test.js",
+        "test_repository/standalone/action-creators.pure.test.js",
+        "test_repository/feature/user-profile.feature.test.js",
+        "test_repository/feature/api-navigation.feature.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js",
+        "test_repository/feature/reducers-spinners-app.feature.test.js",
+        "test_repository/feature/wishlist.feature.test.js",
+        "test_repository/feature/stream-video.feature.test.js",
+        "test_repository/feature/home-search.feature.test.js",
+        "test_repository/feature/sports.feature.test.js",
+        "test_repository/feature/auth-reducers.feature.test.js",
+        "test_repository/feature/ui-state.feature.test.js",
+        "test_repository/cross-dependent/auth-storage.cross.test.js",
+        "test_repository/cross-dependent/payment-state.cross.test.js"
+      ],
+      "count": 533
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "id": "GAP-01",
+      "symbol": "MY_MOVIES_TITLE",
+      "source": "src/navigation/constants.js",
+      "gap": "No test verifies the value of the MY_MOVIES_TITLE constant. If it is renamed or its value is changed the diff-based selector will not catch it.",
+      "suggested_describe": "MY_MOVIES_TITLE",
+      "suggested_tests": [
+        "MY_MOVIES_TITLE equals the string 'My Movies'",
+        "MY_MOVIES_TITLE is a non-empty string"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "GAP-02",
+      "symbol": "carousaTypes.Movies",
+      "source": "src/navigation/constants.js",
+      "gap": "No test verifies that carousaTypes.Movies equals 'MOVIES'. The detection logic in getComposerDetails depends on this value being uppercase.",
+      "suggested_describe": "carousaTypes",
+      "suggested_tests": [
+        "carousaTypes.Movies equals 'MOVIES' (uppercase, matches ComposerData.name from backend)",
+        "carousaTypes.Movies is distinct from carousaTypes.Sports, carousaTypes.Shows, and carousaTypes.Players",
+        "existing carousaTypes properties (isHighlightContent, isSportsHighlightContent, Sports, Shows, Players) are unchanged"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "GAP-03",
+      "symbol": "getComposerDetails (isMoviesTab branch)",
+      "source": "src/screens/home/HomeIntroPage.js",
+      "gap": "The core merge logic — flatMap over filteredSectionData, construct a single mergedSection, dispatch with data: [mergedSection] — has no unit test. Any regression in the merge (wrong title, missing cards, wrong staticCarouselValue) will not be caught.",
+      "suggested_describe": "getComposerDetails — movies tab merge",
+      "suggested_tests": [
+        "when ComposerData.name is 'MOVIES' it dispatches a single section titled MY_MOVIES_TITLE",
+        "the merged section's cardsData is the flat concatenation of all filtered carousel items",
+        "banner data (Highlight Content) is excluded from the merged cardsData",
+        "when ComposerData.name is not 'MOVIES' it dispatches the original multi-section array unchanged",
+        "when ComposerData.name is 'HOME' it does not trigger the merge path",
+        "when ComposerData.name is 'SPORTS' it does not trigger the merge path",
+        "the merged section uses showHeader: true and showPagination: false"
+      ],
+      "status": "OPEN"
+    },
+    {
+      "id": "GAP-04",
+      "symbol": "getComposerDetails (isMoviesTab detection)",
+      "source": "src/screens/home/HomeIntroPage.js",
+      "gap": "The toUpperCase() comparison means tab names that differ only in case (e.g. 'Movies', 'movies') will still match — but this is untested. If the backend returns a lower-case name the merge will silently not trigger.",
+      "suggested_describe": "carousaTypes.Movies tab name detection",
+      "suggested_tests": [
+        "'MOVIES'.toUpperCase() === carousaTypes.Movies returns true",
+        "'movies'.toUpperCase() === carousaTypes.Movies returns true (case-insensitive guard)",
+        "'Movie'.toUpperCase() !== carousaTypes.Movies returns true (partial name does not match)"
+      ],
+      "status": "OPEN"
+    }
+  ],
+
+  "summary": {
+    "total_tests": 533,
+    "test_files": 16,
+    "CRITICAL": 0,
+    "HIGH": 0,
+    "LOW": 0,
+    "SKIP": 533,
+    "coverage_gaps": 4,
+    "gaps_closed": 0,
+    "gaps_remaining": 4,
+    "gap_note": "This diff modifies only a React screen component (HomeIntroPage.js) and a navigation constants file (constants.js). Neither is listed as a source in any existing test suite. The entire test suite is SKIP for this diff. To achieve CRITICAL coverage, new test files must be written with describe() blocks named 'MY_MOVIES_TITLE', 'carousaTypes', and 'getComposerDetails — movies tab merge'."
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage",
+  "jest_run_note": "Because all 533 tests are SKIP for this diff, running the full suite confirms no regressions were introduced — but it does NOT validate the new merge behaviour. The coverage gaps above must be closed with new tests before this change can be considered fully validated by the test system."
+}

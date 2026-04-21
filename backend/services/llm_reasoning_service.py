@@ -10,6 +10,7 @@ Two responsibilities:
    does it directly exercise the changed code, or is it indirectly affected?
 """
 
+import asyncio
 import sys
 from pathlib import Path
 from typing import List, Dict, Optional
@@ -89,11 +90,17 @@ class LLMReasoningService:
         if len(to_classify) > _max:
             to_classify = to_classify[:_max]
 
-        results: List[Dict] = []
-        try:
-            for i in range(0, len(to_classify), _batch):
-                batch = to_classify[i : i + _batch]
-                prompt = build_semantic_classification_prompt(diff_summary_or_content or "", batch)
+        # Build all batches upfront, then fire them ALL in parallel.
+        batches = [
+            to_classify[i : i + _batch]
+            for i in range(0, len(to_classify), _batch)
+        ]
+
+        async def _sem_batch(batch: List[Dict], slot: int) -> List[Dict]:
+            try:
+                prompt = build_semantic_classification_prompt(
+                    diff_summary_or_content or "", batch
+                )
                 request = LLMRequest(
                     messages=[
                         {
@@ -110,14 +117,29 @@ class LLMReasoningService:
                     max_tokens=min(4000, 200 + len(batch) * 60),
                 )
                 response = await self.llm_provider.chat_completion(request)
-                content = response.content or ""
-                # Parse minimal JSON { classifications: [ {test_id, label, reason} ] }
-                parsed = self._parse_simple_classification_json(content, expected=len(batch))
-                results.extend(parsed)
+                parsed = self._parse_simple_classification_json(
+                    response.content or "", expected=len(batch)
+                )
+                logger.info(
+                    "[SEM_CLASSIFY] Batch %d/%d: %d result(s) parsed",
+                    slot + 1, len(batches), len(parsed),
+                )
+                return parsed
+            except Exception as e:
+                logger.warning(
+                    "[SEM_CLASSIFY] Batch %d/%d failed: %s", slot + 1, len(batches), e
+                )
+                return []
+
+        try:
+            per_batch: List[List[Dict]] = await asyncio.gather(
+                *[_sem_batch(b, i) for i, b in enumerate(batches)]
+            )
         except Exception as e:
             logger.warning("Semantic classification failed: %s", e, exc_info=True)
             return []
 
+        results: List[Dict] = [item for br in per_batch for item in br]
         return results
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -156,15 +178,21 @@ class LLMReasoningService:
         if not tests:
             return []
 
-        results: List[Dict] = []
         total = len(tests)
-        logger.info("[DEP_CLASSIFY] Classifying %d test(s) in batches of %d", total, batch_size)
+        batches = [
+            tests[i : i + batch_size] for i in range(0, total, batch_size)
+        ]
+        num_batches = len(batches)
+        logger.info(
+            "[DEP_CLASSIFY] Classifying %d test(s) in %d parallel batch(es) of %d",
+            total, num_batches, batch_size,
+        )
 
-        try:
-            for i in range(0, total, batch_size):
-                batch = tests[i : i + batch_size]
+        async def _dep_batch(batch: List[Dict], slot: int) -> List[Dict]:
+            start_idx = slot * batch_size + 1
+            end_idx   = min(start_idx + batch_size - 1, total)
+            try:
                 prompt = build_dependency_classification_prompt(diff_content or "", batch)
-
                 request = LLMRequest(
                     messages=[
                         {
@@ -182,20 +210,30 @@ class LLMReasoningService:
                     temperature=0.0,
                     max_tokens=min(4000, 300 + len(batch) * 80),
                 )
-
                 response = await self.llm_provider.chat_completion(request)
-                raw = response.content or ""
-                batch_results = self._parse_dependency_classification_json(raw, batch)
-                results.extend(batch_results)
+                parsed = self._parse_dependency_classification_json(
+                    response.content or "", batch
+                )
                 logger.info(
                     "[DEP_CLASSIFY] Batch %d-%d: %d result(s) parsed",
-                    i + 1, min(i + batch_size, total), len(batch_results),
+                    start_idx, end_idx, len(parsed),
                 )
+                return parsed
+            except Exception as e:
+                logger.warning(
+                    "[DEP_CLASSIFY] Batch %d-%d failed: %s", start_idx, end_idx, e
+                )
+                return []
 
+        try:
+            per_batch: List[List[Dict]] = await asyncio.gather(
+                *[_dep_batch(b, i) for i, b in enumerate(batches)]
+            )
         except Exception as e:
-            logger.warning("[DEP_CLASSIFY] LLM call failed: %s", e, exc_info=True)
+            logger.warning("[DEP_CLASSIFY] Parallel gather failed: %s", e, exc_info=True)
             return []
 
+        results: List[Dict] = [item for br in per_batch for item in br]
         logger.info(
             "[DEP_CLASSIFY] Done — %d/%d tests classified by LLM",
             len(results), total,

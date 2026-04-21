@@ -237,7 +237,7 @@ def create_reverse_index_table(conn, schema: str = None):
                 production_class TEXT NOT NULL,
                 test_id VARCHAR(50) NOT NULL,
                 test_file_path TEXT,
-                reference_type VARCHAR(20) DEFAULT 'direct_import',
+                reference_type VARCHAR(50) DEFAULT 'direct_import',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (test_id) REFERENCES {target_schema}.test_registry(test_id) ON DELETE CASCADE
             )

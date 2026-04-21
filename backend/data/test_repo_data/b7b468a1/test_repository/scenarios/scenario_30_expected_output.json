@@ -1,0 +1,104 @@
+{
+  "scenario": "30",
+  "title": "Favourites Sort Order — add 'recently added first' toggle to the favourites list",
+  "commit_message": "feat: add TOGGLE_FAVOURITES_SORT action and sortOrder field to favouritesReducer — sort by modelId desc when 'recent'",
+
+  "changed_files": [
+    "src/reducer/actiotypes.js",
+    "src/reducer/actions.js",
+    "src/reducer/favouritesReducer.js"
+  ],
+
+  "changed_symbols": [
+    "TOGGLE_FAVOURITES_SORT (new action type string)",
+    "toggleFavouritesSort (new action creator — returns { type: TOGGLE_FAVOURITES_SORT })",
+    "favouritesReducer (modified — initial state gains sortOrder: 'api'; new TOGGLE_FAVOURITES_SORT case toggles 'api'↔'recent'; UPDATEALLFAVOURITIESDETAILS now sorts by modelId desc when sortOrder === 'recent')"
+  ],
+
+  "what_the_diff_does": {
+    "before": "favouritesReducer stores userFavourites in API order. No sort state exists. The UI displays favourites in whatever order the backend returns them.",
+    "after": "favouritesReducer gains a sortOrder field ('api' by default). TOGGLE_FAVOURITES_SORT flips between 'api' and 'recent'. When 'recent', UPDATEALLFAVOURITIESDETAILS sorts the incoming items by modelId descending (highest ID = most recently added appears first). A sort toggle button in the Favourites screen dispatches toggleFavouritesSort().",
+    "visible_change": "Favourites screen shows a sort toggle. In 'recently added' mode, the most recently favourited item appears at the top instead of the bottom.",
+    "compile_safe": true,
+    "compile_note": "UPDATEALLFAVOURITIESDETAILS is backward-compatible: when sortOrder is 'api' (the default), items are stored exactly as the API returned them — no change in behaviour for existing callers."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "Two files contribute CRITICAL tests: (1) favourites-watchlist.feature.test.js — describe('favouritesReducer') matches the changed symbol, 8 tests CRITICAL. (2) favourites-sort.feature.test.js — declares favouritesReducer.js, actions.js, and actiotypes.js as sources and contains describe('TOGGLE_FAVOURITES_SORT') 2 tests, describe('toggleFavouritesSort') 3 tests, describe('favouritesReducer — sortOrder') 7 tests — all 12 are CRITICAL. Total CRITICAL: 20.",
+      "tests": [
+        "favouritesReducer > starts with an empty userFavourites list",
+        "favouritesReducer > starts with favouritesFetched as null",
+        "favouritesReducer > UPDATEALLFAVOURITIESDETAILS replaces the entire favourites list",
+        "favouritesReducer > sets favouritesFetched to true once the list is successfully loaded",
+        "favouritesReducer > sets favouritesFetched to false when load fails (empty list)",
+        "favouritesReducer > replaces a populated list with an empty list when dispatched again",
+        "favouritesReducer > reflects the exact number of items provided in the action",
+        "favouritesReducer > returns unchanged state for an unknown action type"
+      ],
+      "files": [
+        "test_repository/feature/favourites-watchlist.feature.test.js",
+        "test_repository/feature/favourites-sort.feature.test.js"
+      ],
+      "count": 20
+    },
+
+    "HIGH": {
+      "reason": "Two files qualify as HIGH: (1) action-creators.pure.test.js declares src/reducer/actions.js as a source — actions.js is changed. (2) The 16 non-CRITICAL tests in favourites-watchlist.feature.test.js (the toastReducer describe block) share the file whose sources include favouritesReducer.js and actiotypes.js — both changed.",
+      "files": [
+        "test_repository/standalone/action-creators.pure.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js"
+      ],
+      "count": 56
+    },
+
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "All remaining test files do not declare actiotypes.js, actions.js, or favouritesReducer.js as a source.",
+      "count": 540
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "id": "GAP-01",
+      "symbol": "TOGGLE_FAVOURITES_SORT",
+      "source": "src/reducer/actiotypes.js",
+      "gap": "Covered by 2 tests in describe('TOGGLE_FAVOURITES_SORT') in favourites-sort.feature.test.js.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/favourites-sort.feature.test.js"
+    },
+    {
+      "id": "GAP-02",
+      "symbol": "toggleFavouritesSort",
+      "source": "src/reducer/actions.js",
+      "gap": "Covered by 3 tests in describe('toggleFavouritesSort') in favourites-sort.feature.test.js.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/favourites-sort.feature.test.js"
+    },
+    {
+      "id": "GAP-03",
+      "symbol": "favouritesReducer — sortOrder and TOGGLE_FAVOURITES_SORT",
+      "source": "src/reducer/favouritesReducer.js",
+      "gap": "Covered by 7 tests in describe('favouritesReducer — sortOrder') in favourites-sort.feature.test.js.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/favourites-sort.feature.test.js"
+    }
+  ],
+
+  "summary": {
+    "total_tests": 616,
+    "test_files": 21,
+    "CRITICAL": 20,
+    "HIGH": 56,
+    "LOW": 0,
+    "SKIP": 540,
+    "coverage_gaps": 3,
+    "gaps_closed": 3,
+    "gaps_remaining": 0
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage test_repository/feature/favourites-sort.feature.test.js test_repository/feature/favourites-watchlist.feature.test.js test_repository/standalone/action-creators.pure.test.js",
+  "jest_run_note": "favourites-sort.feature.test.js runs 12 CRITICAL tests. favourites-watchlist.feature.test.js runs 8 CRITICAL + 16 HIGH tests. action-creators.pure.test.js adds 40 HIGH tests. All 3 gaps closed."
+}

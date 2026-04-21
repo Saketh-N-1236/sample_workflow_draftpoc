@@ -1,0 +1,111 @@
+{
+  "scenario": "28",
+  "title": "Search Unification — merge movie and TV show search into a single 'All Results' section",
+  "commit_message": "feat: unify movie+TV search into one endpoint — replace separate Movies/TVShows rows with a single 'All Results' section",
+
+  "changed_files": [
+    "src/services/api/common/ApiEndPoints.js",
+    "src/services/api/common/homescreen/homescreen.js",
+    "src/components/carousel/SearchResults/Component.js"
+  ],
+
+  "changed_symbols": [
+    "unifiedSearchApi (new endpoint — /api/v3/movie/searchcontent/home?types=0,2&)",
+    "unifiedSearchAPI (new API function — wraps unifiedSearchApi)",
+    "movieSearchAPI (callers updated to unifiedSearchAPI — function itself kept for backward compat)",
+    "TVShowsSearchAPI (callers updated to unifiedSearchAPI — function itself kept for backward compat)",
+    "getSeaarchResults (modified — 3-section array becomes 2-section: 'All Results' + Sports)",
+    "titles.movies and titles.TVShows (removed — replaced by titles.allResults = 'All Results')"
+  ],
+
+  "what_the_diff_does": {
+    "before": "Search returns three labelled rows: 'Movies' (movieSearchAPI), 'TV Shows' (TVShowsSearchAPI), and 'Sports' (MatchApi). Two separate HTTP calls are made for movies and TV shows.",
+    "after": "Search returns two labelled rows: 'All Results' (unifiedSearchAPI with types=0,2, pageSize=15) and 'Sports' (MatchApi unchanged). One HTTP call covers both movies and TV shows.",
+    "visible_change": "The search results screen drops the 'Movies' and 'TV Shows' row headings and shows all streaming content under a single 'All Results' heading.",
+    "compile_safe": true,
+    "compile_note": "movieSearchAPI and TVShowsSearchAPI are kept in homescreen.js for backward compatibility with any other callers. Only SearchResults/Component.js stops importing them."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "search-unification.feature.test.js declares all three changed files as sources and contains describe blocks that exactly match the changed symbols: 'unifiedSearchApi' (5 tests), 'unifiedSearchAPI' (5 tests), 'getSeaarchResults — unified search' (8 tests). All 18 are CRITICAL.",
+      "tests": [
+        "unifiedSearchApi > contains types=0,2 to cover both movies and TV shows in one request",
+        "unifiedSearchApi > uses the /searchcontent/home path shared with the old separate endpoints",
+        "unifiedSearchApi > is distinct from the old Movies endpoint which only had types=0",
+        "unifiedSearchApi > is distinct from the old TVShowsSearch endpoint which only had types=2",
+        "unifiedSearchApi > ends with & so a query key can be appended directly without extra punctuation",
+        "unifiedSearchAPI > calls ApiClient.get exactly once per invocation",
+        "unifiedSearchAPI > appends the search key directly after the unifiedSearchApi base URL",
+        "unifiedSearchAPI > returns the response object provided by ApiClient.get",
+        "unifiedSearchAPI > throws when ApiClient.get throws",
+        "unifiedSearchAPI > the URL forwarded to ApiClient.get contains types=0,2",
+        "getSeaarchResults — unified search > apiCallling array has exactly 2 entries after the merge",
+        "getSeaarchResults — unified search > first entry title is 'All Results'",
+        "getSeaarchResults — unified search > first entry searchAPI is unifiedSearchAPI",
+        "getSeaarchResults — unified search > first entry apiEndPoint includes pageSize=15",
+        "getSeaarchResults — unified search > first entry apiEndPoint includes the search term",
+        "getSeaarchResults — unified search > second entry title is 'Sports' and is unchanged",
+        "getSeaarchResults — unified search > neither entry has the old 'Movies' title",
+        "getSeaarchResults — unified search > neither entry has the old 'TV Shows' title"
+      ],
+      "files": ["test_repository/feature/search-unification.feature.test.js"],
+      "count": 18
+    },
+
+    "HIGH": {
+      "reason": "api-navigation.feature.test.js declares src/services/api/common/ApiEndPoints.js as a source — that file is changed (unifiedSearchApi added), so all 30 endpoint contract tests must be re-verified.",
+      "files": ["test_repository/feature/api-navigation.feature.test.js"],
+      "count": 30
+    },
+
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "All remaining test files do not declare ApiEndPoints.js, homescreen.js, or SearchResults/Component.js as a source.",
+      "count": 568
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "id": "GAP-01",
+      "symbol": "unifiedSearchApi",
+      "source": "src/services/api/common/ApiEndPoints.js",
+      "gap": "Covered by 5 tests in describe('unifiedSearchApi') in search-unification.feature.test.js.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/search-unification.feature.test.js"
+    },
+    {
+      "id": "GAP-02",
+      "symbol": "unifiedSearchAPI",
+      "source": "src/services/api/common/homescreen/homescreen.js",
+      "gap": "Covered by 5 tests in describe('unifiedSearchAPI') in search-unification.feature.test.js.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/search-unification.feature.test.js"
+    },
+    {
+      "id": "GAP-03",
+      "symbol": "getSeaarchResults (unified branch)",
+      "source": "src/components/carousel/SearchResults/Component.js",
+      "gap": "Covered by 8 tests in describe('getSeaarchResults — unified search') in search-unification.feature.test.js.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/search-unification.feature.test.js"
+    }
+  ],
+
+  "summary": {
+    "total_tests": 616,
+    "test_files": 21,
+    "CRITICAL": 18,
+    "HIGH": 30,
+    "LOW": 0,
+    "SKIP": 568,
+    "coverage_gaps": 3,
+    "gaps_closed": 3,
+    "gaps_remaining": 0
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage test_repository/feature/search-unification.feature.test.js test_repository/feature/api-navigation.feature.test.js",
+  "jest_run_note": "search-unification.feature.test.js runs 18 CRITICAL tests. api-navigation.feature.test.js runs 30 HIGH tests confirming existing endpoint contracts are intact. All 3 gaps closed."
+}

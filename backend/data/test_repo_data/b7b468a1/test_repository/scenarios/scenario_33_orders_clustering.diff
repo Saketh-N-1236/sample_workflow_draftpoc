@@ -1,0 +1,147 @@
+diff --git a/src/screens/MyOrder/myOrderData.js b/src/screens/MyOrder/myOrderData.js
+index aaaaaaa..bbbbbbb 100644
+--- a/src/screens/MyOrder/myOrderData.js
++++ b/src/screens/MyOrder/myOrderData.js
+@@ -1,11 +1,21 @@
+ import { LocalImages } from '../../globalAssets/images/';
+ import spiderman from  "../../globalAssets/images/ShowSubImages/spiderman.png";
+ import thor from "../../globalAssets/images/ShowSubImages/thor.png";
+ import wonderWoman from "../../globalAssets/images/ShowSubImages/wonderWoman.png";
+ import avatar from "../../globalAssets/images/ShowSubImages/Avatar.png"
+ import blackpanther from "../../globalAssets/images/ShowSubImages/blackpanther.png"
++
++export const ORDER_TYPES = {
++  MOVIE: 'Movie',
++  TV_SHOW: 'TVShow',
++};
++
++export const getOrdersByType = (orders, type) =>
++  Array.isArray(orders) ? orders.filter(o => o.type === type) : [];
++
+ export const myOrderDetails = [
+     {
+         imageUrl:spiderman,
+         gameTitle:'Spider Man',
+         gameDesc:'iStream',
+         gameName:'Movie',
++        type: 'Movie',
+         price:'$ 9.99',
+         paymentTime:'9:30 AM',
+         paymentDate:`March 7`,
+@@ -16,6 +26,7 @@ export const myOrderDetails = [
+         gameTitle:'Avatar',
+         gameDesc:'iStream',
+         gameName:'Movie',
++        type: 'Movie',
+         price:'$ 9.99',
+         paymentTime:'9:30 AM',
+         paymentDate:`March 7`,
+@@ -26,6 +37,7 @@ export const myOrderDetails = [
+         gameTitle:'Wonder Woman',
+         gameDesc:'iStream',
+         gameName:'movie',
++        type: 'TVShow',
+         price:'$ 9.99',
+         paymentTime:'9:30 AM',
+         paymentDate:`March 7`,
+@@ -36,6 +48,7 @@ export const myOrderDetails = [
+         gameTitle:'Thor',
+         gameDesc:'iStream',
+         gameName:'Movie',
++        type: 'TVShow',
+         price:'$ 9.99',
+         paymentTime:'9:30 AM',
+         paymentDate:`March 7`,
+@@ -46,9 +59,11 @@ export const myOrderDetails = [
+         gameTitle:'Black panther',
+         gameDesc:'iStream',
+         gameName:'Movie',
++        type: 'Movie',
+         price:'$ 9.99',
+         paymentTime:'9:30 AM',
+         paymentDate:`March 7`,
+         paymentMode:`1234 1234 1234 7659`,
+         paymentStatus:'Success'
+     }
+ ];
+
+diff --git a/src/screens/MyOrder/MyOrder.js b/src/screens/MyOrder/MyOrder.js
+index ccccccc..ddddddd 100644
+--- a/src/screens/MyOrder/MyOrder.js
++++ b/src/screens/MyOrder/MyOrder.js
+@@ -9,7 +9,7 @@ import Body from '../../components/typography/typography';
+ import { themeLight } from '../../config/theme';
+ import TableRow from './TableRow/TableRow';
+-import {myOrderDetails} from "./myOrderData";
++import {myOrderDetails, ORDER_TYPES, getOrdersByType} from "./myOrderData";
+ import { useTranslation } from 'react-i18next';
+ import { toastTypes } from '../../globalAssets/strings';
+ import { getMyOrders } from '../../services/api/common/myOrders/MyOrders';
+@@ -54,16 +54,34 @@ export default function MyOrder() {
+                 </View>
+                 <ScrollView  showsHorizontalScrollIndicator={false} contentContainerStyle={ModalStyles[screensizereducer.screennumber].tableContainer}>
+                   <View>
+                     <View style={[ModalStyles[screensizereducer.screennumber].tableRowHeadingContainer,{backgroundColor:themeLight.bg.primary.light}]}>
+                         <Body fontSizeStyle="XM" type="bold" color={themeLight.bg.cardFooter.default}>{t('TITLE_DETAILS')}</Body>
+                         <Body fontSizeStyle="XM" type="bold" color={themeLight.bg.cardFooter.default}>{t('PRICE')}</Body>
+                         <Body fontSizeStyle="XM" type="bold" color={themeLight.bg.cardFooter.default}>{t('DATE_AND_TIME')}</Body>
+                         <Body fontSizeStyle="XM" type="bold" color={themeLight.bg.cardFooter.default}>{t('MODE_OF_PAMENT')}</Body>
+                         <Body fontSizeStyle="XM" type="bold" color={themeLight.bg.cardFooter.default}>{t('STATUS')}</Body>
+                     </View>
+-                    <ScrollView
+-                  style={ModalStyles[screensizereducer.screennumber].tableRowsContainer}
+-                  showsVerticalScrollIndicator={false}
+-                >
+-                  {myOrderDetails?.map((item, index)=>{
+-                    return <TableRow
+-                              testID={`order${index}RowButton`}
+-                              key={`${item.id}_${index}`}
+-                              imageUrl={item.imageUrl}
+-                              gameTitle={item.gameTitle}
+-                              desc={item.gameDesc}
+-                              gameName={item.gameName}
+-                              price={item.price}
+-                              paymentDate={item.paymentDate}
+-                              paymentTime={item.paymentTime}
+-                              paymentMode={item.paymentMode}
+-                              status={item.paymentStatus}
+-                            />
+-                  })}
+-                    </ScrollView>
++                    <ScrollView
++                  style={ModalStyles[screensizereducer.screennumber].tableRowsContainer}
++                  showsVerticalScrollIndicator={false}
++                >
++                  {[ORDER_TYPES.MOVIE, ORDER_TYPES.TV_SHOW].map(type => {
++                    const group = getOrdersByType(myOrderDetailss ?? myOrderDetails, type);
++                    if (!group.length) return null;
++                    return (
++                      <View key={type}>
++                        <Body
++                          fontSizeStyle="M"
++                          type="bold"
++                          color={themeLight.bg.cardFooter.default}
++                          style={{paddingVertical: 8, paddingHorizontal: 4}}>
++                          {type === ORDER_TYPES.MOVIE ? t('MOVIES') : t('TV_SHOWS')}
++                        </Body>
++                        {group.map((item, index) => (
++                          <TableRow
++                            testID={`order${type}${index}RowButton`}
++                            key={`${item.id}_${index}`}
++                            imageUrl={item.imageUrl}
++                            gameTitle={item.gameTitle}
++                            desc={item.gameDesc}
++                            gameName={item.gameName}
++                            price={item.price}
++                            paymentDate={item.paymentDate}
++                            paymentTime={item.paymentTime}
++                            paymentMode={item.paymentMode}
++                            status={item.paymentStatus}
++                          />
++                        ))}
++                      </View>
++                    );
++                  })}
++                    </ScrollView>
+                   </View>
+                 </ScrollView>

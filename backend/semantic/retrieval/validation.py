@@ -5,7 +5,7 @@ Validates LLM-generated summaries by comparing embeddings with the diff embeddin
 """
 
 import logging
-from typing import List, Dict
+from typing import Dict, List, Optional
 import numpy as np
 
 from config.settings import get_settings
@@ -18,10 +18,14 @@ logger = logging.getLogger(__name__)
 
 async def validate_llm_extraction(
     diff_content: str,
-    query_variations: List[str]
+    query_variations: List[str],
+    precomputed_diff_embedding: Optional[List[float]] = None,
 ) -> Dict[str, float]:
     """
     Compare query/summary embeddings to the diff embedding (cosine similarity).
+
+    Pass precomputed_diff_embedding (from diff_summarizer) to avoid a redundant
+    embedding API call — the diff was already embedded there.
 
     Returns:
         avg_similarity, max_similarity, min_similarity, query_scores
@@ -44,17 +48,20 @@ async def validate_llm_extraction(
         settings = get_settings()
         llm = LLMFactory.create_embedding_provider(settings)
 
-        diff_for_embed, diff_was_trunc = truncate_for_embedding_api(diff_content)
-        if diff_was_trunc:
-            logger.info(
-                "[VALIDATION] Diff truncated to %s chars for embedding (8192-token API limit)",
-                len(diff_for_embed),
+        if precomputed_diff_embedding is not None:
+            logger.debug("[VALIDATION] Reusing precomputed diff embedding (saved 1 API call)")
+            diff_embedding = np.array(precomputed_diff_embedding)
+        else:
+            diff_for_embed, diff_was_trunc = truncate_for_embedding_api(diff_content)
+            if diff_was_trunc:
+                logger.info(
+                    "[VALIDATION] Diff truncated to %s chars for embedding (8192-token API limit)",
+                    len(diff_for_embed),
+                )
+            diff_response = await llm.get_embeddings(
+                EmbeddingRequest(texts=[diff_for_embed])
             )
-
-        diff_response = await llm.get_embeddings(
-            EmbeddingRequest(texts=[diff_for_embed])
-        )
-        diff_embedding = np.array(diff_response.embeddings[0])
+            diff_embedding = np.array(diff_response.embeddings[0])
 
         query_scores: Dict[int, float] = {}
         similarities: List[float] = []

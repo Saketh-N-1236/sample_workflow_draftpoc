@@ -1,0 +1,209 @@
+{
+  "scenario": "16",
+  "category": "FULLY STANDALONE — CARD_REGEX CASCADE",
+  "title": "constants.ts — CARD_REGEX now rejects internal spaces between digit groups",
+  "commit_message": "fix: require contiguous digits in CARD_REGEX (no spaced groups)",
+
+  "changed_files": ["src/types/constants.ts"],
+  "changed_symbols": ["CARD_REGEX"],
+
+  "why_card_regex_cascade": {
+    "explanation": "CARD_REGEX lives only in constants.ts. CRITICAL selection is describe('CARD_REGEX') (2 tests). Every other regex describe in standalone/regex.constants.test.js is HIGH (sibling symbols, same file). Cross-dependent rows whose sources[] include constants.ts are also HIGH — same cascade pattern as scenario 2 (PHONE_REGEX) and scenario 13 (EMAIL_REGEX).",
+    "key_point": "2 CRITICAL + 23 HIGH + 52 SKIP = 77. No feature suite lists CARD_REGEX as a symbol; CARD_REGEX standalone tests are the direct blast centre."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "describe('CARD_REGEX') label exactly matches changed symbol",
+      "tests": [
+        {
+          "test": "CARD_REGEX > accepts a string of digits and spaces",
+          "file": "test_repository/standalone/regex.constants.test.js",
+          "result": "⚠️  MAY FAIL — if spaced groups like '4111 1111' no longer match",
+          "category": "standalone"
+        },
+        {
+          "test": "CARD_REGEX > rejects letters inside a card number",
+          "file": "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        }
+      ],
+      "count": 2,
+      "all_from_category": "standalone"
+    },
+
+    "HIGH": {
+      "reason": "Same source file (constants.ts) — sibling regex describes; plus cross-dependent tests listing constants.ts",
+      "tests": [
+        {
+          "test": "EMAIL_REGEX > accepts a valid .com email address",
+          "file": "test_repository/standalone/regex.constants.test.js",
+          "why": "Sibling constant in same file — conservative inclusion",
+          "category": "standalone"
+        },
+        {
+          "test": "EMAIL_REGEX > rejects an email address missing the @ symbol",
+          "file": "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "EMAIL_REGEX > rejects a non-.com domain (e.g. .org)",
+          "file": "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "PASSWORD_REGEX_CHANGE_PASSWORD > accepts a password meeting all requirements",
+          "file": "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "PASSWORD_REGEX_CHANGE_PASSWORD > rejects a password without an uppercase letter",
+          "file": "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "PASSWORD_REGEX_CHANGE_PASSWORD > rejects a password without a special character",
+          "file": "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "PASSWORD_REGEX_CHANGE_PASSWORD > rejects a password longer than 30 characters",
+          "file": "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "PHONE_REGEX > accepts a 10-digit phone number",
+          "file": "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "PHONE_REGEX > accepts a phone number with a + country prefix",
+          "file": "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "PHONE_REGEX > rejects a phone number shorter than 10 digits",
+          "file": "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "UNIQUE_USERNAME_REGEX > accepts a valid alphanumeric username with a letter",
+          "file": "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "UNIQUE_USERNAME_REGEX > rejects a username made entirely of digits",
+          "file": "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "CARD_NUMBER_REGEX > accepts a properly spaced 19-character card number",
+          "file": "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "CARD_NUMBER_REGEX > rejects a card number shorter than 17 characters",
+          "file": "test_repository/standalone/regex.constants.test.js",
+          "category": "standalone"
+        },
+        {
+          "test": "validateEmailOrUsername uses EMAIL_REGEX > routes input containing @ to email validation and accepts a valid address",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "why": "sources include constants.ts",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "validateEmailOrUsername uses EMAIL_REGEX > routes plain text input to username validation and accepts a clean username",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "validateEmailOrUsername uses EMAIL_REGEX > returns an error message when the email format is invalid via EMAIL_REGEX",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "validateEmailOrUsername uses EMAIL_REGEX > returns an error message when the username contains special characters",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "generateCardNumber output satisfies CARD_REGEX > output of generateCardNumber contains only digits and spaces",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "why": "sources include constants.ts; CARD_REGEX contract changed",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "generateCardNumber output satisfies CARD_REGEX > correctly masks middle digits with X characters",
+          "file": "test_repository/cross-dependent/auth-storage.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "storageKeys align with payment flow expectations > storageKeys.stripePaymentDetails equals STRIPEPAYMENTDETAILS",
+          "file": "test_repository/cross-dependent/payment-state.cross.test.js",
+          "why": "sources include constants.ts",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "CARD_NUMBER_REGEX validates checkout flow input > accepts a standard 19-character card number with spaces",
+          "file": "test_repository/cross-dependent/payment-state.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "CARD_NUMBER_REGEX validates checkout flow input > rejects a card number shorter than 17 characters",
+          "file": "test_repository/cross-dependent/payment-state.cross.test.js",
+          "category": "cross-dependent"
+        },
+        {
+          "test": "CARD_NUMBER_REGEX validates checkout flow input > rejects a card number that contains letters",
+          "file": "test_repository/cross-dependent/payment-state.cross.test.js",
+          "category": "cross-dependent"
+        }
+      ],
+      "count": 23
+    },
+
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "sources[] have zero overlap with src/types/constants.ts",
+      "skipped_files": [
+        "test_repository/standalone/utilities.pure.test.js (sources: utilities.js only)",
+        "test_repository/cross-dependent/auth-storage.cross.test.js (isUserLoggedIn, updateNewTokenDetails, capitalizeFirstLetter describes — constants.ts not in sources[])",
+        "test_repository/cross-dependent/payment-state.cross.test.js (updateUserCards, updatePaymentPlanDetails, paymentActions.CLEARCARDS describes — constants.ts not in sources[])",
+        "test_repository/feature/user-profile.feature.test.js",
+        "test_repository/feature/favourites-watchlist.feature.test.js",
+        "test_repository/feature/api-navigation.feature.test.js"
+      ],
+      "count": 52
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "gap_id": "GAP-01",
+      "type": "ASSERTION_UPDATE",
+      "symbol": "CARD_REGEX",
+      "detail": "If digits-with-spaces are no longer valid, update standalone expectations and any generateCardNumber assertions that assumed CARD_REGEX allowed spaces."
+    }
+  ],
+
+  "selection_proof": {
+    "standalone_selected": 16,
+    "cross_dependent_selected": 9,
+    "feature_selected": 0,
+    "total_selected": 25,
+    "total_skipped": 52
+  },
+
+  "summary": {
+    "total_tests": 77,
+    "CRITICAL": 2,
+    "HIGH": 23,
+    "LOW": 0,
+    "SKIP": 52,
+    "coverage_gaps": 1
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage -t \"CARD_REGEX|EMAIL_REGEX|PASSWORD_REGEX_CHANGE_PASSWORD|PHONE_REGEX|UNIQUE_USERNAME_REGEX|CARD_NUMBER_REGEX|validateEmailOrUsername uses EMAIL_REGEX|generateCardNumber output satisfies CARD_REGEX|storageKeys align with payment flow|CARD_NUMBER_REGEX validates checkout\" --verbose"
+}

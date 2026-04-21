@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 # Regex for extracting primary symbol from Jest describe labels:
 # "capitalizeFirstLetter with checkWhiteSpace" → "capitalizeFirstLetter"
 _DESCRIBE_SPLIT_RE = _re.compile(
-    r'\s+(?:with|uses|from|for|in|that|>|→|:)\s+', _re.IGNORECASE
+    r'\s+(?:with|uses|from|for|in|that|>|→|:|—|–)\s+', _re.IGNORECASE
 )
 
 
@@ -245,11 +245,14 @@ def _load_reverse_index(conn, result: AnalysisResult, schema: str) -> int:
     rows: List[tuple] = []
     for symbol, entries in result.reverse_index.items():
         for e in entries:
+            ref_type = e.get("reference_type", "direct_import") or "direct_import"
+            # Clamp to VARCHAR(50) so a long reference_type string never kills the batch
+            ref_type = ref_type[:50]
             rows.append((
                 symbol,
                 e.get("test_id", ""),
                 e.get("file_path") or e.get("test_file_path"),
-                e.get("reference_type", "direct_import"),
+                ref_type,
             ))
 
     if not rows:

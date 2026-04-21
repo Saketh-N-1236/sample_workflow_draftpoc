@@ -63,7 +63,7 @@ async def list_repositories():
     """
     try:
         repos = db_list_repositories()
-        return [RepositoryResponse(**repo) for repo in repos]
+        return [RepositoryResponse.from_db(repo) for repo in repos]
     except Exception as e:
         logger.error(f"Failed to list repositories: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to list repositories: {str(e)}")
@@ -100,93 +100,82 @@ async def connect_repository(repo_data: RepositoryCreate):
                     detail="Could not detect repository provider. Please specify 'github' or 'gitlab' in the provider field."
                 )
         
+        # Resolve token: per-repo PAT from request takes priority, then fall back to env
+        import os
+        supplied_token = (repo_data.access_token or "").strip() or None
+        env_token = os.getenv('GITLAB_API_TOKEN' if provider == 'gitlab' else 'GITHUB_API_TOKEN', '').strip() or None
+        effective_token = supplied_token or env_token
+
         # Validate access based on provider
         if provider == 'gitlab':
             logger.info(f"Connecting to GitLab repository (API only): {repo_data.url}")
-            
-            gitlab_service = GitLabService()
-            
-            # Verify API token is configured
-            import os
-            token_set = bool(os.getenv('GITLAB_API_TOKEN'))
-            if not token_set:
-                logger.warning("GITLAB_API_TOKEN is not set in environment variables")
+            gitlab_service = GitLabService(api_token=effective_token)
+
             if not gitlab_service.api_token:
-                logger.warning("GitLabService API token is not configured")
-            
+                logger.warning("No GitLab token provided (request) or set (GITLAB_API_TOKEN env)")
+
             has_access = await gitlab_service.validate_access(repo_data.url)
-            
             if not has_access:
                 error_detail = "Access denied."
                 if not gitlab_service.api_token:
-                    error_detail += " GITLAB_API_TOKEN is not set in environment variables."
+                    error_detail += " No access token provided. Pass it in the 'access_token' field or set GITLAB_API_TOKEN."
                 else:
                     error_detail += " Token may be invalid or lack access to this repository."
-                error_detail += " Check your .env file and ensure the token has 'read_api' and 'read_repository' scopes."
-                
+                error_detail += " Ensure the token has 'read_api' and 'read_repository' scopes."
                 logger.error(error_detail)
                 raise HTTPException(status_code=403, detail=error_detail)
-            
+
             logger.info(f"Successfully validated access to GitLab repository: {repo_data.url}")
-            
+
         elif provider == 'github':
             logger.info(f"Connecting to GitHub repository (API only): {repo_data.url}")
-            
-            github_service = GitHubService()
-            
-            # Verify API token is configured
-            import os
-            token_set = bool(os.getenv('GITHUB_API_TOKEN'))
-            if not token_set:
-                logger.warning("GITHUB_API_TOKEN is not set in environment variables")
+            github_service = GitHubService(api_token=effective_token)
+
             if not github_service.api_token:
-                logger.warning("GitHubService API token is not configured")
-            
+                logger.warning("No GitHub token provided (request) or set (GITHUB_API_TOKEN env)")
+
             has_access = await github_service.validate_access(repo_data.url)
-            
             if not has_access:
                 error_detail = "Access denied."
                 if not github_service.api_token:
-                    error_detail += " GITHUB_API_TOKEN is not set in environment variables."
+                    error_detail += " No access token provided. Pass it in the 'access_token' field or set GITHUB_API_TOKEN."
                 else:
                     error_detail += " Token may be invalid or lack access to this repository."
-                error_detail += " Check your .env file and ensure the token has 'repo' scope."
-                
+                error_detail += " Ensure the token has 'repo' scope."
                 logger.error(error_detail)
                 raise HTTPException(status_code=403, detail=error_detail)
-            
+
             logger.info(f"Successfully validated access to GitHub repository: {repo_data.url}")
         else:
             raise HTTPException(
                 status_code=400,
                 detail=f"Unsupported provider: {provider}. Supported providers: 'github', 'gitlab'"
             )
-        
+
         # Default branch from project/repo API (avoids listing every branch on connect)
         default_branch = None
         if provider == 'gitlab':
-            gitlab_service = GitLabService()
-            pinfo = await gitlab_service.get_project_info(repo_data.url)
+            pinfo = await GitLabService(api_token=effective_token).get_project_info(repo_data.url)
             if pinfo:
                 default_branch = pinfo.get('default_branch')
         elif provider == 'github':
-            github_service = GitHubService()
-            info = await github_service.get_repository_info(repo_data.url)
+            info = await GitHubService(api_token=effective_token).get_repository_info(repo_data.url)
             if info:
                 default_branch = info.get('default_branch')
-        
-        # Create repository in database
+
+        # Create repository in database — store the supplied PAT (not the env fallback)
         repository_data = create_repository(
             url=repo_data.url,
             provider=provider,
-            local_path=None,  # No local path needed - using API only
-            selected_branch=default_branch,  # Set selected branch to default initially
-            default_branch=default_branch
+            local_path=None,
+            selected_branch=default_branch,
+            default_branch=default_branch,
+            access_token=supplied_token,  # only persist an explicitly provided token
         )
-        
-        logger.info(f"Repository connected : {repository_data['id']} - {repo_data.url} ({provider})")
-        
-        return RepositoryResponse(**repository_data)
+
+        logger.info(f"Repository connected: {repository_data['id']} - {repo_data.url} ({provider}) | has_token={bool(supplied_token)}")
+
+        return RepositoryResponse.from_db(repository_data)
     except HTTPException:
         raise
     except Exception as e:
@@ -219,8 +208,10 @@ async def list_branches(
         stored_default = repo.get("default_branch")
         selected = repo.get("selected_branch")
 
-        gitlab_service = GitLabService()
-        github_service = GitHubService()
+        from services.token_encryption import decrypt_token
+        _repo_token = decrypt_token(repo.get("encrypted_token") or "") or None
+        gitlab_service = GitLabService(api_token=_repo_token)
+        github_service = GitHubService(api_token=_repo_token)
 
         live_default: Optional[str] = None
         if provider == "gitlab":
@@ -328,9 +319,12 @@ async def get_diff(repo_id: str, branch: str = None):
         provider = resolve_provider(repo_url, repo.get("provider"))
         branch = effective_branch(branch, repo.get("selected_branch"), repo.get("default_branch"))
         default_hint = repo.get("default_branch")
-        
+
+        from services.token_encryption import decrypt_token
+        _repo_token = decrypt_token(repo.get("encrypted_token") or "") or None
+
         if provider == 'gitlab':
-            gitlab_service = GitLabService()
+            gitlab_service = GitLabService(api_token=_repo_token)
             diff_data = await gitlab_service.get_latest_diff(
                 repo_url, branch=branch, default_branch_hint=default_hint
             )
@@ -355,11 +349,11 @@ async def get_diff(repo_id: str, branch: str = None):
             )
             
         elif provider == 'github':
-            github_service = GitHubService()
+            github_service = GitHubService(api_token=_repo_token)
             diff_data = await github_service.get_latest_diff(
                 repo_url, branch=branch, default_branch_hint=default_hint
             )
-            
+
             if not diff_data:
                 raise HTTPException(
                     status_code=500,
@@ -399,7 +393,20 @@ async def get_repository(repo_id: str):
     if not repo:
         raise HTTPException(status_code=404, detail="Repository not found. Please connect the repository first.")
     
-    return RepositoryResponse(**repo)
+    return RepositoryResponse.from_db(repo)
+
+
+@router.delete("/{repo_id}", status_code=204)
+async def delete_repository(repo_id: str):
+    """Delete a repository and its stored access token."""
+    from services.repository_db import delete_repository as db_delete_repository
+    repo = get_repository_by_id(repo_id)
+    if not repo:
+        raise HTTPException(status_code=404, detail="Repository not found.")
+    deleted = db_delete_repository(repo_id)
+    if not deleted:
+        raise HTTPException(status_code=500, detail="Failed to delete repository.")
+    logger.info(f"Repository deleted: {repo_id} - {repo.get('url')}")
 
 
 @router.put("/{repo_id}", response_model=RepositoryResponse)
@@ -423,8 +430,8 @@ async def update_repository(repo_id: str, repo_update: RepositoryUpdate):
         
         if not updated_repo:
             raise HTTPException(status_code=500, detail="Failed to update repository")
-        
-        return RepositoryResponse(**updated_repo)
+
+        return RepositoryResponse.from_db(updated_repo)
     except Exception as e:
         logger.error(f"Failed to update repository: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to update repository: {str(e)}")
@@ -465,9 +472,9 @@ async def update_risk_threshold(repo_id: str, threshold_update: RiskThresholdUpd
         verified_repo = get_repository_by_id(repo_id)
         if verified_repo:
             logger.info(f"Risk threshold updated for repo {repo_id}: {verified_repo.get('risk_threshold')}")
-            return RepositoryResponse(**verified_repo)
+            return RepositoryResponse.from_db(verified_repo)
         else:
-            return RepositoryResponse(**updated_repo)
+            return RepositoryResponse.from_db(updated_repo)
     except HTTPException:
         raise
     except Exception as e:
@@ -507,37 +514,38 @@ async def refresh_repository(repo_id: str):
                     detail="Could not determine repository provider."
                 )
         
+        from services.token_encryption import decrypt_token
+        _repo_token = decrypt_token(repo.get("encrypted_token") or "") or None
+
         # Re-validate access based on provider
         if provider == 'gitlab':
-            gitlab_service = GitLabService()
+            gitlab_service = GitLabService(api_token=_repo_token)
             has_access = await gitlab_service.validate_access(repo_url)
-            
+
             if not has_access:
                 error_detail = "Access denied."
                 if not gitlab_service.api_token:
-                    error_detail += " GITLAB_API_TOKEN is not set in environment variables."
+                    error_detail += " No token stored for this repo and GITLAB_API_TOKEN is not set."
                 else:
                     error_detail += " Token may be invalid or lack access to this repository."
-                
                 logger.error(error_detail)
                 raise HTTPException(status_code=403, detail=error_detail)
-            
+
             logger.info(f"Successfully refreshed GitLab repository: {repo_url}")
-            
+
         elif provider == 'github':
-            github_service = GitHubService()
+            github_service = GitHubService(api_token=_repo_token)
             has_access = await github_service.validate_access(repo_url)
-            
+
             if not has_access:
                 error_detail = "Access denied."
                 if not github_service.api_token:
-                    error_detail += " GITHUB_API_TOKEN is not set in environment variables."
+                    error_detail += " No token stored for this repo and GITHUB_API_TOKEN is not set."
                 else:
                     error_detail += " Token may be invalid or lack access to this repository."
-                
                 logger.error(error_detail)
                 raise HTTPException(status_code=403, detail=error_detail)
-            
+
             logger.info(f"Successfully refreshed GitHub repository: {repo_url}")
         else:
             raise HTTPException(
@@ -554,8 +562,8 @@ async def refresh_repository(repo_id: str):
         
         if not updated_repo:
             raise HTTPException(status_code=500, detail="Failed to update repository")
-        
-        return RepositoryResponse(**updated_repo)
+
+        return RepositoryResponse.from_db(updated_repo)
     except HTTPException:
         raise
     except Exception as e:

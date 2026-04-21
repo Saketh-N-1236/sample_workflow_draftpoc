@@ -1,0 +1,21 @@
+{
+  "generated_at": "2026-04-17T17:37:07.757018",
+  "data": {
+    "test_repository_overview": {
+      "total_test_files": 0,
+      "total_lines_of_code": 0,
+      "test_framework": "unknown",
+      "framework_confidence": "medium"
+    },
+    "test_inventory": {
+      "total_tests": 0,
+      "total_test_classes": 0,
+      "tests_by_type": {}
+    },
+    "summary_for_db": {
+      "files_analyzed": 0,
+      "total_tests": 0,
+      "framework": "unknown"
+    }
+  }
+}

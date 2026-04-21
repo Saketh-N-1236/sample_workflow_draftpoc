@@ -1,0 +1,96 @@
+{
+  "scenario": "36",
+  "title": "Subscription Plan Labels — show 'Most Popular' and 'Best Value' badges on plan cards",
+  "commit_message": "feat: add PLAN_LABELS constant and getPlanLabel helper — render colored badge on Monthly ('Most Popular') and Yearly ('Best Value') plan cards",
+
+  "changed_files": [
+    "src/screens/SubscriptionPlans/SubscriptionPlans.js"
+  ],
+
+  "changed_symbols": [
+    "PLAN_LABELS (new export — { Monthly: 'Most Popular', Yearly: 'Best Value' })",
+    "getPlanLabel (new export — returns PLAN_LABELS[billingPeriod] or null)",
+    "SubscriptionPlans render (modified — badge View rendered above each plan card when getPlanLabel returns a truthy value)"
+  ],
+
+  "what_the_diff_does": {
+    "before": "Subscription plan cards show only price and billing period. There is no visual indicator distinguishing which plan is recommended.",
+    "after": "Each plan card shows a small colored badge at the top: 'Most Popular' for the Monthly plan and 'Best Value' for the Yearly plan. Badges use the app's red theme color and white text.",
+    "visible_change": "Users see a 'Most Popular' red badge on the Monthly plan card and a 'Best Value' red badge on the Yearly plan card when viewing the Subscription Plans screen.",
+    "compile_safe": true,
+    "compile_note": "PLAN_LABELS and getPlanLabel are added as module-level exports before the SubscriptionPlans component — no existing imports or props are changed."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "subscription-labels.pure.test.js declares SubscriptionPlans.js as @source and covers every new symbol: PLAN_LABELS (5 tests), getPlanLabel (9 tests). All 14 are CRITICAL.",
+      "tests": [
+        "PLAN_LABELS > Monthly label is \"Most Popular\"",
+        "PLAN_LABELS > Yearly label is \"Best Value\"",
+        "PLAN_LABELS > contains exactly two keys",
+        "PLAN_LABELS > Monthly and Yearly labels are distinct strings",
+        "PLAN_LABELS > both label strings are non-empty",
+        "getPlanLabel > returns \"Most Popular\" for \"Monthly\"",
+        "getPlanLabel > returns \"Best Value\" for \"Yearly\"",
+        "getPlanLabel > returns null for an unknown billing period",
+        "getPlanLabel > returns null for undefined",
+        "getPlanLabel > returns null for empty string",
+        "getPlanLabel > is case-sensitive — \"monthly\" (lowercase) returns null",
+        "getPlanLabel > is case-sensitive — \"yearly\" (lowercase) returns null",
+        "getPlanLabel > Monthly plan has a truthy label so the badge always renders",
+        "getPlanLabel > Yearly plan has a truthy label so the badge always renders"
+      ],
+      "files": ["test_repository/standalone/subscription-labels.pure.test.js"],
+      "count": 14
+    },
+
+    "HIGH": {
+      "reason": "payment-state.cross.test.js covers the full payment/subscription state machine, including SubscriptionPlan API calls. These tests must pass to confirm badge labels don't interfere with subscription data flow.",
+      "files": [
+        "test_repository/cross-dependent/payment-state.cross.test.js"
+      ],
+      "count": 22
+    },
+
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "All remaining test files do not declare SubscriptionPlans.js as a source and do not test plan label logic.",
+      "count": 661
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "id": "GAP-01",
+      "symbol": "PLAN_LABELS",
+      "source": "src/screens/SubscriptionPlans/SubscriptionPlans.js",
+      "gap": "No existing tests covered this new constant.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/standalone/subscription-labels.pure.test.js"
+    },
+    {
+      "id": "GAP-02",
+      "symbol": "getPlanLabel",
+      "source": "src/screens/SubscriptionPlans/SubscriptionPlans.js",
+      "gap": "No existing tests covered this new helper function.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/standalone/subscription-labels.pure.test.js"
+    }
+  ],
+
+  "summary": {
+    "total_tests": 684,
+    "test_files": 25,
+    "CRITICAL": 14,
+    "HIGH": 22,
+    "LOW": 0,
+    "SKIP": 648,
+    "coverage_gaps": 2,
+    "gaps_closed": 2,
+    "gaps_remaining": 0
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage test_repository/standalone/subscription-labels.pure.test.js test_repository/cross-dependent/payment-state.cross.test.js",
+  "jest_run_note": "subscription-labels.pure.test.js runs 14 CRITICAL tests for PLAN_LABELS and getPlanLabel. payment-state.cross.test.js runs 22 HIGH tests confirming subscription data flow is unaffected."
+}

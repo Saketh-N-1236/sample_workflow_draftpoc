@@ -1,0 +1,11 @@
+diff --git a/src/types/constants.ts b/src/types/constants.ts
+index 7777777..8888888 100644
+--- a/src/types/constants.ts
++++ b/src/types/constants.ts
+@@ -1,6 +1,6 @@
+ export const EMAIL_REGEX =
+-  /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
++  /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.com$/;
+
+ export const PASSWORD_REGEX_CHANGE_PASSWORD =
+   /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,30}$/;

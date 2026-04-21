@@ -514,12 +514,14 @@ async def process_diff_and_select_tests(
                     _diag = (semantic_config or {}).get("_rag_diagnostics") or {}
                     _qlist = _diag.get("queries_used_strings") or []
                     _primary_q = (_qlist[0] or "").strip() if _qlist else ""
+                    _prim_emb = _diag.get("primary_query_embedding")
                     if _primary_q and ast_results.get("tests"):
                         _sup_map = await supplement_semantic_hits_for_ast_tests(
                             conn,
                             ast_results,
                             _primary_q,
                             _resolved_tr,
+                            precomputed_query_embedding=_prim_emb,
                         )
                         if isinstance(semantic_config, dict):
                             semantic_config["_ast_semantic_supplement_scores"] = _sup_map
@@ -711,16 +713,21 @@ async def process_diff_and_select_tests(
             s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", s)
             return {p.lower() for p in re.split(r"[^a-zA-Z0-9]+", s) if len(p) >= 4}
 
+        # Use 4-char minimum to keep the token set discriminating.
+        # 3-char tokens like 'api', 'get', 'add' appear in almost every test file
+        # (e.g. "watchlistApi" contains "api") and cause false co-location matches
+        # when the diff touches any API-related file.  4-char minimum is consistent
+        # with _specific_diff_tokens4 and the existing semantic-only precision gate.
         for _ec in search_queries.get('exact_matches', []):
-            _diff_class_tokens |= _tokenise_symbol(_ec)
+            _diff_class_tokens |= _tokenise_symbol4(_ec)
         for _ec in search_queries.get('module_matches', []):
-            _diff_class_tokens |= _tokenise_symbol(_ec.rstrip('.*'))
+            _diff_class_tokens |= _tokenise_symbol4(_ec.rstrip('.*'))
         for _fc in parsed_diff.get('changed_classes', []):
             if _fc:
-                _diff_class_tokens |= _tokenise_symbol(_fc)
+                _diff_class_tokens |= _tokenise_symbol4(_fc)
         for _mf in parsed_diff.get('changed_methods', []):
             if _mf:
-                _diff_class_tokens |= _tokenise_symbol(_mf)
+                _diff_class_tokens |= _tokenise_symbol4(_mf)
 
         # ── Specific-symbol tokens (4-char minimum) — used to filter semantic-only
         # results that have no AST match. Restricted to identifiers that actually
@@ -743,45 +750,65 @@ async def process_diff_and_select_tests(
         # Seed the FIRST SEGMENT of dotted class names from confirmed tests.
         # Only dotted names are considered — prevents prose-style describes like
         # "action creators — wishlist and favourites" from contributing generic
-        # words such as "action" or "creators".
+        # words such as "action" or "creators".  Use 4-char minimum consistent
+        # with the rest of _diff_class_tokens.
         for _ct in combined_tests_dict.values():
             _cls = (_ct.get('class_name') or '').strip()
             if _cls and '.' in _cls:
                 _first_seg = _cls.split('.')[0].strip()
-                if len(_first_seg) >= 3:
-                    _diff_class_tokens |= _tokenise_symbol(_first_seg)
+                if len(_first_seg) >= 4:
+                    _diff_class_tokens |= _tokenise_symbol4(_first_seg)
 
         def _coloc_class_is_relevant(class_name: Optional[str]) -> bool:
             """True when the describe label shares at least one whole-word token with the diff.
 
-            Uses whole-word token intersection (not substring) so that a diff token
-            "card" (from CARD_REGEX) does NOT match "updateUserCards" or "CLEARCARDS".
+            Uses 4-char minimum tokens (same as _specific_diff_tokens4) so generic
+            3-char words like 'api', 'get', 'add' that appear in virtually every
+            test file cannot accidentally match the co-location filter.
             """
             if not class_name:
                 return True  # unknown describe → keep (benefit of the doubt)
-            _cn_tokens = _tokenise_symbol(class_name)
+            _cn_tokens = _tokenise_symbol4(class_name)
             return bool(_cn_tokens & _diff_class_tokens)
 
         def _sem_only_is_relevant(class_name: Optional[str]) -> bool:
             """Precision gate for semantic-only results (no AST confirmation).
 
-            A semantic-only test is KEPT only when its describe label shares at
-            least one 4+-char token with the specific changed symbols/methods.
-            Generic tokens like 'api', 'get', 'all' (< 4 chars) are excluded to
-            prevent every API-related test from matching any API file change.
+            Two-tier check (either tier suffices):
+
+            Tier 1 — Specific symbols: does the test's describe label share ≥1
+              4-char token with changed methods / added symbols / deleted symbols?
+              Example: "FAQ fallback logic — resolveFaqItems" matches
+              "resolveFaqItems" → tokens {resolve, items} → pass.
+
+            Tier 2 — Module-level tokens: does the label share ≥1 4-char token
+              with the broader diff token set (which includes module/file names)?
+              This catches tests that describe DATA or STRUCTURE aspects of a
+              changed file rather than a specific function name.
+              Example: "FAQDataList — size" → {data, list, size} overlaps with
+              {data, list} from 'FAQDataList' module name → pass.
+              The secondary tier still blocks unrelated tests because their class
+              names contain domain words absent from _diff_class_tokens.
+
+            Generic tokens < 4 chars (e.g. 'api', 'get', 'all') are always
+            excluded to prevent universal API-file false positives.
 
             Returns True (keep) when:
             - class_name is unknown (benefit of the doubt)
-            - _specific_diff_tokens4 is empty (diff has no named symbols, e.g.
-              config-only change) — fall back to the broader co-location filter
-            - overlap exists between class_name tokens and specific diff symbols
+            - Tier 1 overlap found
+            - Tier 2 overlap found
             """
             if not class_name:
                 return True
-            if not _specific_diff_tokens4:
-                return _coloc_class_is_relevant(class_name)
             _cn_tokens4 = _tokenise_symbol4(class_name)
-            return bool(_cn_tokens4 & _specific_diff_tokens4)
+            # Tier 1: specific changed symbols (most discriminating)
+            if _specific_diff_tokens4 and (_cn_tokens4 & _specific_diff_tokens4):
+                return True
+            # Tier 2: broader module-level diff tokens (catches data/structure tests
+            # for the same changed file whose describe labels don't echo the function)
+            if _cn_tokens4 & _diff_class_tokens:
+                return True
+            return False
 
         if _sem_confirmed_file_paths:
             _coloc_added = 0
@@ -1035,22 +1062,76 @@ async def process_diff_and_select_tests(
                 )
                 continue
 
+            # ── Module-name AST token gate ────────────────────────────────────
+            # Problem: module-level pattern queries AND "exact" queries that used
+            # a file STEM (e.g. "constants") instead of a specific changed symbol
+            # can match tests from a DIFFERENT source file that shares the same
+            # stem.  Example: src/navigation/constants.js (changed) and
+            # src/types/constants.ts (source of regex tests) both normalise to
+            # production_class = "constants".  When the diff only touches the
+            # navigation file, all regex tests are falsely promoted.
+            #
+            # SCOPE: only all-lowercase stems are collision-prone (e.g. "constants",
+            # "utils", "types").  CamelCase stems (e.g. "FAQDataList",
+            # "FrequentlyAskedQuestions", "HomeIntroPage") are specific enough to
+            # be practically unique — applying the gate there would incorrectly
+            # drop legitimate tests whose describe labels don't echo the module name
+            # (e.g. "FAQ fallback logic — resolveFaqItems" tests).
+            #
+            # Gate: if ALL AST evidence for a test comes from collision-prone stems,
+            # require the test's class/describe name to share ≥1 4-char token with
+            # the diff's changed symbols.  Tests with no vocabulary overlap are
+            # dropped as stem-collision false positives.
+            if has_ast and _diff_class_tokens:
+                _module_names_in_exact = frozenset(
+                    search_queries.get('module_exact_matches', [])
+                )
+                # Collision-prone = all-lowercase stems (generic, widely shared).
+                # CamelCase stems are treated as strong evidence.
+                _collision_prone = frozenset(
+                    n for n in _module_names_in_exact if n == n.lower()
+                )
+                _has_strong_ast = any(
+                    m.get('type') in (
+                        'function_level', 'direct_file', 'direct_file_match',
+                        'direct_test_file', 'integration', 'cochanged_test_suite',
+                    ) or (
+                        # 'exact' match is strong when class is NOT a collision-prone stem.
+                        # CamelCase module names and specific symbols are strong.
+                        m.get('type') == 'exact' and
+                        m.get('class', '') not in _collision_prone
+                    ) or (
+                        # 'module' type is strong when the pattern isn't collision-prone.
+                        m.get('type') == 'module' and
+                        m.get('pattern', '').replace('.*', '') not in _collision_prone
+                    )
+                    for m in combined_match_details.get(test_id, [])
+                    if m.get('type') != 'semantic'
+                )
+                if not _has_strong_ast:
+                    _test_class_m = (
+                        test.get('class_name') or test.get('test_class') or ''
+                    )
+                    if _test_class_m and not _coloc_class_is_relevant(_test_class_m):
+                        logger.debug(
+                            "[FILTER] Dropped collision-prone module AST (no token overlap): %s [%s]",
+                            test_id, _test_class_m,
+                        )
+                        continue
+            # ─────────────────────────────────────────────────────────────────
+
             # ── Semantic-only precision gate ─────────────────────────────────
             # Tests that have NO AST match and came only from the semantic RAG
             # pipeline are checked for vocabulary alignment with the diff's actual
             # changed symbols (4-char minimum token, to exclude generic words like
             # 'api', 'get', 'all' that appear in virtually every API test).
             #
-            # Reason: A diff that adds `unifiedSearchAPI` in ApiEndPoints.js
-            # produces a summary that mentions "unified", "search", "ApiClient",
-            # "types=0,2".  Watchlist tests whose names contain "types=0" or
-            # "unified watchlistApi URL" can score 0.45+ on cosine similarity —
-            # above the 0.42 threshold — despite having nothing to do with the
-            # change.  Requiring a 4-char token overlap with the specific changed
-            # identifiers (unifiedSearchAPI, getSeaarchResults, …) drops them.
-            #
-            # Tests that DO share vocabulary (e.g. "unifiedSearchApi > contains
-            # types=0,2 …") keep their 4-char overlap on "unified"/"search" and pass.
+            # If the token gate PASSES, _sem_token_gate_passed is set True so the
+            # test is kept even though pure-semantic confidence scores are capped
+            # at 40 (= 100 × 0.40), which is always below the 42 % threshold.
+            # Trusting LLM classification + vocabulary gate here is equivalent to
+            # the logic that trusts co-located tests via _has_sem_coloc_flag.
+            _sem_token_gate_passed = False
             if has_semantic and not has_ast and not _has_sem_coloc_flag:
                 _test_class = (
                     test.get('class_name')
@@ -1063,9 +1144,11 @@ async def process_diff_and_select_tests(
                         test_id, _test_class,
                     )
                     continue
+                # Token gate passed — bypass confidence threshold for this test
+                _sem_token_gate_passed = True
             # ─────────────────────────────────────────────────────────────────
 
-            if passes_threshold or is_ast_any:
+            if passes_threshold or is_ast_any or _sem_token_gate_passed:
                 # Set explicit flags based on match_details and original sources
                 test['is_ast_match'] = has_ast
                 test['is_semantic_match'] = has_semantic

@@ -1,0 +1,109 @@
+{
+  "scenario": "34",
+  "title": "Movies Tab Merge — collapse all carousel genre sections into a single 'My Movies' section",
+  "commit_message": "feat: merge all movie genre carousels into one 'My Movies' section on the Movies tab — add MY_MOVIES_TITLE, carousaTypes.Movies, and mergedMoviesSection memo",
+
+  "changed_files": [
+    "src/navigation/constants.js",
+    "src/screens/home/HomeIntroPage.js"
+  ],
+
+  "changed_symbols": [
+    "MY_MOVIES_TITLE (new export — string constant 'My Movies')",
+    "carousaTypes.Movies (new field — value 'MOVIES')",
+    "mergedMoviesSection (new useMemo — flattens all non-sports carousel sections into one)"
+  ],
+
+  "what_the_diff_does": {
+    "before": "The Movies tab shows multiple carousel rows, one per genre (Thriller, Crime, Drama, etc.), each returned as a separate section from the composer API.",
+    "after": "The Movies tab shows a single carousel row titled 'My Movies' containing all movie items from every genre merged together. Sports/highlight sections are unchanged and still appear below.",
+    "visible_change": "Instead of multiple labelled genre rows on the Movies tab, users see one big row called 'My Movies' that includes all movies from every genre in the order they were received from the API.",
+    "compile_safe": true,
+    "compile_note": "MY_MOVIES_TITLE is imported alongside the existing carousaTypes import. The mergedMoviesSection memo is added as an additional selector — no existing selectors are removed."
+  },
+
+  "selection_strategy": {
+    "CRITICAL": {
+      "reason": "movies-merge.feature.test.js declares both changed files as @source and covers every new symbol: MY_MOVIES_TITLE (2 tests), carousaTypes.Movies (4 tests), mergedMoviesSection (16 tests). All 22 are CRITICAL.",
+      "tests": [
+        "MY_MOVIES_TITLE > equals the string \"My Movies\"",
+        "MY_MOVIES_TITLE > is a non-empty string",
+        "carousaTypes.Movies > has value \"MOVIES\"",
+        "carousaTypes.Movies > is distinct from Sports type",
+        "carousaTypes.Movies > is distinct from Shows type",
+        "carousaTypes.Movies > original carousaTypes entries are still present",
+        "mergedMoviesSection > returns an empty array when homeScreenData is undefined",
+        "mergedMoviesSection > returns an empty array when homeScreenData is null",
+        "mergedMoviesSection > returns exactly one movie section plus sports sections",
+        "mergedMoviesSection > first section title is MY_MOVIES_TITLE",
+        "mergedMoviesSection > first section type is carousaTypes.Movies",
+        "mergedMoviesSection > merged section data combines items from all non-sports sections",
+        "mergedMoviesSection > Sports section is preserved after the merged movie section",
+        "mergedMoviesSection > isSportsHighlightContent section is preserved after the merged movie section",
+        "mergedMoviesSection > the old individual genre sections are NOT in the result",
+        "mergedMoviesSection > returns original data unchanged when all sections are sports",
+        "mergedMoviesSection > handles sections with no data property gracefully"
+      ],
+      "files": ["test_repository/feature/movies-merge.feature.test.js"],
+      "count": 17
+    },
+
+    "HIGH": {
+      "reason": "home-search.feature.test.js and sports.feature.test.js both declare homescreen-related source files. The carousel merging must not break home search state or sports section rendering.",
+      "files": [
+        "test_repository/feature/home-search.feature.test.js",
+        "test_repository/feature/sports.feature.test.js"
+      ],
+      "count": 38
+    },
+
+    "LOW": { "tests": [], "count": 0 },
+
+    "SKIP": {
+      "reason": "All remaining test files do not declare constants.js or HomeIntroPage.js as a source and do not test carousel merging logic.",
+      "count": 635
+    }
+  },
+
+  "coverage_gaps": [
+    {
+      "id": "GAP-01",
+      "symbol": "MY_MOVIES_TITLE",
+      "source": "src/navigation/constants.js",
+      "gap": "No existing tests covered this new constant.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/movies-merge.feature.test.js"
+    },
+    {
+      "id": "GAP-02",
+      "symbol": "carousaTypes.Movies",
+      "source": "src/navigation/constants.js",
+      "gap": "No existing tests covered this new carousaTypes field.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/movies-merge.feature.test.js"
+    },
+    {
+      "id": "GAP-03",
+      "symbol": "mergedMoviesSection",
+      "source": "src/screens/home/HomeIntroPage.js",
+      "gap": "No existing tests covered the merge logic.",
+      "status": "CLOSED",
+      "closed_by": "test_repository/feature/movies-merge.feature.test.js"
+    }
+  ],
+
+  "summary": {
+    "total_tests": 655,
+    "test_files": 23,
+    "CRITICAL": 17,
+    "HIGH": 38,
+    "LOW": 0,
+    "SKIP": 600,
+    "coverage_gaps": 3,
+    "gaps_closed": 3,
+    "gaps_remaining": 0
+  },
+
+  "jest_run_command": "npx jest --config test_repository/jest.config.js --no-coverage test_repository/feature/movies-merge.feature.test.js test_repository/feature/home-search.feature.test.js test_repository/feature/sports.feature.test.js",
+  "jest_run_note": "movies-merge.feature.test.js runs 17 CRITICAL tests. home-search and sports run 38 HIGH tests confirming no regressions in carousel state or sports section display."
+}
